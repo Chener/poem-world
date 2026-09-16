@@ -114,7 +114,7 @@
         <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
         <div class="row"><span class="k">effort</span><span class="v sand">medium</span></div>
         <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">—</span></div>
-        <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">跑满 10 轮</span></div>
+        <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">循环进行中</span></div>
       </div>
       <div class="lnks">
         <a href="../">← 三个世界</a>
@@ -481,17 +481,10 @@ function makeBlades() {
     const z = (h2(guard, 9.3) * 2 - 1) * 128 - 44;
     const y = terrainH(x, z);
     if (y < 0.34 || y > 5.2) continue;
-    let dens = Math.min(1, (y - 0.34) * 1.5) * (0.35 + 0.65 * fbm(x * 0.06, z * 0.06));
-    // 一条踩出来的路：从骋望的高处一直走到水边，来回走了很多趟。
-    // 草在这里被踏平了 —— 这是这个世界里唯一一处人待过的痕迹。
-    const pt = Math.max(0, Math.min(1, (z + 60) / 24));          // 0 在高处，1 在水边
-    const px = -pt * 1.2, pz = -60 + pt * 24;
-    const pd = Math.hypot(x - px, z - pz);
-    const worn = 1 - Math.min(1, Math.max(0, (pd - 0.9) / 2.0));  // 1 = 正踩在路当中
-    dens *= 1 - 0.74 * worn;
+    const dens = Math.min(1, (y - 0.34) * 1.5) * (0.35 + 0.65 * fbm(x * 0.06, z * 0.06));
     if (h2(guard, 33) > dens) continue;
     placed++;
-    const hgt = (0.52 + h2(guard, 5) * 0.86) * (1 - 0.62 * worn);
+    const hgt = 0.52 + h2(guard, 5) * 0.86;
     const w = 0.028 + h2(guard, 7) * 0.030;
     const ph = h2(guard, 11) * 6.28;
     const tint = h2(guard, 13);
@@ -862,7 +855,7 @@ function makeWrongness() {
       const a = h2(seed * 3 + i, 2.2) * Math.PI * 2;
       const d = Math.sqrt(h2(seed * 3 + i, 6.6)) * r * 0.74;
       bird(cx + Math.cos(a) * d, 0.02, cz + Math.sin(a) * d,
-           h2(seed + i, 8.1) * Math.PI * 2, 0.62 + 0.26 * h2(seed + i, 3.4), 1);
+           h2(seed + i, 8.1) * Math.PI * 2, 0.40 + 0.16 * h2(seed + i, 3.4), 1);
     }
   }
 
@@ -931,7 +924,6 @@ function makeWrongness() {
   pingPatch(-16, 58, 5.6, 37, 4);
   pingPatch(-44, -6, 6.0, 47, 6);
   pingPatch(-53, 27, 7.0, 59, 8);
-  pingPatch(-7, -29, 7.6, 67, 9);
 
   // 麋食兮庭中 —— 就在为她盖的那座屋子的廊下
   elk(HOUSE.x - 0.6, 1.52, HOUSE.z - 5.95, -0.28);
@@ -961,17 +953,7 @@ const CLOTHS = [
   { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.6, h: 1.35, tone: 1.00 },
   { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.4, h: 1.30, tone: 1.03 },
   { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 4.0, h: 1.55, tone: 1.02 },
-  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子
-  { x:-64.2, z:  37.0, ang: 0.74, vx: 0.050, vz: 0.082, w: 4.4, h: 1.80, tone: 1.10 },
   { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 4.2, h: 1.60, tone: 0.98 },
-  // 正从「登白薠兮骋望」眼前漂过去的那一件
-  { x: -2.0, z: -25.0, ang: 1.22, vx: 0.058, vz: 0.094, w: 6.0, h: 2.60, tone: 1.12 },
-  // 挂在枯枝上的两件：水把它们带到这儿，枝子替水留住了它们。
-  // 三个机位里唯一的人迹，就是这个人脱下来、扔掉、再也没回来拿的衣裳。
-  { x: -0.85, z: -74.9, y: 5.35, ang: 0.26, w: 1.55, h: 2.80, tone: 0.86, hang: true },
-  { x:-12.05, z: -45.9, y: 4.35, ang: 1.62, w: 1.40, h: 2.55, tone: 0.72, hang: true },
-  // 就丢在「登白薠兮骋望」的脚边：她没有来，你在这儿站到把褋都脱下来了
-  { x:  1.5, z: -55.6, ang: 1.34, w: 3.6, h: 1.95, tone: 0.72, snag: true, lift: 1.16 },
   // 褋：落在澧浦的浅滩上，盖在白薠上，再也漂不动了
   { x:  4.2, z: -70.6, ang: 1.92, w: 3.4, h: 1.75, tone: 0.95, snag: true },
 ];
@@ -985,56 +967,15 @@ function updateCloths(t) {
   for (const C of CLOTHS) {
     const cx = C.x + (C.vx || 0) * t, cz = C.z + (C.vz || 0) * t;
     const ca = Math.cos(C.ang + (C.snag ? 0 : t * 0.010)), sa = Math.sin(C.ang + (C.snag ? 0 : t * 0.010));
-    const base = C.snag ? Math.max(terrainH(cx, cz), WATER_Y) + (C.lift || 0.62) : WATER_Y;
-    if (C.hang) {                                    // 挂在枯枝上的那一件
-      const ca2 = Math.cos(C.ang), sa2 = Math.sin(C.ang);
-      const hangAt = (u, v, out) => {
-        const hem = 1 - 0.22 * Math.abs(Math.sin(u * 5.7 + C.ang));   // 破了的下摆
-        const lx = (u - 0.5) * C.w * (1 - 0.34 * v);
-        const ly = -v * C.h * hem - 0.30 * Math.sin(Math.PI * u);
-        const lz = 0.20 * Math.sin(t * 1.35 + u * 3.3 + v * 2.4) * (0.25 + 0.75 * v)
-                 + 0.10 * Math.sin(t * 2.4 - u * 5.1);
-        out[0] = C.x + lx * ca2 - lz * sa2;
-        out[1] = C.y + ly;
-        out[2] = C.z + lx * sa2 + lz * ca2;
-        return out;
-      };
-      const a = [0,0,0], b = [0,0,0], c = [0,0,0], d = [0,0,0];
-      for (let i = 0; i < CU; i++) for (let j = 0; j < CV; j++) {
-        hangAt(i / CU, j / CV, a); hangAt((i+1) / CU, j / CV, b);
-        hangAt((i+1) / CU, (j+1) / CV, c); hangAt(i / CU, (j+1) / CV, d);
-        for (const tri of [[a,b,c], [a,c,d]]) {
-          const ux = tri[1][0]-tri[0][0], uy = tri[1][1]-tri[0][1], uz = tri[1][2]-tri[0][2];
-          const vx = tri[2][0]-tri[0][0], vy = tri[2][1]-tri[0][1], vz = tri[2][2]-tri[0][2];
-          let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
-          let l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
-          // 垂着的绢两面都该亮：法线往天上偏一点，让它吃到整片暮色的天光，
-          // 否则背光那一面会黑成树影的一部分。
-          ny += 0.85; l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
-          const g = C.tone * (0.84 + 0.20 * (1 - j / CV));
-          for (const q of tri) {
-            clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
-            clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
-            clothData[o++] = 0.985 * g; clothData[o++] = 0.938 * g; clothData[o++] = 0.848 * g;
-            clothData[o++] = 0;
-          }
-        }
-      }
-      continue;
-    }
+    const base = C.snag ? Math.max(terrainH(cx, cz), WATER_Y) + 0.62 : WATER_Y;
     const at = (u, v, out) => {
-      // 袖子：一头宽、一头收口，边缘是软的，中间还有一道顺着水走的褶
-      const taper = 0.56 + 0.44 * Math.sin(Math.PI * (0.18 + 0.82 * u));
-      const ripple = 1 + 0.16 * Math.sin(u * 7.1 + C.ang * 3.0);
-      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h * taper * ripple;
+      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h;
       const x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca;
       // 绢很软：它贴着浪起伏，自己还在抖
-      const crease = 0.055 * Math.cos(Math.PI * (v - 0.5) * 2.0) * (0.5 + 0.5 * Math.sin(lx * 1.9));
       const flut = C.snag
-        ? 0.115 * Math.sin(lx * 2.05 + lz * 1.4) + 0.075 * Math.sin(lz * 3.3 - lx * 1.1)
-          + 0.045 * Math.sin(t * 1.9 + lx * 3.1) * (0.4 + 0.6 * Math.abs(lz))
+        ? 0.035 * Math.sin(t * 2.3 + lx * 3.1) * (0.4 + 0.6 * Math.abs(lz))
         : 0.075 * Math.sin(t * 1.55 + lx * 2.3 + lz * 1.7)
-          + 0.045 * Math.sin(t * 2.70 - lx * 3.7) + crease;
+          + 0.045 * Math.sin(t * 2.70 - lx * 3.7);
       out[0] = x; out[1] = base + 0.045 + (C.snag ? 0 : waveJS(x, z, t)) + flut; out[2] = z;
       return out;
     };
@@ -1054,7 +995,7 @@ function updateCloths(t) {
         for (const q of tri) {
           clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
           clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
-          clothData[o++] = 0.475 * g; clothData[o++] = 0.462 * g; clothData[o++] = 0.432 * g;
+          clothData[o++] = 0.880 * g; clothData[o++] = 0.852 * g; clothData[o++] = 0.790 * g;
           clothData[o++] = 0;
         }
       }
@@ -1062,57 +1003,6 @@ function updateCloths(t) {
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, clothData);
-}
-
-/* ---------- 木叶落在水上，水记了一笔 ----------
-   一片叶子落水，荡开一圈，圈慢慢大、慢慢淡。这个世界因此在计时：
-   观流水兮潺湲 —— 等待是有长度的。                                   */
-const NRIPPLE = 64;
-const ripples = [];                      // {x, z, t0}
-let rippleHead = 0;
-function dropRipple(x, z, t) {
-  ripples[rippleHead] = { x: x, z: z, t0: t };
-  rippleHead = (rippleHead + 1) % NRIPPLE;
-}
-const RIPPLE_SEG = 28;                   // 每圈是一条闭合的细环
-const rippleData = new Float32Array(NRIPPLE * RIPPLE_SEG * 6 * 10);
-const rippleBuf = buf(rippleData, gl.DYNAMIC_DRAW);
-const RIPPLE_N = NRIPPLE * RIPPLE_SEG * 6;
-const RIPPLE_LIFE = 5.2;
-function updateRipples(t) {
-  let o = 0;
-  for (let k = 0; k < NRIPPLE; k++) {
-    const R = ripples[k];
-    const age = R ? t - R.t0 : 1e9;
-    if (!R || age < 0 || age > RIPPLE_LIFE) {          // 空位：塞一个退化三角形
-      for (let q = 0; q < RIPPLE_SEG * 6 * 10; q++) rippleData[o++] = 0;
-      continue;
-    }
-    const u = age / RIPPLE_LIFE;
-    const rad = 0.16 + u * 1.15;
-    const wid = 0.035 + u * 0.065;
-    const fade = (1 - u) * (1 - u) * 0.30;
-    const lift = 0.030 * Math.exp(-u * 3.4);
-    for (let i = 0; i < RIPPLE_SEG; i++) {
-      const a0 = i / RIPPLE_SEG * Math.PI * 2, a1 = (i + 1) / RIPPLE_SEG * Math.PI * 2;
-      const pt = (a, r) => {
-        const x = R.x + Math.cos(a) * r, z = R.z + Math.sin(a) * r;
-        return [x, WATER_Y + waveJS(x, z, t) + lift, z];
-      };
-      const p0 = pt(a0, rad - wid), p1 = pt(a0, rad + wid);
-      const p2 = pt(a1, rad + wid), p3 = pt(a1, rad - wid);
-      for (const tri of [[p0, p1, p2], [p0, p2, p3]]) {
-        for (const q of tri) {
-          rippleData[o++] = q[0]; rippleData[o++] = q[1]; rippleData[o++] = q[2];
-          rippleData[o++] = 0; rippleData[o++] = 1; rippleData[o++] = 0;
-          rippleData[o++] = 0.30 * fade; rippleData[o++] = 0.29 * fade; rippleData[o++] = 0.265 * fade;
-          rippleData[o++] = 0;
-        }
-      }
-    }
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, rippleBuf);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, rippleData);
 }
 
 /* ---------- camera + input ---------- */
@@ -1308,11 +1198,7 @@ function step(dt, t) {
     L.z += (WIND[1] * 1.15 + Math.cos(t * L.sw * 0.83 + L.sp) * 0.85) * dt;
     L.rot += L.rv * dt;
     const surf = groundY(L.x, L.z);
-    if (L.y < surf + 0.06 && L.y >= surf - 0.2 && terrainH(L.x, L.z) < WATER_Y - 0.15)
-      dropRipple(L.x, L.z, t);                      // 落在水上的那一片，水替它记一笔
-    // 贴着镜头的那一片会被近裁剪面切开，糊住半个画面：让它落到别处去
-    const near = Math.hypot(L.x - cam.x, L.y - cam.y, L.z - cam.z) < 2.2;
-    if (near || L.y < surf - 0.2 || Math.abs(L.x - cam.x) > 68 || Math.abs(L.z - cam.z) > 68) {
+    if (L.y < surf - 0.2 || Math.abs(L.x - cam.x) > 68 || Math.abs(L.z - cam.z) > 68) {
       L.x = cam.x + (Math.random() * 2 - 1) * 62;
       L.z = cam.z + (Math.random() * 2 - 1) * 62;
       L.y = groundY(L.x, L.z) + 14 + Math.random() * 16;
@@ -1327,7 +1213,6 @@ function step(dt, t) {
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, leafData);
 
   updateCloths(t);
-  updateRipples(t);
 
   updateSubtitle();
   const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
@@ -1428,19 +1313,6 @@ function draw(t) {
   gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
   gl.drawArrays(gl.TRIANGLES, 0, CLOTH_N);
 
-  // 落叶在水上荡开的圈
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-  gl.depthMask(false);
-  gl.bindBuffer(gl.ARRAY_BUFFER, rippleBuf);
-  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
-  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
-  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
-  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
-  gl.drawArrays(gl.TRIANGLES, 0, RIPPLE_N);
-  gl.depthMask(true);
-  gl.disable(gl.BLEND);
-
   // sedge
   gl.useProgram(bladeP);
   gl.uniformMatrix4fv(bladeP.u.uVP, false, vp);
@@ -1494,16 +1366,9 @@ if (gl) {
   if (SHOT) {
     // 只画三帧，所以叶子得先撒到相机跟前，不能等它们自己飘过来
     for (const L of leaves) {
-      const a = Math.random() * Math.PI * 2, d = 3.5 + Math.random() * 30;
-      L.x = cam.x + Math.cos(a) * d;
-      L.z = cam.z + Math.sin(a) * d;
+      L.x = cam.x + (Math.random() * 2 - 1) * 34;
+      L.z = cam.z + (Math.random() * 2 - 1) * 34;
       L.y = groundY(L.x, L.z) + Math.random() * 17;
-    }
-    for (let i = 0; i < NRIPPLE; i++) {
-      const a = Math.random() * Math.PI * 2, d = 9 + Math.random() * 42;
-      const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
-      if (terrainH(x, z) > WATER_Y - 0.15) continue;
-      dropRipple(x, z, SHOT_T0 - Math.random() * RIPPLE_LIFE);
     }
     for (let i = 0; i < SHOT_FRAMES; i++) {          // 同步画满，画完就不再要新帧
       const t = SHOT_T0 + i * SHOT_DT;
