@@ -261,7 +261,7 @@ var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 6000);
 /* The palette of a pale, luminous, slightly overcast hour: the beach smiles,
  * but the smile is pale. Everything else is tuned to these five colours. */
 var PAL = {
-  skyTop:  new THREE.Color(0x6a8dac),
+  skyTop:  new THREE.Color(0x7d9cb6),
   skyHaze: new THREE.Color(0xd7d1c2),
   sun:     new THREE.Color(0xfff2dc),
   seaDeep: new THREE.Color(0x1d3b4b),
@@ -298,27 +298,15 @@ var sky = new THREE.Mesh(
       'float fbm(vec2 p){ float v=0.0, a=0.5;',
       '  for(int i=0;i<5;i++){ v += a*ns(p); p *= 2.03; a *= 0.5; } return v; }',
       'void main(){',
-      /* A vault, not a backdrop. The old gradient was written in terms of
-       * half-sphere height, which put nearly all of its range above 30 degrees -
-       * and these cameras almost never look up there, so every frame got the
-       * flat pale bottom of the ramp and the sky read as blank paper. Elevation
-       * to a fractional power puts the gradient where the eye actually is, low
-       * down, so the dome has depth from the first metre above the horizon. */
-      '  float el = vDir.y;',
-      '  float elc = clamp(el, 0.0, 1.0);',
-      '  float t = pow(elc, 0.42);',
+      '  float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);',
+      '  float t = pow(clamp((h-0.5)*2.0,0.0,1.0), 0.78);',
       '  vec3 col = mix(uHaze, uTop, t);',
-      /* and it keeps deepening overhead, so there is a weight above you */
-      '  col = mix(col, uTop * 0.74, pow(elc, 2.0) * 0.62);',
       /* the sun does not burn here; it soaks */
       '  float d = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);',
       '  col += uSun * pow(d, 12.0) * 0.26;',
       '  col += uSun * pow(d, 2.5) * 0.045;',
-      /* a light that is simply everywhere, the way an overcast noon is */
-      '  col += uSun * pow(elc, 1.4) * 0.055;',
-      /* a seam at the horizon so sky and sea meet without a cut - but a narrow
-       * one: the old band was six degrees wide and swallowed the horizon */
-      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*16.0,0.0,1.0), 2.0)*0.32);',
+      /* a faint band right at the seam, so sky and sea meet without a hard edge */
+      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*9.0,0.0,1.0), 2.0)*0.45);',
       /* --------------------------------------------------------------------
        * "Tempest roams in the pathless sky."  Two lines of this poem look like
        * a contradiction — the sky is motionless overhead, AND a tempest roams
@@ -329,6 +317,7 @@ var sky = new THREE.Mesh(
        * is happening. Look out and something is.
        * ------------------------------------------------------------------ */
       '  float az = atan(vDir.x, vDir.z);',
+      '  float el = vDir.y;',
       '  float da = mod(az - uStormAz + 3.14159, 6.28318) - 3.14159;',
       '  float across = 1.0 - smoothstep(0.0, 0.78, abs(da));',
       '  float top = 0.055 + 0.265 * across;',                 /* an anvil, tallest at its heart */

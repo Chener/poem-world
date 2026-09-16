@@ -261,7 +261,7 @@ var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 6000);
 /* The palette of a pale, luminous, slightly overcast hour: the beach smiles,
  * but the smile is pale. Everything else is tuned to these five colours. */
 var PAL = {
-  skyTop:  new THREE.Color(0x6a8dac),
+  skyTop:  new THREE.Color(0x7d9cb6),
   skyHaze: new THREE.Color(0xd7d1c2),
   sun:     new THREE.Color(0xfff2dc),
   seaDeep: new THREE.Color(0x1d3b4b),
@@ -298,27 +298,15 @@ var sky = new THREE.Mesh(
       'float fbm(vec2 p){ float v=0.0, a=0.5;',
       '  for(int i=0;i<5;i++){ v += a*ns(p); p *= 2.03; a *= 0.5; } return v; }',
       'void main(){',
-      /* A vault, not a backdrop. The old gradient was written in terms of
-       * half-sphere height, which put nearly all of its range above 30 degrees -
-       * and these cameras almost never look up there, so every frame got the
-       * flat pale bottom of the ramp and the sky read as blank paper. Elevation
-       * to a fractional power puts the gradient where the eye actually is, low
-       * down, so the dome has depth from the first metre above the horizon. */
-      '  float el = vDir.y;',
-      '  float elc = clamp(el, 0.0, 1.0);',
-      '  float t = pow(elc, 0.42);',
+      '  float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);',
+      '  float t = pow(clamp((h-0.5)*2.0,0.0,1.0), 0.78);',
       '  vec3 col = mix(uHaze, uTop, t);',
-      /* and it keeps deepening overhead, so there is a weight above you */
-      '  col = mix(col, uTop * 0.74, pow(elc, 2.0) * 0.62);',
       /* the sun does not burn here; it soaks */
       '  float d = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);',
       '  col += uSun * pow(d, 12.0) * 0.26;',
       '  col += uSun * pow(d, 2.5) * 0.045;',
-      /* a light that is simply everywhere, the way an overcast noon is */
-      '  col += uSun * pow(elc, 1.4) * 0.055;',
-      /* a seam at the horizon so sky and sea meet without a cut - but a narrow
-       * one: the old band was six degrees wide and swallowed the horizon */
-      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*16.0,0.0,1.0), 2.0)*0.32);',
+      /* a faint band right at the seam, so sky and sea meet without a hard edge */
+      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*9.0,0.0,1.0), 2.0)*0.45);',
       /* --------------------------------------------------------------------
        * "Tempest roams in the pathless sky."  Two lines of this poem look like
        * a contradiction — the sky is motionless overhead, AND a tempest roams
@@ -329,6 +317,7 @@ var sky = new THREE.Mesh(
        * is happening. Look out and something is.
        * ------------------------------------------------------------------ */
       '  float az = atan(vDir.x, vDir.z);',
+      '  float el = vDir.y;',
       '  float da = mod(az - uStormAz + 3.14159, 6.28318) - 3.14159;',
       '  float across = 1.0 - smoothstep(0.0, 0.78, abs(da));',
       '  float top = 0.055 + 0.265 * across;',                 /* an anvil, tallest at its heart */
@@ -528,14 +517,6 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     /* a breaking wave is lit through: the thin water at the crest glows */
     '  float thin = smoothstep(0.35, 1.25, vW.y) * pow(max(dot(-v, normalize(uSunDir)), 0.0) * 0.5 + 0.5, 2.0);',
     '  base += vec3(0.10, 0.26, 0.24) * thin;',
-    /* A breaking wave has a face, and the face is in its own shadow: it leans
-     * away from the light and the water behind it is deep. Without this the
-     * swell had no volume, and white spray in front of a white sky had nothing
-     * to be seen against. */
-    '  float steep = smoothstep(0.20, 0.78, length(dh));',
-    '  float face = steep * smoothstep(-0.2, 0.9, disp.y);',
-    '  base *= 1.0 - 0.42 * face;',
-    '  base = mix(base, uDeep * 0.72, steep * 0.30);',
     '  float fres = pow(1.0 - max(dot(n, v), 0.0), 4.2);',
     '  vec3 refl = uSky * 0.80 + vec3(0.03, 0.05, 0.07);',
     '  vec3 col = mix(base, refl, clamp(fres*0.72, 0.0, 0.55));',
@@ -671,113 +652,6 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
 }));
 sand.frustumCulled = false;
 scene.add(sand);
-
-/* -------------------------------------------------------------- SPRAY -- */
-/* "The sea surges up with laughter."
- *
- * Every frame of this world had empty air in it. A wave that breaks and throws
- * nothing is a wave you have to be told about; the spray is the part you can
- * actually see from the sand. Each puff is launched when the crest at its own
- * stretch of shore topples - the same wave phase the foam uses, so the spray
- * and the white water belong to the same wave - then follows a plain ballistic
- * arc and fades. No simulation state: position is a pure function of (which
- * stretch of shore, what time), so the fixed cameras see the same spray every
- * time they are pointed here. */
-
-function wavePhaseJS(w, x, z, t) {
-  var L = Math.hypot(w[0], w[1]), k = 6.28318 / w[3];
-  return k * ((w[0] / L) * x + (w[1] / L) * z) - Math.sqrt(9.8 / k) * k * t * WAVE_SPEED;
-}
-/* Spray timing runs off the OBLIQUE train, not the head-on one. W0 travels
- * straight at the beach, so its phase does not vary along x at all: every
- * metre of shore breaks in the same instant, and spray was therefore either
- * everywhere or nowhere - and at the frozen instant, nowhere. W1 comes in at
- * an angle, so the break runs along the shore the way a real one does. */
-var SPRAY_WAVE = WAVES[1];
-var SPRAY_PERIOD = (function () {
-  var k = 6.28318 / SPRAY_WAVE[3];
-  return 6.28318 / (Math.sqrt(9.8 / k) * k * WAVE_SPEED);
-})();
-
-var SPRAY_CELLS = 150, SPRAY_PER_CELL = 8, SPRAY_TILE = 240;
-var SPRAY_N = SPRAY_CELLS * SPRAY_PER_CELL;
-var SPRAY_LIFE = 1.70, SPRAY_Z = -13.0;
-
-var sprayTex = (function () {
-  var c = document.createElement('canvas'); c.width = c.height = 64;
-  var x = c.getContext('2d');
-  var g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,0.95)');
-  g.addColorStop(0.45, 'rgba(255,255,255,0.40)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
-  var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-})();
-
-var sprayGeo = new THREE.PlaneGeometry(1, 1);
-var sprayOpacity = new THREE.InstancedBufferAttribute(new Float32Array(SPRAY_N), 1);
-sprayGeo.setAttribute('aOpacity', sprayOpacity);
-var iSpray = new THREE.InstancedMesh(sprayGeo, new THREE.ShaderMaterial({
-  uniforms: { uMap: { value: sprayTex } },
-  transparent: true, depthWrite: false,
-  vertexShader: [
-    'attribute float aOpacity; varying float vO; varying vec2 vUv;',
-    'void main(){ vO = aOpacity; vUv = uv;',
-    '  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }'
-  ].join('\n'),
-  fragmentShader: [
-    'uniform sampler2D uMap; varying float vO; varying vec2 vUv;',
-    'void main(){',
-    '  float a = texture2D(uMap, vUv).a * vO;',
-    '  if (a < 0.004) discard;',
-    '  gl_FragColor = vec4(0.965, 0.975, 0.985, a);',
-    '  #include <tonemapping_fragment>',
-    '  #include <colorspace_fragment>',
-    '}'
-  ].join('\n')
-}), SPRAY_N);
-iSpray.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-iSpray.frustumCulled = false;
-iSpray.count = 0;
-scene.add(iSpray);
-
-function updateSpray(t, camX) {
-  var n = 0;
-  var cell = SPRAY_TILE / SPRAY_CELLS;
-  var x0 = Math.round(camX / SPRAY_TILE) * SPRAY_TILE - SPRAY_TILE / 2;
-  for (var c = 0; c < SPRAY_CELLS; c++) {
-    var x = x0 + (c + 0.5) * cell;
-    /* seconds since the crest at this stretch of shore toppled */
-    var zc = SPRAY_Z + 3.0 - h1(c * 1.31) * 6.8;
-    var u = wavePhaseJS(SPRAY_WAVE, x, zc, t) / 6.28318
-          + 0.13 * Math.sin(x * 0.09) + 0.21 * Math.sin(x * 0.031 + 1.7)
-          + 0.08 * Math.sin(x * 0.27);
-    u = u - Math.floor(u);
-    var age = u * SPRAY_PERIOD;
-    if (age > SPRAY_LIFE) continue;
-    var surf = seaHeightJS(x, zc, t);
-    for (var k = 0; k < SPRAY_PER_CELL; k++) {
-      var j = c * SPRAY_PER_CELL + k;
-      var vy = 4.4 + h1(j * 1.7) * 4.6;
-      var vz = 1.2 + h1(j * 2.9 + 5) * 2.4;      // carried shoreward as it flies
-      var jx = (h1(j * 4.1 + 11) - 0.5) * cell * 2.4;
-      var y = surf + 0.35 + vy * age - 4.9 * age * age;
-      var gy = -0.15;
-      if (y < gy) continue;                       // it has fallen back into the sea
-      _dummy.position.set(x + jx, y, zc + vz * age);
-      _dummy.quaternion.copy(camera.quaternion);  // face the eye
-      var grow = 0.60 + age * 1.70 + h1(j * 3.3 + 2) * 0.70;
-      _dummy.scale.set(grow, grow, grow);
-      _dummy.updateMatrix();
-      iSpray.setMatrixAt(n, _dummy.matrix);
-      sprayOpacity.array[n] = Math.max(0, 1 - age / SPRAY_LIFE) * 0.95;
-      n++;
-    }
-  }
-  iSpray.count = n;
-  iSpray.instanceMatrix.needsUpdate = true;
-  sprayOpacity.needsUpdate = true;
-}
 
 /* ------------------------------------------------------------- WRECKS -- */
 /* "ships get wrecked in the trackless water, death is abroad and children play."
@@ -1460,7 +1334,6 @@ function frame() {
   updateChildren(simT, camera.position.x);
   updateWrecks(simT, camera.position.x);
   updateBoats(simT, camera.position.x);
-  updateSpray(simT, camera.position.x);
   sky.position.copy(camera.position);
   sea.position.x = Math.round(camera.position.x / 200) * 200;
   sand.position.x = Math.round(camera.position.x / 400) * 400; // the shore never ends
@@ -1502,14 +1375,7 @@ requestAnimationFrame(function () {
     var b = document.getElementById('boot');
     b.classList.add('gone');
     setTimeout(function () { b.remove(); }, 800);
-    if (SHOT) {
-      document.body.setAttribute('data-shot-ready', '1');
-      /* so a headless --dump-dom can report what the frame contained */
-      document.body.setAttribute('data-counts',
-        'children=' + iTorso.count + ' boats=' + iBoat.count +
-        ' spray=' + iSpray.count + ' turrets=' + iTurret.count +
-        ' shells=' + iShell.count + ' pebbles=' + iPebble.count);
-    }
+    if (SHOT) { document.body.setAttribute('data-shot-ready', '1'); }
   });
 });
 
