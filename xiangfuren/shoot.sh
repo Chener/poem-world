@@ -26,11 +26,11 @@ CAMS=(
 
 for entry in "${CAMS[@]}"; do
   name="${entry%%|*}"; cam="${entry##*|}"
-  chrome-devtools-axi open "$BASE?cam=$cam" >/dev/null
-  chrome-devtools-axi resize 1440 900 >/dev/null
-  chrome-devtools-axi eval "(() => { document.getElementById('enter').classList.add('gone'); document.getElementById('tl').classList.add('collapsed'); document.getElementById('hint').style.display = 'none'; return 'ok' })()" >/dev/null
+  chrome-devtools-axi open "$BASE?cam=$cam" >/dev/null 2>&1 || chrome-devtools-axi open "$BASE?cam=$cam" >/dev/null 2>&1 || true
+  chrome-devtools-axi resize 1440 900 >/dev/null 2>&1 || true
+  chrome-devtools-axi eval "(() => { document.getElementById('enter').classList.add('gone'); document.getElementById('tl').classList.add('collapsed'); document.getElementById('hint').style.display = 'none'; return 'ok' })()" >/dev/null 2>&1 || true
   python3 -c "import time; time.sleep(3.0)"
-  chrome-devtools-axi screenshot "$OUT/$name.png" >/dev/null
+  chrome-devtools-axi screenshot "$OUT/$name.png" >/dev/null 2>&1 || chrome-devtools-axi screenshot "$OUT/$name.png" >/dev/null 2>&1
   sips -Z 1100 "$OUT/$name.png" --out "$OUT/$name.png" >/dev/null 2>&1 || true
   echo "shot $name"
 done
