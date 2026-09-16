@@ -216,6 +216,8 @@
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen time, no UI
 var FROZEN_T = 14.0;                                   // deterministic clock for shots
+var SHOT_FRAMES = 4;                                   // shot mode renders this many, then stops
+var shotFrames = 0;
 
 /* ---------------------------------------------------------------- POEM -- */
 /* Five stanzas. Walking the endless shore walks the poem. */
@@ -372,94 +374,133 @@ var seaUniforms = {
   uFogFar:   { value: 5200 },
   uStormAz:  { value: Math.PI }
 };
-var WAVE_GLSL = [
-  /* w = (dirx, dirz, amplitude, wavelength) ; steepness folded into amplitude */
-  'const vec4 W0 = vec4( 0.00, -1.00, 1.15,  47.0);',
-  'const vec4 W1 = vec4( 0.26, -0.97, 0.66,  24.0);',
-  'const vec4 W2 = vec4(-0.19, -0.98, 0.37,  12.5);',
-  'const vec4 W3 = vec4( 0.44, -0.90, 0.19,   6.2);',
-  'float wavePhase(vec4 w, vec2 p, float t){',
-  '  float k = 6.28318 / w.w;',
-  '  float c = sqrt(9.8 / k);',
-  '  return k * dot(normalize(w.xy), p) - c * k * t * 0.42;',
-  '}',
-  /* Waves do not simply fade out at the sand. They feel the bottom, rear up,
-   * and fall over. shoal() is that: a swell that gains about 2.3x around
-   * twenty metres out, then dies in the last few metres of run-up. */
-  'float shoreFall(vec2 p){',
-  '  float d = -p.y;',
-  '  float runUp = smoothstep(-1.5, 13.0, d);',
-  '  float deep  = mix(0.62, 1.0, smoothstep(0.0, 90.0, d));',
-  '  float rear  = 1.0 + 1.30 * exp(-pow((d - 21.0) / 15.0, 2.0));',
+/* One source of truth for the wave field. The GLSL below is generated from
+ * these numbers, and seaHeightJS() reads the same array, so the shader and the
+ * things floating on the water can never drift apart again.
+ *   dir x, dir z, amplitude (m), wavelength (m) */
+var WAVES = [
+  [ 0.00, -1.00, 1.35, 42.0],
+  [ 0.26, -0.97, 0.72, 23.0],
+  [-0.19, -0.98, 0.40, 12.5],
+  [ 0.44, -0.90, 0.20,  6.2]
+];
+var WAVE_SPEED = 0.62;   // sets the rhythm: the big swell arrives every ~8.5s
+var WAVE_STEEP = 1.05;   // horizontal Gerstner pull — this is what rears the face up
+
+/* shoal(): the whole difference between a swell and a breaker. A wave that
+ * feels the bottom does not fade out politely; it slows, stacks up on itself,
+ * rears about eleven metres from the sand — right where the children are
+ * standing — and falls over. */
+var SHOAL_GLSL = [
+  'float shoal(float d){',
+  '  float runUp = smoothstep(-1.2, 7.0, d);',
+  '  float deep  = mix(0.55, 1.0, smoothstep(0.0, 80.0, d));',
+  '  float rear  = 1.0 + 2.40 * exp(-pow((d - 11.0) / 8.0, 2.0));',
   '  return runUp * deep * rear;',
-  '}',
-  'float seaHeight(vec2 p, float t){',
-  '  float f = shoreFall(p); float h = 0.0;',
-  '  h += W0.z * sin(wavePhase(W0, p, t));',
-  '  h += W1.z * sin(wavePhase(W1, p, t));',
-  '  h += W2.z * sin(wavePhase(W2, p, t));',
-  '  h += W3.z * sin(wavePhase(W3, p, t));',
-  '  return h * f;',
   '}'
 ].join('\n');
 
-var seaGeo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, 600, 600);
+var WAVE_GLSL = (function () {
+  var out = ['const float WSPEED = ' + WAVE_SPEED.toFixed(3) + ';',
+             'const float WSTEEP = ' + WAVE_STEEP.toFixed(3) + ';'];
+  WAVES.forEach(function (w, i) {
+    var L = Math.hypot(w[0], w[1]);
+    out.push('const vec4 W' + i + ' = vec4(' +
+      (w[0] / L).toFixed(4) + ', ' + (w[1] / L).toFixed(4) + ', ' +
+      w[2].toFixed(3) + ', ' + w[3].toFixed(2) + ');');
+  });
+  out.push(SHOAL_GLSL);
+  out.push('float wavePhase(vec4 w, vec2 p, float t){');
+  out.push('  float k = 6.28318 / w.w;');
+  out.push('  return k * dot(w.xy, p) - sqrt(9.8 / k) * k * t * WSPEED;');
+  out.push('}');
+  /* One pass over the wave field that hands back height, the analytic surface
+   * slope, and the full Gerstner displacement at once. It replaces the five
+   * finite-difference evaluations the vertex stage used to do and the four the
+   * fragment stage did per pixel — which is the difference between this scene
+   * being renderable in software and not. Sampled in UNDISPLACED coordinates,
+   * which is where the height field is actually defined. */
+  out.push('void seaField(vec2 p, float t, out float h, out vec2 dh, out vec3 disp){');
+  out.push('  float d = -p.y;');
+  out.push('  float f = shoal(d);');
+  out.push('  float fz = shoal(d - 0.5) - shoal(d + 0.5);');
+  out.push('  float H = 0.0; vec2 dH = vec2(0.0); vec2 pull = vec2(0.0);');
+  WAVES.forEach(function (w, i) {
+    out.push('  { float k = 6.28318 / W' + i + '.w;');
+    out.push('    float ph = k * dot(W' + i + '.xy, p) - sqrt(9.8 / k) * k * t * WSPEED;');
+    out.push('    float sn = sin(ph), cs = cos(ph);');
+    out.push('    H += W' + i + '.z * sn;');
+    out.push('    dH += W' + i + '.z * k * W' + i + '.xy * cs;');
+    out.push('    pull += W' + i + '.xy * (W' + i + '.z * WSTEEP * cs); }');
+  });
+  out.push('  h = H * f;');
+  out.push('  dh = dH * f; dh.y += fz * H;');
+  /* the horizontal term is what sharpens a crest into a face instead of
+   * leaving it a rounded hump */
+  out.push('  disp = vec3(pull.x * f, h, pull.y * f);');
+  out.push('}');
+  return out.join('\n');
+})();
+
+var seaGeo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, 620, 620);
 seaGeo.rotateX(-Math.PI / 2);
 var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
   uniforms: seaUniforms,
-  transparent: true,
   vertexShader: [
-    'uniform float uTime; varying vec3 vW; varying float vH; varying float vFoam;',
+    'uniform float uTime; varying vec3 vW; varying vec2 vP0; varying float vFoam;',
     WAVE_GLSL,
     'void main(){',
     '  vec4 wp0 = modelMatrix * vec4(position, 1.0);',
-    '  vec2 xz = wp0.xz;',
-    '  float h = seaHeight(xz, uTime);',
-    /* crest foam: steep + high, plus a band of surf right at the waterline */
-    '  float e = 0.9;',
-    '  float hx = seaHeight(xz + vec2(e,0.0), uTime) - seaHeight(xz - vec2(e,0.0), uTime);',
-    '  float hz = seaHeight(xz + vec2(0.0,e), uTime) - seaHeight(xz - vec2(0.0,e), uTime);',
-    '  float slope = length(vec2(hx,hz)) / (2.0*e);',
-    '  float crest = smoothstep(0.95, 2.05, h) * smoothstep(0.13, 0.52, slope);',
-    '  float d = -xz.y;',
-    '  float breakBand = exp(-pow((d - 15.0) / 11.0, 2.0));',
-    '  float rollers = 0.5 + 0.5*sin(wavePhase(W0, xz, uTime) - 0.9);',
-    '  float surf = breakBand * pow(rollers, 2.6) * 0.95;',
-    '  float wash = smoothstep(2.5, -1.0, d) * 0.30;',
+    '  vec2 p0 = wp0.xz;',
+    '  vP0 = p0;',
+    '  float h; vec2 dh; vec3 disp;',
+    '  seaField(p0, uTime, h, dh, disp);',
+    '  vec3 wp = wp0.xyz + disp;',
+    '  float d = -p0.y;',
+    /* foam has three sources: crests that are genuinely toppling, the band
+     * where the shoaling wave is breaking, and the sheet of white left on the
+     * sand behind it */
+    '  float slope = length(dh);',
+    '  float crest = smoothstep(0.85, 1.95, disp.y) * smoothstep(0.16, 0.58, slope);',
+    '  float rollers = 0.5 + 0.5*sin(wavePhase(W0, p0, uTime) - 0.85);',
+    '  float breakBand = exp(-pow((d - 10.0) / 7.5, 2.0));',
+    '  float surf = breakBand * pow(rollers, 2.2) * 1.30;',
+    '  float wash = smoothstep(2.2, -1.2, d) * 0.36;',
     '  vFoam = clamp(crest + surf + wash, 0.0, 1.0);',
-    '  vH = h;',
-    '  vec4 wp = vec4(wp0.x, wp0.y + h, wp0.z, 1.0); vW = wp.xyz;',
-    '  gl_Position = projectionMatrix * viewMatrix * wp;',
+    '  vW = wp;',
+    '  gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);',
     '}'
   ].join('\n'),
   fragmentShader: [
     'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime,uStormAz;',
-    'varying vec3 vW; varying float vH; varying float vFoam;',
+    'varying vec3 vW; varying vec2 vP0; varying float vFoam;',
     WAVE_GLSL,
     'void main(){',
-    '  vec2 xz = vec2(vW.x, vW.z);',
     '  float dist = length(cameraPosition - vW);',
     '  float lod = clamp(dist / 300.0, 0.0, 1.0);',
-    '  float e = 0.55 + lod * 7.0;',
-    '  float hx = seaHeight(xz + vec2(e,0.0), uTime) - seaHeight(xz - vec2(e,0.0), uTime);',
-    '  float hz = seaHeight(xz + vec2(0.0,e), uTime) - seaHeight(xz - vec2(0.0,e), uTime);',
-    '  vec3 n = normalize(vec3(-hx, 2.0*e, -hz));',
+    /* normals come from the UNDISPLACED domain, which is where the height
+     * field is actually defined; sampling at the displaced position was an
+     * approximation that got worse the steeper the waves became */
+    '  float h; vec2 dh; vec3 disp;',
+    '  seaField(vP0, uTime, h, dh, disp);',
+    '  vec3 n = normalize(vec3(-dh.x, 1.0, -dh.y));',
+    /* flatten the normal with distance: near the horizon one pixel covers many
+     * wavelengths, and keeping the detail there only produces moire */
     '  n = normalize(mix(n, vec3(0.0,1.0,0.0), lod * lod * 0.80));',
     '  vec3 v = normalize(cameraPosition - vW);',
-    /* depth: thin over the shelf near the beach, deep further out */
-    '  float depth = clamp((-xz.y) / 210.0, 0.0, 1.0);',
+    '  float depth = clamp((-vP0.y) / 210.0, 0.0, 1.0);',
     '  vec3 base = mix(uShal, uDeep, pow(depth, 0.55));',
+    /* a breaking wave is lit through: the thin water at the crest glows */
+    '  float thin = smoothstep(0.7, 2.2, vW.y) * pow(max(dot(-v, normalize(uSunDir)), 0.0) * 0.5 + 0.5, 2.0);',
+    '  base += vec3(0.10, 0.26, 0.24) * thin;',
     '  float fres = pow(1.0 - max(dot(n, v), 0.0), 4.2);',
     '  vec3 refl = uSky * 0.80 + vec3(0.03, 0.05, 0.07);',
     '  vec3 col = mix(base, refl, clamp(fres*0.72, 0.0, 0.55));',
-    /* the long low glitter path — the laughter */
     '  vec3 hv = normalize(normalize(uSunDir) + v);',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 190.0) * 1.35;',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 18.0) * 0.10;',
     '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.78);',
     '  col = mix(col, vec3(0.94,0.94,0.92), foam * 0.85);',
-    /* the water under the tempest goes out, the way it does when a squall
-     * drags its shadow across a sea you are looking at from a dry beach */
     '  float fa = atan(vW.x - cameraPosition.x, vW.z - cameraPosition.z);',
     '  float dda = mod(fa - uStormAz + 3.14159, 6.28318) - 3.14159;',
     '  float under = (1.0 - smoothstep(0.10, 0.70, abs(dda))) * smoothstep(320.0, 1500.0, dist);',
@@ -471,7 +512,7 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '}'
   ].join('\n')
 }));
-sea.position.set(0, 0, -SEA_SIZE / 2 + 30); // plane extends out to sea from just inland of the waterline
+sea.position.set(0, 0, -SEA_SIZE / 2 + 30);
 sea.frustumCulled = false;
 scene.add(sea);
 
@@ -482,7 +523,9 @@ var SAND_W = 4200, SAND_D = 1000;
 var TAU = Math.PI * 2;
 function sandHeight(x, z) {
   // z = 0 is the waterline; +z walks inland and rises, -z is the shelf going under
-  var ramp = z > 0 ? z * 0.030 : z * 0.105;
+  // seaward the bottom must fall faster than the waves trough: the deepest
+  // trough now runs past -5m around eleven metres out, so 0.78/m clears it
+  var ramp = z > 0 ? z * 0.030 : z * 0.78;
   var dune = Math.max(0, z - 120) * 0.055;
   // periods of 80m / 400m / 20m all divide the 400m re-tile step, so the shore
   // can repeat forever without the dunes jumping under your feet
@@ -528,7 +571,11 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  vec3 n = normalize(vN);',
     '  float g = noise(vW.xz*2.6)*0.5 + noise(vW.xz*11.0)*0.26 + noise(vW.xz*46.0)*0.14;',
     /* the tide breathes: the wet line creeps up and back */
-    '  float edge = 3.3 + 2.2*sin(uTime*0.44 + vW.x*0.026) + 1.2*sin(uTime*0.31 - vW.x*0.0145);',
+    /* the run-up follows the rhythm of the breaker that made it, and sweeps
+     * along the shore rather than surging everywhere at once — the slow,
+     * repeating rock the poem calls a cradle */
+    '  float surge = pow(max(sin(uTime*0.735 + vW.x*0.021), 0.0), 0.70);',
+    '  float edge = 2.4 + 4.0*surge + 0.9*sin(uTime*0.29 - vW.x*0.0145);',
     '  float wet = 1.0 - smoothstep(edge - 0.8, edge + 4.5, vW.z);',
     '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.35, 0.0, 1.0);',
     '  vec3 col = mix(uSand, uWet, wet*0.92);',
@@ -561,23 +608,23 @@ scene.add(sand);
  * The children never look at these. That is the whole point of the poem, so the
  * wrecks sit far out where you have to choose to look for them. */
 
-/* A JS mirror of the sea surface, for floating things on. It must carry ALL
- * FOUR waves and the same shoal(): with only the first two it under-reports
- * the surface by up to half a metre, and anything floated on it spends most
- * of its life underneath the water. If the GLSL W0..W3 change, change these. */
+/* The JS side of the same wave field. It reads WAVES and mirrors shoal(), so
+ * anything floated on the water sits on the surface the shader actually draws.
+ * (It carries only the vertical term; the horizontal Gerstner pull moves a
+ * floating thing sideways by under a metre, which nothing here would notice.) */
 function seaHeightJS(x, z, t) {
   var d = -z;
-  var runUp = Math.min(1, Math.max(0, (d + 1.5) / 14.5));
-  var deep = 0.62 + 0.38 * Math.min(1, Math.max(0, d / 90));
-  var rear = 1 + 1.30 * Math.exp(-Math.pow((d - 21) / 15, 2));
-  var f = runUp * runUp * (3 - 2 * runUp) * deep * rear;
+  var ru = Math.min(1, Math.max(0, (d + 1.2) / 8.2));
+  var runUp = ru * ru * (3 - 2 * ru);
+  var dp = Math.min(1, Math.max(0, d / 80));
+  var deep = 0.55 + 0.45 * (dp * dp * (3 - 2 * dp));
+  var rear = 1 + 2.40 * Math.exp(-Math.pow((d - 11) / 8, 2));
+  var f = runUp * deep * rear;
   var h = 0;
-  var W = [[0.00, -1.00, 1.15, 47.0], [0.26, -0.97, 0.66, 24.0],
-           [-0.19, -0.98, 0.37, 12.5], [0.44, -0.90, 0.19, 6.2]];
-  for (var i = 0; i < W.length; i++) {
-    var w = W[i], k = 6.28318 / w[3], c = Math.sqrt(9.8 / k);
-    var L = Math.hypot(w[0], w[1]);
-    h += w[2] * Math.sin(k * ((w[0] / L) * x + (w[1] / L) * z) - c * k * t * 0.42);
+  for (var i = 0; i < WAVES.length; i++) {
+    var w = WAVES[i], L = Math.hypot(w[0], w[1]);
+    var k = 6.28318 / w[3];
+    h += w[2] * Math.sin(k * ((w[0] / L) * x + (w[1] / L) * z) - Math.sqrt(9.8 / k) * k * t * WAVE_SPEED);
   }
   return h * f;
 }
@@ -1215,7 +1262,8 @@ function applyShotCamera() {
 }
 
 function frame() {
-  requestAnimationFrame(frame);
+  if (!SHOT || shotFrames < SHOT_FRAMES) requestAnimationFrame(frame);
+  if (SHOT) shotFrames++;
   var dt = Math.min(clock.getDelta(), 0.05);
   if (SHOT) {
     simT = FROZEN_T;
