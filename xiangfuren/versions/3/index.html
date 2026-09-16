@@ -911,72 +911,6 @@ function makeWrongness() {
 }
 const wrong = makeWrongness();
 
-/* ---------- 捐余袂兮江中，遗余褋兮澧浦 ----------
-   她没有来。于是把袖子解下来，扔进水里，让它自己漂走。
-   这几片素绢是这个世界里唯一还在移动、而且再也不回来的东西。   */
-function waveJS(x, z, t) {
-  return 0.240 * Math.sin(0.130*x + 0.098*z + t * 0.92)
-       + 0.155 * Math.sin(-0.089*x + 0.176*z + t * 1.21)
-       + 0.072 * Math.sin(0.305*x - 0.121*z + t * 1.74)
-       + 0.036 * Math.sin(0.470*x + 0.395*z + t * 2.55)
-       + 0.017 * Math.sin(-0.760*x + 0.510*z + t * 3.40);
-}
-const CLOTHS = [
-  // 袂：解下来的袖子，顺着流水一直往南去
-  { x: -14.5, z: 33.0, ang: 0.62, vx: 0.052, vz: 0.086, w: 3.1, h: 1.15, tone: 1.00 },
-  { x:  -8.5, z: -11.0, ang: 2.35, vx: 0.068, vz: 0.041, w: 2.7, h: 1.02, tone: 0.93 },
-  { x: -55.0, z:  21.0, ang: 1.15, vx: 0.045, vz: 0.074, w: 2.9, h: 1.08, tone: 0.97 },
-  // 褋：挂在澧浦的浅滩上，再也漂不动了
-  { x:   4.6, z: -70.4, ang: 1.92, vx: 0, vz: 0, w: 2.5, h: 1.30, tone: 0.90, snag: true },
-];
-const CU = 12, CV = 5;
-const clothData = new Float32Array(CLOTHS.length * CU * CV * 6 * 10);
-const clothBuf = buf(clothData, gl.DYNAMIC_DRAW);
-const CLOTH_N = CLOTHS.length * CU * CV * 6;
-function updateCloths(t) {
-  let o = 0;
-  const P = [0, 0, 0];
-  for (const C of CLOTHS) {
-    const cx = C.x + C.vx * t, cz = C.z + C.vz * t;
-    const ca = Math.cos(C.ang + (C.snag ? 0 : t * 0.010)), sa = Math.sin(C.ang + (C.snag ? 0 : t * 0.010));
-    const base = C.snag ? Math.max(terrainH(cx, cz), WATER_Y) : WATER_Y;
-    const at = (u, v, out) => {
-      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h;
-      const x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca;
-      // 绢很软：它贴着浪起伏，自己还在抖
-      const flut = C.snag
-        ? 0.035 * Math.sin(t * 2.3 + lx * 3.1) * (0.4 + 0.6 * Math.abs(lz))
-        : 0.075 * Math.sin(t * 1.55 + lx * 2.3 + lz * 1.7)
-          + 0.045 * Math.sin(t * 2.70 - lx * 3.7);
-      out[0] = x; out[1] = base + 0.045 + (C.snag ? 0 : waveJS(x, z, t)) + flut; out[2] = z;
-      return out;
-    };
-    const a = [0,0,0], b = [0,0,0], c = [0,0,0], d = [0,0,0];
-    for (let i = 0; i < CU; i++) for (let j = 0; j < CV; j++) {
-      at(i / CU, j / CV, a); at((i+1) / CU, j / CV, b);
-      at((i+1) / CU, (j+1) / CV, c); at(i / CU, (j+1) / CV, d);
-      for (const tri of [[a,b,c], [a,c,d]]) {
-        const ux = tri[1][0]-tri[0][0], uy = tri[1][1]-tri[0][1], uz = tri[1][2]-tri[0][2];
-        const vx = tri[2][0]-tri[0][0], vy = tri[2][1]-tri[0][1], vz = tri[2][2]-tri[0][2];
-        let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
-        const l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
-        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-        // 生绢：边上被水泡得发暗
-        const edge = 0.80 + 0.24 * Math.min(1, Math.min(i, CU - 1 - i) / 2.4);
-        const g = C.tone * edge;
-        for (const q of tri) {
-          clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
-          clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
-          clothData[o++] = 0.735 * g; clothData[o++] = 0.706 * g; clothData[o++] = 0.648 * g;
-          clothData[o++] = 0;
-        }
-      }
-    }
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, clothData);
-}
-
 /* ---------- camera + input ---------- */
 const cam = { x: 6, y: 0, z: 16, yaw: Math.PI, pitch: -0.055, vy: 0 };
 const keys = Object.create(null);
@@ -1059,8 +993,6 @@ const LINES = [
     en: 'Dim, blurred, I look into the distance — only the running water, going on, going on.' },
   { x:  14, z: -76, r: 16, zh: '鸟何萃兮蘋中？罾何为兮木上？',
     en: 'Why do the birds gather in the duckweed? Why is the fishing net hung in a tree?' },
-  { x: -24, z:  -4, r: 15, zh: '捐余袂兮江中，遗余褋兮澧浦。',
-    en: 'I throw my sleeve away into the river, I leave my under-robe on the Li\'s far shore.' },
   { x:  30, z:  -4, r: 17, zh: '麋何食兮庭中？蛟何为兮水裔？',
     en: 'Why is the elk feeding in my courtyard? Why is the water-dragon at the river\'s edge?' },
   { x:   0, z:  40, r: 14, zh: '筑室兮水中，葺之兮荷盖。',
@@ -1181,8 +1113,6 @@ function step(dt, t) {
   gl.bindBuffer(gl.ARRAY_BUFFER, leafBuf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, leafData);
 
-  updateCloths(t);
-
   updateSubtitle();
   const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
   compass.textContent = ['北','东北','东','东南','南','西南','西','西北'][Math.round(deg / 45) % 8];
@@ -1273,14 +1203,6 @@ function draw(t) {
   gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
   gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
   gl.drawArrays(gl.TRIANGLES, 0, wrong.n);
-
-  // 捐余袂兮江中
-  gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
-  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
-  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
-  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
-  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
-  gl.drawArrays(gl.TRIANGLES, 0, CLOTH_N);
 
   // sedge
   gl.useProgram(bladeP);
