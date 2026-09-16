@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>湘夫人 · 可漫游世界</title>
+<style>
+  :root{
+    --ink:#e8e2d6; --ink-dim:#a89f8e; --ink-faint:#6f6858;
+    --bg:#0b0d12; --panel:#11141b; --line:#232833;
+    --gold:#c9a24a; --water:#2f5f66;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Songti SC","Noto Serif CJK SC","Source Han Serif SC",Georgia,"Times New Roman",serif;
+    overflow:hidden;-webkit-text-size-adjust:100%}
+  #app{display:flex;height:100%;width:100%}
+  #stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+
+  /* ---- overlays on the world ---- */
+  #vignette{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 45%,rgba(0,0,0,0) 40%,rgba(0,0,0,.55) 100%)}
+  #subtitle{position:absolute;left:0;right:0;bottom:6.5vh;text-align:center;pointer-events:none;
+    padding:0 6vw;opacity:0;transition:opacity 1.1s ease}
+  #subtitle.on{opacity:1}
+  #subtitle .zh{font-size:clamp(17px,2.1vw,27px);letter-spacing:.22em;line-height:1.9;
+    text-shadow:0 2px 18px rgba(0,0,0,.95),0 0 40px rgba(0,0,0,.7)}
+  #subtitle .en{margin-top:.7em;font-size:clamp(11px,1.05vw,14px);color:var(--ink-dim);
+    letter-spacing:.06em;font-style:italic;text-shadow:0 2px 12px rgba(0,0,0,.9)}
+  #title{position:absolute;left:28px;top:22px;pointer-events:none;
+    text-shadow:0 2px 16px rgba(0,0,0,.9)}
+  #title h1{margin:0;font-size:20px;font-weight:400;letter-spacing:.5em}
+  #title p{margin:.5em 0 0;font-size:11px;color:var(--ink-dim);letter-spacing:.24em}
+  #hint{position:absolute;left:28px;bottom:20px;font-size:11px;color:var(--ink-faint);
+    letter-spacing:.14em;pointer-events:none;text-shadow:0 1px 10px #000}
+  #enter{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:18px;background:rgba(6,8,12,.78);cursor:pointer;
+    backdrop-filter:blur(3px);transition:opacity .8s ease}
+  #enter.gone{opacity:0;pointer-events:none}
+  #enter .k{font-size:15px;letter-spacing:.42em;color:var(--ink)}
+  #enter .s{font-size:11px;letter-spacing:.2em;color:var(--ink-faint)}
+  #compass{position:absolute;right:20px;top:20px;font-size:11px;letter-spacing:.2em;
+    color:var(--ink-faint);pointer-events:none;text-shadow:0 1px 8px #000}
+
+  /* ---- timeline panel ---- */
+  #tl{flex:0 0 360px;max-width:360px;background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;transition:margin-right .35s ease}
+  #tl.collapsed{margin-right:-360px}
+  #tl header{padding:18px 20px 14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+  #tl header h2{margin:0;font-size:13px;font-weight:400;letter-spacing:.34em;color:var(--ink)}
+  #tl header p{margin:.6em 0 0;font-size:10.5px;color:var(--ink-faint);letter-spacing:.1em;line-height:1.7}
+  #rounds{flex:1 1 auto;overflow-y:auto;padding:6px 0 10px}
+  .rd{border-bottom:1px solid #1a1e27}
+  .rd>summary{list-style:none;cursor:pointer;padding:13px 20px;display:flex;gap:11px;align-items:baseline}
+  .rd>summary::-webkit-details-marker{display:none}
+  .rd .n{font-size:10px;color:var(--gold);letter-spacing:.16em;flex:0 0 auto;min-width:34px}
+  .rd .ch{font-size:12.5px;color:var(--ink);line-height:1.6;flex:1 1 auto}
+  .rd .vd{font-size:10px;letter-spacing:.1em;flex:0 0 auto;color:var(--ink-faint)}
+  .rd[open]>summary{background:#161a23}
+  .rd .body{padding:2px 20px 16px 65px}
+  .rd .body dt{font-size:9.5px;color:var(--ink-faint);letter-spacing:.2em;margin-top:10px}
+  .rd .body dd{margin:.4em 0 0;font-size:12px;color:var(--ink-dim);line-height:1.75}
+  .rd .shots{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:10px}
+  .rd .shots a{display:block;aspect-ratio:16/10;background:#0a0c10;border:1px solid var(--line);
+    overflow:hidden}
+  .rd .shots img{width:100%;height:100%;object-fit:cover;display:block;opacity:.85}
+  .rd .shots a:hover img{opacity:1}
+  .v-win{color:var(--gold)}
+  #empty{padding:22px 20px;font-size:11.5px;color:var(--ink-faint);line-height:2;letter-spacing:.08em}
+  #meta{flex:0 0 auto;border-top:1px solid var(--line);padding:14px 20px 16px;
+    font-size:10px;color:var(--ink-faint);line-height:2.05;letter-spacing:.08em}
+  #meta b{color:var(--ink-dim);font-weight:400}
+  #meta a{color:var(--ink-faint)}
+  #toggle{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:5;
+    width:22px;height:74px;background:var(--panel);border:1px solid var(--line);border-right:none;
+    color:var(--ink-faint);cursor:pointer;font-size:11px;padding:0;line-height:74px}
+  #toggle:hover{color:var(--ink)}
+
+  @media (max-width:900px){
+    #app{flex-direction:column}
+    #tl{flex:0 0 46%;max-width:none;border-left:none;border-top:1px solid var(--line)}
+    #tl.collapsed{margin-right:0;margin-bottom:-46%}
+    #toggle{top:auto;bottom:0;right:10px;transform:none;width:74px;height:22px;line-height:22px;
+      border:1px solid var(--line);border-bottom:none}
+    #title{left:16px;top:14px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="vignette"></div>
+    <div id="title"><h1>湘夫人</h1><p>屈原 · 九歌</p></div>
+    <div id="compass">北</div>
+    <div id="subtitle"><div class="zh"></div><div class="en"></div></div>
+    <div id="hint">WASD / 方向键 行走 · 鼠标拖动 转身 · Shift 疾行 · 触屏拖动即可</div>
+    <div id="enter"><div class="k">走 进 洞 庭</div><div class="s">click / tap to enter</div></div>
+    <button id="toggle" title="时间线">‹</button>
+  </div>
+  <aside id="tl">
+    <header>
+      <h2>打 磨 时 间 线</h2>
+      <p>每一轮只改一个最大缺口；critic 独立评审，没看过 builder 的解释。</p>
+    </header>
+    <div id="rounds"><div id="empty">读取 log.jsonl…</div></div>
+    <div id="meta">
+      <b>loop</b> Gauntlet 式独立 critic + Ralph 式一轮一事<br>
+      <b>harness</b> Claude Code<br>
+      <b>模型</b> Opus 5（非 fast）<br>
+      <b>推理强度</b> medium<br>
+      <b>轮数</b> <span id="m-rounds">1</span> / 10 · <b>停止原因</b> <span id="m-stop">进行中</span><br>
+      <a href="../">← 返回诗世界首页</a>
+    </div>
+  </aside>
+</div>
+
+<!--log-fallback-start-->
+<script type="application/x-ndjson" id="log-fallback">
+{"round": 1, "changed": "第一份可以走进去的洞庭：天/水/北渚/白薠/木叶/九嶷剪影，WASD + 触控漫游，右栏时间线读 log.jsonl", "critic_verdict": "接近了", "critic_note": "秋风木叶、洞庭空波与白薠远望的空茫等待感对了，但六张几乎同一片湖天，缺少《湘夫人》独有的辨识物。", "biggest_gap": "在水中央建起那座荷盖香草之屋，让至少一个机位正对它而她始终不来。", "shots": ["shots/1/1-beizhu.png", "shots/1/2-dongtingbo.png", "shots/1/3-muyexia.png", "shots/1/4-jiuyi.png", "shots/1/5-chengwang.png", "shots/1/6-dengdai.png"]}
+</script>
+<!--log-fallback-end-->
+
+<script>
+/* =====================================================================
+   湘夫人 · a walkable Dongting — zero dependencies, raw WebGL
+   ===================================================================== */
+
+/* ---------- tiny mat4 ---------- */
+const M = {
+  create: () => new Float32Array(16),
+  perspective(o, fovy, a, n, f) {
+    const t = 1 / Math.tan(fovy / 2); o.fill(0);
+    o[0] = t / a; o[5] = t; o[11] = -1;
+    o[10] = (f + n) / (n - f); o[14] = 2 * f * n / (n - f); return o;
+  },
+  lookAt(o, e, c, u) {
+    let zx = e[0]-c[0], zy = e[1]-c[1], zz = e[2]-c[2];
+    let l = 1/Math.hypot(zx,zy,zz); zx*=l; zy*=l; zz*=l;
+    let xx = u[1]*zz - u[2]*zy, xy = u[2]*zx - u[0]*zz, xz = u[0]*zy - u[1]*zx;
+    l = Math.hypot(xx,xy,xz); l = l ? 1/l : 0; xx*=l; xy*=l; xz*=l;
+    const yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+    o[0]=xx; o[1]=yx; o[2]=zx; o[3]=0;
+    o[4]=xy; o[5]=yy; o[6]=zy; o[7]=0;
+    o[8]=xz; o[9]=yz; o[10]=zz; o[11]=0;
+    o[12]=-(xx*e[0]+xy*e[1]+xz*e[2]);
+    o[13]=-(yx*e[0]+yy*e[1]+yz*e[2]);
+    o[14]=-(zx*e[0]+zy*e[1]+zz*e[2]); o[15]=1; return o;
+  },
+  mul(o, a, b) {
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      let s = 0; for (let k = 0; k < 4; k++) s += a[k*4+r] * b[c*4+k];
+      o[c*4+r] = s;
+    } return o;
+  }
+};
+
+/* ---------- world constants ---------- */
+const WATER_Y = 0.0;
+const EYE = 1.62;
+const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-east shore
+
+/* deterministic hash noise, shared by JS + (mirrored) shaders */
+function h2(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
+function vnoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+  const ux = fx*fx*(3-2*fx), uz = fz*fz*(3-2*fz);
+  const a = h2(ix,iz), b = h2(ix+1,iz), c = h2(ix,iz+1), d = h2(ix+1,iz+1);
+  return a*(1-ux)*(1-uz) + b*ux*(1-uz) + c*(1-ux)*uz + d*ux*uz;
+}
+function fbm(x, z) {
+  let v = 0, amp = .5, fx = x, fz = z;
+  for (let i = 0; i < 4; i++) { v += amp * vnoise(fx, fz); fx *= 2.03; fz *= 2.03; amp *= .5; }
+  return v;
+}
+function gauss(x, z, cx, cz, rx, rz) {
+  const dx = (x - cx) / rx, dz = (z - cz) / rz;
+  return Math.exp(-(dx*dx + dz*dz));
+}
+/* -Z is north. 帝子降兮北渚 — the shoal lies to the north. */
+function terrainH(x, z) {
+  let h = -2.6;
+  h += 4.9 * gauss(x, z,   0, -62, 52, 30);    // 北渚 the northern shoal
+  h += 2.1 * gauss(x, z,  34, -30, 22, 17);    // a lower sandbar
+  h += 1.5 * gauss(x, z, -46, -24, 19, 22);
+  h += 1.1 * gauss(x, z, -12, -96, 26, 20);
+  h += 1.9 * (fbm(x * 0.035 + 11, z * 0.035 + 7) - .5) * gauss(x, z, 0, -55, 80, 55);
+  h += 0.22 * (fbm(x * 0.18, z * 0.18) - .5);
+  return h;
+}
+function groundY(x, z) { return Math.max(terrainH(x, z), WATER_Y); }
+
+/* ---------- gl boot ---------- */
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', { antialias: true, alpha: false, depth: true })
+        || canvas.getContext('experimental-webgl');
+if (!gl) {
+  document.getElementById('enter').innerHTML =
+    '<div class="k">此浏览器没有 WebGL</div><div class="s">试试桌面版 Chrome / Safari</div>';
+}
+
+function sh(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s), src);
+  return s;
+}
+function prog(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  p.u = new Proxy({}, { get: (c, k) => (k in c ? c[k] : (c[k] = gl.getUniformLocation(p, k))) });
+  p.a = new Proxy({}, { get: (c, k) => (k in c ? c[k] : (c[k] = gl.getAttribLocation(p, k))) });
+  return p;
+}
+function buf(data, usage) {
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, data, usage || gl.STATIC_DRAW);
+  return b;
+}
+
+/* ---------- shared GLSL: sky, so water & fog agree with it ---------- */
+const SKY_GLSL = `
+  const vec3 SUN_DIR = normalize(vec3(-0.34, 0.085, 0.52));   // low sun, sinking west-ish
+  vec3 skyColor(vec3 d){
+    float up = clamp(d.y, -1.0, 1.0);
+    vec3 zen  = vec3(0.075, 0.105, 0.175);
+    vec3 mid  = vec3(0.245, 0.255, 0.300);
+    vec3 horiz= vec3(0.640, 0.545, 0.430);
+    float t = pow(clamp(up, 0.0, 1.0), 0.62);
+    vec3 c = mix(mix(horiz, mid, smoothstep(0.0, 0.26, up)), zen, smoothstep(0.18, 0.92, t));
+    float sun = max(dot(normalize(d), SUN_DIR), 0.0);
+    c += vec3(0.78, 0.52, 0.28) * pow(sun, 7.0) * 0.55;
+    c += vec3(0.42, 0.30, 0.20) * pow(sun, 1.6) * 0.16;
+    c = mix(c, vec3(0.30, 0.29, 0.30), smoothstep(0.02, -0.30, up) * 0.75); // below horizon haze
+    return c;
+  }
+  vec3 fogColor(vec3 d){
+    vec3 fd = normalize(vec3(d.x, max(d.y, 0.008), d.z));
+    return mix(skyColor(fd), vec3(0.545, 0.500, 0.432), 0.42);
+  }
+`;
+
+/* ---------- sky ---------- */
+const skyP = prog(`
+  attribute vec2 aP; varying vec2 vP;
+  void main(){ vP = aP; gl_Position = vec4(aP, 0.999, 1.0); }
+`, `
+  precision highp float; varying vec2 vP;
+  uniform mat4 uInv; uniform float uT;
+  ${SKY_GLSL}
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
+  float fb(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<5;i++){ v+=a*vn(p); p*=2.07; a*=0.5; } return v; }
+  void main(){
+    vec4 q = uInv * vec4(vP, 1.0, 1.0);
+    vec3 d = normalize(q.xyz / q.w);
+    vec3 c = skyColor(d);
+    // 秋云，被风拉长 — clouds stretched by the wind
+    if (d.y > 0.006) {
+      vec2 uv = d.xz / d.y;
+      float band = fb(uv * vec2(0.055, 0.14) + vec2(uT * 0.0052, uT * 0.0016));
+      float cl = smoothstep(0.50, 0.90, band) * smoothstep(0.012, 0.28, d.y) * (1.0 - smoothstep(0.55, 1.0, d.y));
+      vec3 cc = mix(vec3(0.34,0.32,0.33), vec3(0.83,0.72,0.58), pow(clamp(1.0-d.y,0.0,1.0), 3.0));
+      c = mix(c, cc, cl * 0.62);
+    }
+    c += (hash(gl_FragCoord.xy) - 0.5) * 0.010;   // dither
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+const skyBuf = buf(new Float32Array([-1,-1, 3,-1, -1,3]));
+
+/* ---------- water ---------- */
+const WSPAN = 760;
+const uintOK = !!gl.getExtension('OES_element_index_uint');
+function makeWaterGrid(G) {
+  const v = [], idx = [];
+  for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
+    // non-linear spacing: dense near the viewer, huge at the rim
+    const u = (i / G) * 2 - 1, w = (j / G) * 2 - 1;
+    v.push(Math.sign(u) * Math.pow(Math.abs(u), 2.35) * WSPAN,
+           Math.sign(w) * Math.pow(Math.abs(w), 2.35) * WSPAN);
+  }
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+    const a = j * (G + 1) + i, b = a + 1, c = a + G + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const vb = buf(new Float32Array(v));
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, uintOK ? new Uint32Array(idx) : new Uint16Array(idx),
+    gl.STATIC_DRAW);
+  return { vb, ib, n: idx.length };
+}
+const water = makeWaterGrid(uintOK ? 220 : 180);
+
+const WAVE_GLSL = `
+  // 洞庭波 — crossing swells, all running with the wind
+  float waveH(vec2 p, float t){
+    float h = 0.0;
+    h += sin(dot(p, vec2( 0.130, 0.098)) + t * 0.92) * 0.240;
+    h += sin(dot(p, vec2(-0.089, 0.176)) + t * 1.21) * 0.155;
+    h += sin(dot(p, vec2( 0.305,-0.121)) + t * 1.74) * 0.072;
+    h += sin(dot(p, vec2( 0.470, 0.395)) + t * 2.55) * 0.036;
+    h += sin(dot(p, vec2(-0.760, 0.510)) + t * 3.40) * 0.017;
+    return h;
+  }
+`;
+const waterP = prog(`
+  precision highp float;
+  attribute vec2 aP; uniform mat4 uVP; uniform vec3 uCam; uniform float uT;
+  varying vec3 vW; varying float vD;
+  ${WAVE_GLSL}
+  void main(){
+    vec2 p = aP + uCam.xz;
+    float h = waveH(p, uT);
+    // flatten the far rim so the horizon line stays clean
+    float d = length(aP);
+    h *= 1.0 - smoothstep(120.0, 520.0, d);
+    vW = vec3(p.x, h, p.y);
+    vD = d;
+    gl_Position = uVP * vec4(vW, 1.0);
+  }
+`, `
+  precision highp float;
+  varying vec3 vW; varying float vD;
+  uniform vec3 uCam; uniform float uT;
+  ${SKY_GLSL}
+  ${WAVE_GLSL}
+  void main(){
+    vec2 p = vW.xz;
+    float e = 0.42;
+    vec3 n = normalize(vec3(waveH(p - vec2(e,0.0), uT) - waveH(p + vec2(e,0.0), uT),
+                            2.0 * e,
+                            waveH(p - vec2(0.0,e), uT) - waveH(p + vec2(0.0,e), uT)));
+    n = normalize(mix(n, vec3(0.0,1.0,0.0), smoothstep(60.0, 340.0, vD)));
+    vec3 v = normalize(uCam - vW);
+    float fres = pow(1.0 - max(dot(n, v), 0.0), 4.3);
+    fres = mix(0.045, 1.0, fres);
+    vec3 refl = skyColor(reflect(-v, n));
+    vec3 deep = vec3(0.052, 0.088, 0.098);
+    vec3 shallow = vec3(0.105, 0.150, 0.148);
+    vec3 body = mix(deep, shallow, smoothstep(-0.25, 0.25, vW.y));
+    vec3 c = mix(body, refl, fres);
+    // 夕阳在波上碎成一条路 — the sun broken into a road on the water
+    vec3 hv = normalize(v + SUN_DIR);
+    c += vec3(1.0, 0.76, 0.46) * pow(max(dot(n, hv), 0.0), 220.0) * 1.25;
+    c += vec3(0.92, 0.66, 0.38) * pow(max(dot(n, hv), 0.0), 26.0) * 0.16;
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(-v), fog);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- terrain (the shoal) ---------- */
+function makeTerrain() {
+  const G = 240, SPAN = 150, v = [], idx = [];
+  for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
+    const x = (i / G * 2 - 1) * SPAN, z = (j / G * 2 - 1) * SPAN - 40;
+    const y = terrainH(x, z);
+    const e = 0.7;
+    const nx = terrainH(x - e, z) - terrainH(x + e, z);
+    const nz = terrainH(x, z - e) - terrainH(x, z + e);
+    const l = Math.hypot(nx, 2 * e, nz);
+    v.push(x, y, z, nx / l, 2 * e / l, nz / l);
+  }
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+    const a = j * (G + 1) + i, b = a + 1, c = a + G + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const vb = buf(new Float32Array(v));
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, uintOK ? new Uint32Array(idx) : new Uint16Array(idx),
+    gl.STATIC_DRAW);
+  return { vb, ib, n: idx.length };
+}
+const terrain = makeTerrain();
+const terrP = prog(`
+  precision highp float;
+  attribute vec3 aP; attribute vec3 aN;
+  uniform mat4 uVP; uniform vec3 uCam;
+  varying vec3 vW; varying vec3 vN; varying float vD;
+  void main(){ vW = aP; vN = aN; vD = length(aP - uCam); gl_Position = uVP * vec4(aP, 1.0); }
+`, `
+  precision highp float;
+  varying vec3 vW; varying vec3 vN; varying float vD;
+  uniform vec3 uCam; uniform float uT;
+  ${SKY_GLSL}
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+  float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
+  float fb(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<4;i++){ v+=a*vn(p); p*=2.1; a*=0.5; } return v; }
+  void main(){
+    vec3 n = normalize(vN);
+    float wet = 1.0 - smoothstep(0.02, 0.85, vW.y);          // the tide line
+    float g = fb(vW.xz * 0.5);
+    vec3 mud   = mix(vec3(0.150,0.130,0.108), vec3(0.205,0.178,0.142), g);
+    vec3 sedge = mix(vec3(0.430,0.405,0.320), vec3(0.560,0.530,0.425), g);  // 白薠, bleached autumn grass
+    vec3 alb = mix(sedge, mud, wet);
+    alb = mix(alb, vec3(0.088,0.082,0.070), smoothstep(0.35, -0.6, vW.y));
+    float lam = max(dot(n, SUN_DIR), 0.0);
+    vec3 c = alb * (0.30 + 1.05 * lam);
+    c += alb * skyColor(vec3(0.0,1.0,0.0)) * 0.34 * (0.5 + 0.5 * n.y);
+    // foam where the swell meets the shoal
+    float foam = smoothstep(0.26, 0.0, abs(vW.y - 0.03 - 0.10*sin(vW.x*0.5 + uT*1.1) - 0.08*sin(vW.z*0.62 - uT*0.9)));
+    c = mix(c, vec3(0.70,0.69,0.66), foam * 0.42);
+    vec3 v = normalize(uCam - vW);
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(-v), fog);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- 九嶷 : nine peaks on the far southern rim ---------- */
+function makePeaks() {
+  const v = [];
+  const R = 900;
+  for (let k = 0; k < 9; k++) {
+    // spread across the southern horizon (+Z), with two outliers
+    const a = Math.PI * 0.5 + (k - 4) * 0.115 + (h2(k, 3) - .5) * 0.035;
+    const cx = Math.sin(a) * R, cz = Math.cos(a) * R;
+    const hgt = 108 + h2(k, 9) * 92 + (k === 4 ? 62 : 0);
+    const wid = 105 + h2(k, 17) * 72;
+    const seg = 9;
+    for (let s = 0; s < seg; s++) {
+      const t0 = s / seg, t1 = (s + 1) / seg;
+      const ridge = t => {
+        const q = Math.abs(t - .5) * 2;
+        return hgt * (1 - Math.pow(q, 1.45)) * (0.82 + 0.36 * h2(k * 13 + s, t * 7 + 1));
+      };
+      const px = t => cx + (t - .5) * wid * 2 * Math.cos(a), pz = t => cz - (t - .5) * wid * 2 * Math.sin(a);
+      const x0 = px(t0), z0 = pz(t0), x1 = px(t1), z1 = pz(t1);
+      const y0 = ridge(t0), y1 = ridge(t1);
+      v.push(x0, -6, z0, x1, -6, z1, x1, y1, z1,
+             x0, -6, z0, x1, y1, z1, x0, y0, z0);
+    }
+  }
+  return { vb: buf(new Float32Array(v)), n: v.length / 3 };
+}
+const peaks = makePeaks();
+const peakP = prog(`
+  precision highp float; attribute vec3 aP; uniform mat4 uVP; varying vec3 vW;
+  void main(){ vW = aP; gl_Position = uVP * vec4(aP, 1.0); }
+`, `
+  precision highp float; varying vec3 vW; uniform vec3 uCam;
+  ${SKY_GLSL}
+  void main(){
+    vec3 v = normalize(uCam - vW);
+    float hh = clamp(vW.y / 190.0, 0.0, 1.0);
+    vec3 c = mix(vec3(0.335,0.318,0.318), vec3(0.235,0.232,0.268), hh);
+    float fog = 1.0 - exp(-pow(length(vW.xz - uCam.xz) * 0.00104, 2.0));
+    c = mix(c, fogColor(-v), clamp(fog, 0.0, 0.94));
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- 白薠 : sedge blades on the shoal ---------- */
+function makeBlades() {
+  const v = [], N = 26000;
+  let placed = 0, guard = 0;
+  while (placed < N && guard < N * 40) {
+    guard++;
+    const x = (h2(guard, 1.7) * 2 - 1) * 132;
+    const z = (h2(guard, 9.3) * 2 - 1) * 128 - 44;
+    const y = terrainH(x, z);
+    if (y < 0.34 || y > 5.2) continue;
+    const dens = Math.min(1, (y - 0.34) * 1.5) * (0.35 + 0.65 * fbm(x * 0.06, z * 0.06));
+    if (h2(guard, 33) > dens) continue;
+    placed++;
+    const hgt = 0.52 + h2(guard, 5) * 0.86;
+    const w = 0.028 + h2(guard, 7) * 0.030;
+    const ph = h2(guard, 11) * 6.28;
+    const tint = h2(guard, 13);
+    const ang = h2(guard, 19) * 3.14159;
+    const dx = Math.cos(ang) * w, dz = Math.sin(ang) * w;
+    // two triangles, tapering to a point
+    v.push(x - dx, y, z - dz, 0, ph, tint,
+           x + dx, y, z + dz, 0, ph, tint,
+           x + dx * .18, y + hgt, z + dz * .18, 1, ph, tint);
+  }
+  return { vb: buf(new Float32Array(v)), n: v.length / 6 };
+}
+const blades = makeBlades();
+const bladeP = prog(`
+  precision highp float;
+  attribute vec3 aP; attribute vec3 aQ;   // aQ = (tipFlag, phase, tint)
+  uniform mat4 uVP; uniform float uT; uniform vec3 uCam; uniform vec2 uWind;
+  varying float vT; varying float vTint; varying float vD;
+  void main(){
+    vec3 p = aP;
+    float s = aQ.x;
+    float sway = sin(uT * 1.9 + aQ.y + p.x * 0.22 + p.z * 0.17) * 0.5 + 0.5;
+    float gust = 0.55 + 0.45 * sin(uT * 0.47 + p.x * 0.012 + p.z * 0.009);
+    p.xz += uWind * (0.30 + 0.42 * sway) * gust * s * s;
+    p.y  -= 0.10 * s * s * gust;
+    vT = s; vTint = aQ.z; vD = length(p - uCam);
+    gl_Position = uVP * vec4(p, 1.0);
+  }
+`, `
+  precision highp float; varying float vT; varying float vTint; varying float vD;
+  uniform vec3 uCam;
+  ${SKY_GLSL}
+  void main(){
+    vec3 base = mix(vec3(0.245,0.225,0.168), vec3(0.330,0.305,0.225), vTint);
+    vec3 tip  = mix(vec3(0.660,0.625,0.495), vec3(0.790,0.752,0.612), vTint);
+    vec3 c = mix(base, tip, pow(vT, 0.72));
+    c *= 0.72 + 0.50 * max(dot(normalize(vec3(0.2,1.0,0.1)), SUN_DIR), 0.0);
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(normalize(vec3(0.0,0.05,1.0))), fog * 0.9);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- 木叶下 : the leaves, always coming down ---------- */
+const NLEAF = 620;
+const leaves = [];
+for (let i = 0; i < NLEAF; i++) leaves.push({
+  x: (Math.random() * 2 - 1) * 70, y: Math.random() * 26 - 1, z: (Math.random() * 2 - 1) * 70,
+  vy: -0.42 - Math.random() * 0.55,
+  sp: Math.random() * 6.28, sw: 0.5 + Math.random() * 1.4,
+  rot: Math.random() * 6.28, rv: (Math.random() - .5) * 1.9,
+  sz: 0.085 + Math.random() * 0.135, tint: Math.random()
+});
+const leafData = new Float32Array(NLEAF * 6 * 8);   // 6 verts * (cx,cy,cz, ox,oy, rot, tint, size)
+const leafBuf = buf(leafData, gl.DYNAMIC_DRAW);
+const CORNERS = [[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];
+const leafP = prog(`
+  precision highp float;
+  attribute vec3 aC; attribute vec2 aO; attribute vec3 aQ;   // aQ = (rot, tint, size)
+  uniform mat4 uVP; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uCam;
+  varying vec2 vUV; varying float vTint; varying float vD;
+  void main(){
+    float s = sin(aQ.x), c = cos(aQ.x);
+    vec2 o = vec2(aO.x * c - aO.y * s, aO.x * s + aO.y * c) * aQ.z;
+    vec3 p = aC + uRight * o.x + uUp * o.y;
+    vUV = aO; vTint = aQ.y; vD = length(p - uCam);
+    gl_Position = uVP * vec4(p, 1.0);
+  }
+`, `
+  precision highp float; varying vec2 vUV; varying float vTint; varying float vD;
+  ${SKY_GLSL}
+  void main(){
+    float w = 0.62 * (1.0 - vUV.y * vUV.y);          // a pointed leaf
+    float d = abs(vUV.x) / max(w, 0.001);
+    if (d > 1.0) discard;
+    vec3 c = mix(vec3(0.520,0.318,0.150), vec3(0.735,0.545,0.245), vTint);
+    c = mix(c, vec3(0.330,0.215,0.135), smoothstep(0.55, 1.0, d));    // darker rim
+    c = mix(c, vec3(0.255,0.170,0.105), smoothstep(0.10, 0.0, abs(vUV.x)) * 0.55);  // midrib
+    float a = smoothstep(1.0, 0.86, d) * clamp(1.0 - vD / 95.0, 0.0, 1.0);
+    gl_FragColor = vec4(c, a * 0.96);
+  }
+`);
+
+/* ---------- camera + input ---------- */
+const cam = { x: 6, y: 0, z: 16, yaw: Math.PI, pitch: -0.055, vy: 0 };
+const keys = Object.create(null);
+/* 固定机位：?cam=x,z,yaw,pitch  — used for the six reproducible screenshots */
+(function () {
+  const q = new URLSearchParams(location.search).get('cam');
+  if (!q) return;
+  const n = q.split(',').map(Number);
+  if (n.length >= 4 && n.every(v => isFinite(v))) {
+    cam.x = n[0]; cam.z = n[1]; cam.yaw = n[2]; cam.pitch = n[3];
+  }
+})();
+let entered = false, pointerLocked = false, lastT = 0, T0 = 0;
+
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Escape' && pointerLocked) document.exitPointerLock();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+const enterEl = document.getElementById('enter');
+function enterWorld() {
+  if (!entered) { entered = true; enterEl.classList.add('gone'); }
+  if (canvas.requestPointerLock) canvas.requestPointerLock();
+}
+enterEl.addEventListener('click', enterWorld);
+canvas.addEventListener('click', () => { if (entered && !isTouch) enterWorld(); });
+document.addEventListener('pointerlockchange', () => { pointerLocked = document.pointerLockElement === canvas; });
+addEventListener('mousemove', e => {
+  if (!pointerLocked) return;
+  cam.yaw   -= e.movementX * 0.0022;
+  cam.pitch = Math.max(-1.35, Math.min(1.1, cam.pitch - e.movementY * 0.0020));
+});
+
+/* drag-to-look (no pointer lock) + touch stick */
+let isTouch = false, dragId = null, dragX = 0, dragY = 0;
+let stick = null;   // {id, ox, oy, dx, dy}
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') isTouch = true;
+  if (!entered) { enterWorld(); if (e.pointerType === 'touch') return; }
+  const leftHalf = e.clientX - canvas.getBoundingClientRect().left < canvas.clientWidth * 0.42;
+  if (e.pointerType === 'touch' && leftHalf && !stick) {
+    stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 };
+  } else if (dragId === null) {
+    dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (stick && e.pointerId === stick.id) {
+    stick.dx = Math.max(-1, Math.min(1, (e.clientX - stick.ox) / 62));
+    stick.dy = Math.max(-1, Math.min(1, (e.clientY - stick.oy) / 62));
+    return;
+  }
+  if (e.pointerId !== dragId || pointerLocked) return;
+  cam.yaw   -= (e.clientX - dragX) * 0.0040;
+  cam.pitch = Math.max(-1.35, Math.min(1.1, cam.pitch - (e.clientY - dragY) * 0.0034));
+  dragX = e.clientX; dragY = e.clientY;
+});
+function endPtr(e) {
+  if (stick && e.pointerId === stick.id) stick = null;
+  if (e.pointerId === dragId) dragId = null;
+}
+canvas.addEventListener('pointerup', endPtr);
+canvas.addEventListener('pointercancel', endPtr);
+
+/* ---------- 字幕 : lines of the poem, waiting in places ---------- */
+const LINES = [
+  { x:   0, z:  20, r: 34, zh: '帝子降兮北渚，目眇眇兮愁予。',
+    en: 'The child of heaven descends to the northern shoal; far, far her eyes go — and grief takes me.' },
+  { x:  -4, z: -18, r: 32, zh: '袅袅兮秋风，洞庭波兮木叶下。',
+    en: 'Softly, softly, the autumn wind; Dongting rises in waves, and the leaves of the trees come down.' },
+  { x:   2, z: -58, r: 34, zh: '登白薠兮骋望，与佳期兮夕张。',
+    en: 'I climb the white sedge and let my gaze run loose — I set the evening out for the hour we agreed on.' },
+  { x: -46, z: -30, r: 26, zh: '沅有芷兮澧有兰，思公子兮未敢言。',
+    en: 'The Yuan has its angelica, the Li its orchid; I think of my lady and dare not say so.' },
+  { x:  40, z: -26, r: 26, zh: '荒忽兮远望，观流水兮潺湲。',
+    en: 'Dim, blurred, I look into the distance — only the running water, going on, going on.' },
+  { x:  14, z:  74, r: 40, zh: '九嶷缤兮并迎，灵之来兮如云。',
+    en: 'The nine peaks of Jiuyi come thronging to meet her; the spirits arrive like cloud.' },
+  { x: -70, z:  46, r: 38, zh: '时不可兮骤得，聊逍遥兮容与。',
+    en: 'The hour cannot be seized when we want it. For now — wander; for now, be at ease, and wait.' },
+];
+const subEl = document.getElementById('subtitle');
+const subZh = subEl.querySelector('.zh'), subEn = subEl.querySelector('.en');
+let curLine = -1;
+function updateSubtitle() {
+  let best = -1, bestD = 1e9;
+  for (let i = 0; i < LINES.length; i++) {
+    const L = LINES[i], d = Math.hypot(cam.x - L.x, cam.z - L.z);
+    if (d < L.r && d < bestD) { bestD = d; best = i; }
+  }
+  if (best !== curLine) {
+    curLine = best;
+    if (best < 0) subEl.classList.remove('on');
+    else {
+      subEl.classList.remove('on');
+      setTimeout(() => {
+        subZh.textContent = LINES[best].zh;
+        subEn.textContent = LINES[best].en;
+        subEl.classList.add('on');
+      }, 260);
+    }
+  }
+}
+const compass = document.getElementById('compass');
+
+/* ---------- loop ---------- */
+const vp = M.create(), view = M.create(), proj = M.create(), inv = M.create();
+function invert(o, m) {   // full 4x4 inverse (used only for the sky ray)
+  const a = m, b = o;
+  const a00=a[0],a01=a[1],a02=a[2],a03=a[3],a10=a[4],a11=a[5],a12=a[6],a13=a[7],
+        a20=a[8],a21=a[9],a22=a[10],a23=a[11],a30=a[12],a31=a[13],a32=a[14],a33=a[15];
+  const b00=a00*a11-a01*a10,b01=a00*a12-a02*a10,b02=a00*a13-a03*a10,b03=a01*a12-a02*a11,
+        b04=a01*a13-a03*a11,b05=a02*a13-a03*a12,b06=a20*a31-a21*a30,b07=a20*a32-a22*a30,
+        b08=a20*a33-a23*a30,b09=a21*a32-a22*a31,b10=a21*a33-a23*a31,b11=a22*a33-a23*a32;
+  let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if (!det) return b; det = 1/det;
+  b[0]=(a11*b11-a12*b10+a13*b09)*det; b[1]=(a02*b10-a01*b11-a03*b09)*det;
+  b[2]=(a31*b05-a32*b04+a33*b03)*det; b[3]=(a22*b04-a21*b05-a23*b03)*det;
+  b[4]=(a12*b08-a10*b11-a13*b07)*det; b[5]=(a00*b11-a02*b08+a03*b07)*det;
+  b[6]=(a32*b02-a30*b05-a33*b01)*det; b[7]=(a20*b05-a22*b02+a23*b01)*det;
+  b[8]=(a10*b10-a11*b08+a13*b06)*det; b[9]=(a01*b08-a00*b10-a03*b06)*det;
+  b[10]=(a30*b04-a31*b02+a33*b00)*det; b[11]=(a21*b02-a20*b04-a23*b00)*det;
+  b[12]=(a11*b07-a10*b09-a12*b06)*det; b[13]=(a00*b09-a01*b07+a02*b06)*det;
+  b[14]=(a31*b01-a30*b03-a32*b00)*det; b[15]=(a20*b03-a21*b01+a22*b00)*det;
+  return b;
+}
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+
+function step(dt, t) {
+  // ---- walk ----
+  const run = keys.ShiftLeft || keys.ShiftRight ? 2.35 : 1;
+  let fx = 0, sx = 0;
+  if (keys.KeyW || keys.ArrowUp) fx += 1;
+  if (keys.KeyS || keys.ArrowDown) fx -= 1;
+  if (keys.KeyD || keys.ArrowRight) sx += 1;
+  if (keys.KeyA || keys.ArrowLeft) sx -= 1;
+  if (stick) { fx -= stick.dy * 1.2; sx += stick.dx * 1.2; }
+  const m = Math.hypot(fx, sx);
+  if (m > 1) { fx /= m; sx /= m; }
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const fwd = [-sy, -cy], rgt = [cy, -sy];
+  const under = terrainH(cam.x, cam.z);
+  const wading = under < WATER_Y ? Math.min(1, (WATER_Y - under) / 1.4) : 0;
+  const speed = 4.5 * run * (1 - 0.45 * wading);
+  cam.x += (fwd[0] * fx + rgt[0] * sx) * speed * dt;
+  cam.z += (fwd[1] * fx + rgt[1] * sx) * speed * dt;
+  // keep the wanderer inside the bay
+  const R = Math.hypot(cam.x, cam.z + 30);
+  if (R > 210) { cam.x *= 210 / R; cam.z = (cam.z + 30) * (210 / R) - 30; }
+
+  const target = groundY(cam.x, cam.z) + EYE - wading * 0.42;
+  cam.y += (target - cam.y) * Math.min(1, dt * 7.5);
+
+  // ---- leaves ----
+  let o = 0;
+  for (const L of leaves) {
+    L.y += L.vy * dt;
+    const s = Math.sin(t * L.sw + L.sp);
+    L.x += (WIND[0] * 1.15 + s * 0.85) * dt;
+    L.z += (WIND[1] * 1.15 + Math.cos(t * L.sw * 0.83 + L.sp) * 0.85) * dt;
+    L.rot += L.rv * dt;
+    const surf = groundY(L.x, L.z);
+    if (L.y < surf - 0.2 || Math.abs(L.x - cam.x) > 68 || Math.abs(L.z - cam.z) > 68) {
+      L.x = cam.x + (Math.random() * 2 - 1) * 62;
+      L.z = cam.z + (Math.random() * 2 - 1) * 62;
+      L.y = groundY(L.x, L.z) + 14 + Math.random() * 16;
+    }
+    for (let k = 0; k < 6; k++) {
+      leafData[o++] = L.x; leafData[o++] = L.y; leafData[o++] = L.z;
+      leafData[o++] = CORNERS[k][0]; leafData[o++] = CORNERS[k][1];
+      leafData[o++] = L.rot; leafData[o++] = L.tint; leafData[o++] = L.sz;
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, leafBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, leafData);
+
+  updateSubtitle();
+  const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
+  compass.textContent = ['北','东北','东','东南','南','西南','西','西北'][Math.round(deg / 45) % 8];
+}
+
+function draw(t) {
+  resize();
+  const W = canvas.width, H = canvas.height;
+  gl.viewport(0, 0, W, H);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0.09, 0.10, 0.12, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const cp = Math.cos(cam.pitch), f = [-Math.sin(cam.yaw) * cp, Math.sin(cam.pitch), -Math.cos(cam.yaw) * cp];
+  const eye = [cam.x, cam.y, cam.z];
+  M.perspective(proj, 1.02, W / H, 0.1, 2600);
+  M.lookAt(view, eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]);
+  M.mul(vp, proj, view);
+  invert(inv, vp);
+
+  // sky
+  gl.useProgram(skyP);
+  gl.uniformMatrix4fv(skyP.u.uInv, false, inv);
+  gl.uniform1f(skyP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf);
+  gl.enableVertexAttribArray(skyP.a.aP);
+  gl.vertexAttribPointer(skyP.a.aP, 2, gl.FLOAT, false, 0, 0);
+  gl.depthMask(false);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.depthMask(true);
+
+  // peaks
+  gl.useProgram(peakP);
+  gl.uniformMatrix4fv(peakP.u.uVP, false, vp);
+  gl.uniform3fv(peakP.u.uCam, eye);
+  gl.bindBuffer(gl.ARRAY_BUFFER, peaks.vb);
+  gl.enableVertexAttribArray(peakP.a.aP);
+  gl.vertexAttribPointer(peakP.a.aP, 3, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, peaks.n);
+
+  // water
+  gl.useProgram(waterP);
+  gl.uniformMatrix4fv(waterP.u.uVP, false, vp);
+  gl.uniform3fv(waterP.u.uCam, eye);
+  gl.uniform1f(waterP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, water.vb);
+  gl.enableVertexAttribArray(waterP.a.aP);
+  gl.vertexAttribPointer(waterP.a.aP, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, water.ib);
+  gl.drawElements(gl.TRIANGLES, water.n, uintOK ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+  // terrain
+  gl.useProgram(terrP);
+  gl.uniformMatrix4fv(terrP.u.uVP, false, vp);
+  gl.uniform3fv(terrP.u.uCam, eye);
+  gl.uniform1f(terrP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, terrain.vb);
+  gl.enableVertexAttribArray(terrP.a.aP);
+  gl.vertexAttribPointer(terrP.a.aP, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(terrP.a.aN);
+  gl.vertexAttribPointer(terrP.a.aN, 3, gl.FLOAT, false, 24, 12);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrain.ib);
+  gl.drawElements(gl.TRIANGLES, terrain.n, uintOK ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+  // sedge
+  gl.useProgram(bladeP);
+  gl.uniformMatrix4fv(bladeP.u.uVP, false, vp);
+  gl.uniform3fv(bladeP.u.uCam, eye);
+  gl.uniform1f(bladeP.u.uT, t);
+  gl.uniform2fv(bladeP.u.uWind, WIND);
+  gl.bindBuffer(gl.ARRAY_BUFFER, blades.vb);
+  gl.enableVertexAttribArray(bladeP.a.aP);
+  gl.vertexAttribPointer(bladeP.a.aP, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(bladeP.a.aQ);
+  gl.vertexAttribPointer(bladeP.a.aQ, 3, gl.FLOAT, false, 24, 12);
+  gl.drawArrays(gl.TRIANGLES, 0, blades.n);
+
+  // leaves
+  gl.useProgram(leafP);
+  gl.uniformMatrix4fv(leafP.u.uVP, false, vp);
+  gl.uniform3fv(leafP.u.uCam, eye);
+  const right = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+  const up = [f[1] * right[2] - f[2] * right[1], f[2] * right[0] - f[0] * right[2], f[0] * right[1] - f[1] * right[0]];
+  gl.uniform3fv(leafP.u.uRight, right);
+  gl.uniform3fv(leafP.u.uUp, [-up[0], -up[1], -up[2]]);
+  gl.bindBuffer(gl.ARRAY_BUFFER, leafBuf);
+  gl.enableVertexAttribArray(leafP.a.aC);
+  gl.vertexAttribPointer(leafP.a.aC, 3, gl.FLOAT, false, 32, 0);
+  gl.enableVertexAttribArray(leafP.a.aO);
+  gl.vertexAttribPointer(leafP.a.aO, 2, gl.FLOAT, false, 32, 12);
+  gl.enableVertexAttribArray(leafP.a.aQ);
+  gl.vertexAttribPointer(leafP.a.aQ, 3, gl.FLOAT, false, 32, 20);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.drawArrays(gl.TRIANGLES, 0, NLEAF * 6);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+}
+
+function frame(ms) {
+  const t = ms / 1000;
+  if (!T0) { T0 = t; lastT = t; }
+  const dt = Math.min(0.05, t - lastT); lastT = t;
+  step(dt, t - T0);
+  draw(t - T0);
+  requestAnimationFrame(frame);
+}
+if (gl) {
+  cam.y = groundY(cam.x, cam.z) + EYE;
+  requestAnimationFrame(frame);
+}
+
+/* =====================================================================
+   右栏：打磨时间线 — reads log.jsonl
+   ===================================================================== */
+const VERDICT_CLASS = v => /我们赢/.test(v || '') ? 'v-win' : '';
+function renderRounds(rows) {
+  const box = document.getElementById('rounds');
+  if (!rows.length) {
+    box.innerHTML = '<div id="empty">还没有记录。第一轮跑完后，这里会出现每一轮改了什么、' +
+      'critic 怎么说、以及那一轮的 6 张截图。</div>';
+    return;
+  }
+  rows.sort((a, b) => (b.round || 0) - (a.round || 0));
+  box.innerHTML = rows.map((r, i) => {
+    const shots = (r.shots || []).map(s =>
+      `<a href="${s}" target="_blank" rel="noreferrer"><img loading="lazy" src="${s}" alt=""></a>`).join('');
+    return `<details class="rd"${i === 0 ? ' open' : ''}>
+      <summary>
+        <span class="n">R${String(r.round).padStart(2, '0')}</span>
+        <span class="ch">${esc(r.changed || '')}</span>
+        <span class="vd ${VERDICT_CLASS(r.critic_verdict)}">${esc(r.critic_verdict || '')}</span>
+      </summary>
+      <div class="body">
+        <dl>
+          <dt>CRITIC</dt><dd>${esc(r.critic_note || r.critic_verdict || '—')}</dd>
+          <dt>最 大 缺 口</dt><dd>${esc(r.biggest_gap || '—')}</dd>
+        </dl>
+        ${shots ? `<div class="shots">${shots}</div>` : ''}
+        ${r.round ? `<dl><dt>快 照</dt><dd><a href="versions/${r.round}/index.html">versions/${r.round}/index.html</a></dd></dl>` : ''}
+      </div>
+    </details>`;
+  }).join('');
+  const maxR = Math.max.apply(null, rows.map(r => r.round || 0));
+  document.getElementById('m-rounds').textContent = maxR;
+  const stopped = rows.filter(r => r.stop).pop();
+  if (stopped) document.getElementById('m-stop').textContent = stopped.stop;
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function parseNdjson(text) {
+  return text.split('\n').map(l => l.trim()).filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+}
+fetch('log.jsonl', { cache: 'no-store' })
+  .then(r => r.ok ? r.text() : Promise.reject())
+  .then(t => renderRounds(parseNdjson(t)))
+  .catch(() => renderRounds(parseNdjson(document.getElementById('log-fallback').textContent)));
+
+/* panel toggle */
+const tl = document.getElementById('tl'), toggle = document.getElementById('toggle');
+toggle.addEventListener('click', () => {
+  tl.classList.toggle('collapsed');
+  toggle.textContent = tl.classList.contains('collapsed')
+    ? (innerWidth <= 900 ? '˄' : '›') : (innerWidth <= 900 ? '˅' : '‹');
+});
+if (innerWidth <= 900) toggle.textContent = '˅';
+</script>
+</body>
+</html>
