@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>无尽世界的海岸 · Gitanjali 60</title>
+<meta name="description" content="泰戈尔《吉檀迦利》第 60 首，做成一个可以走进去的世界；右侧是它被打磨出来的完整过程。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E🐚%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/site.css">
+<link rel="stylesheet" href="../shared/timeline.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { display: flex; background: var(--bg-sink); }
+
+  /* ---------- left: the world ---------- */
+  #stage { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; background: #0b0d10; }
+  #view  { display: block; width: 100%; height: 100%; }
+
+  #boot {
+    position: absolute; inset: 0; display: grid; place-content: center; gap: 14px; justify-items: center;
+    background: #0b0d10; color: var(--ink-dim); font-family: var(--serif); text-align: center; padding: 24px;
+    transition: opacity .7s ease; z-index: 6;
+  }
+  #boot .t { font-size: 19px; color: var(--ink); letter-spacing: .02em; }
+  #boot .s { font-size: 13px; font-family: var(--mono); color: var(--ink-faint); }
+  #boot.gone { opacity: 0; pointer-events: none; }
+
+  /* poem subtitles, bottom-centre, the way a film carries a voice */
+  /* the world is pale by design, so the words need their own weather */
+  #stage::before, #stage::after {
+    content: ""; position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2;
+  }
+  #stage::before { top: 0; height: 130px; background: linear-gradient(to bottom, rgba(8,10,13,.42), transparent); }
+  #stage::after  { bottom: 0; height: 40%; background: linear-gradient(to top, rgba(8,10,13,.55), rgba(8,10,13,.16) 42%, transparent); }
+  body.shot #stage::before, body.shot #stage::after { display: none; }
+
+  #subs {
+    position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+    width: min(720px, 86%); text-align: center; pointer-events: none; z-index: 4;
+    text-shadow: 0 2px 22px rgba(0,0,0,.75), 0 1px 3px rgba(0,0,0,.6);
+  }
+  #subs .en {
+    font-family: var(--serif); font-style: italic; font-size: clamp(14px, 1.55vw, 19px);
+    line-height: 1.6; color: #f3efe6; margin: 0 0 7px;
+  }
+  #subs .zh {
+    font-family: var(--serif); font-size: clamp(12.5px, 1.25vw, 15.5px);
+    line-height: 1.8; color: #ddd5c6; margin: 0;
+  }
+  #subs .grp { transition: opacity .9s ease, transform .9s ease; }
+  #subs .grp.out { opacity: 0; transform: translateY(8px); }
+
+  /* stanza ticks: where you are inside the poem, along an endless shore */
+  #ticks {
+    position: absolute; left: 50%; bottom: 3.4%; transform: translateX(-50%);
+    display: flex; gap: 7px; z-index: 4; pointer-events: none;
+  }
+  #ticks i {
+    width: 26px; height: 2px; background: rgba(255,255,255,.22); border-radius: 2px;
+    transition: background .5s, width .5s;
+  }
+  #ticks i.on { background: rgba(243,239,230,.9); width: 40px; }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: 0; padding: 14px 18px; z-index: 5;
+    font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,.62);
+    text-shadow: 0 1px 8px rgba(0,0,0,.7); display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+    transition: opacity .5s; pointer-events: none;
+  }
+  #hint kbd {
+    font: inherit; border: 1px solid rgba(255,255,255,.25); border-radius: 3px;
+    padding: 1px 5px; color: rgba(255,255,255,.72);
+  }
+  #hint.dim { opacity: 0; }
+
+  #enter {
+    position: absolute; inset: 0; display: grid; place-content: center; z-index: 5;
+    background: radial-gradient(60% 60% at 50% 50%, rgba(6,8,10,.25), rgba(6,8,10,.72));
+    cursor: pointer; transition: opacity .45s;
+  }
+  #enter .btn {
+    font-family: var(--serif); font-size: 17px; color: #f3efe6; letter-spacing: .06em;
+    border: 1px solid rgba(243,239,230,.45); border-radius: 999px; padding: 12px 30px;
+    background: rgba(0,0,0,.28); backdrop-filter: blur(3px); transition: border-color .25s, background .25s;
+  }
+  #enter:hover .btn { border-color: rgba(243,239,230,.95); background: rgba(0,0,0,.45); }
+  #enter.gone { opacity: 0; pointer-events: none; }
+
+  /* touch: left thumb moves, right thumb looks */
+  #touch { position: absolute; inset: 0; z-index: 3; display: none; }
+  #touch.on { display: block; }
+  #stick {
+    position: absolute; left: 22px; bottom: 22px; width: 104px; height: 104px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.18);
+  }
+  #stick b { position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px;
+    border-radius: 50%; background: rgba(243,239,230,.35); }
+
+  /* ---------- right: the polish timeline ---------- */
+  #rail {
+    flex: 0 0 var(--rail, 372px); width: var(--rail, 372px); height: 100%;
+    display: flex; flex-direction: column; background: var(--bg-raise);
+    border-left: 1px solid var(--line); overflow: hidden; transition: flex-basis .28s ease, width .28s ease;
+  }
+  body.rail-collapsed #rail { flex-basis: 42px; width: 42px; }
+  body.rail-collapsed #rail > *:not(#railbar) { display: none; }
+  body.rail-collapsed #railbar .rb-txt { display: none; }
+
+  #railbar {
+    flex: none; display: flex; align-items: center; gap: 9px; padding: 11px 12px;
+    border-bottom: 1px solid var(--line); background: var(--bg-raise);
+  }
+  #railbar button {
+    flex: none; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 4px;
+    background: transparent; color: var(--ink-dim); cursor: pointer; font-family: var(--mono);
+    font-size: 11px; line-height: 1; display: grid; place-items: center; padding: 0;
+  }
+  #railbar button:hover { color: var(--ink); border-color: var(--ink-faint); }
+  .rb-txt { min-width: 0; }
+  .rb-txt .a {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .rb-txt .b { font-family: var(--serif); font-size: 14px; color: var(--ink); margin-top: 1px; }
+
+  #tl { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+  #tl::-webkit-scrollbar { width: 9px; }
+  #tl::-webkit-scrollbar-thumb { background: var(--line); border-radius: 9px; }
+
+  #railfoot {
+    flex: none; border-top: 1px solid var(--line); padding: 12px 16px 14px;
+    background: var(--bg-sink);
+  }
+  #railfoot .rows { display: grid; gap: 2px; }
+  #railfoot .row { display: flex; gap: 8px; font-family: var(--mono); font-size: 10.5px; line-height: 1.7; }
+  #railfoot .row .k { flex: none; width: 5.2em; color: var(--ink-faint); }
+  #railfoot .row .v { color: var(--ink); min-width: 0; }
+  #railfoot .row .v.sand { color: var(--sand); }
+  #railfoot .lnks { margin-top: 10px; display: flex; gap: 12px; font-family: var(--mono); font-size: 10.5px; }
+  #railfoot .lnks a { color: var(--ink-dim); text-decoration: none; border-bottom: 1px solid var(--line); }
+  #railfoot .lnks a:hover { color: var(--sand); border-color: var(--sand); }
+
+  /* screenshot mode: only the world, at a known camera, at a frozen time */
+  body.shot #rail, body.shot #hint, body.shot #enter, body.shot #boot,
+  body.shot #ticks, body.shot #touch, body.shot #subs { display: none !important; }
+
+  @media (max-width: 860px) {
+    body { flex-direction: column; }
+    #stage { flex: 1 1 58%; }
+    #rail { flex: 0 0 42%; width: 100%; border-left: 0; border-top: 1px solid var(--line); }
+    body.rail-collapsed #rail { flex-basis: 42px; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="view"></canvas>
+
+  <div id="boot"><div class="t">无尽世界的海岸</div><div class="s">正在涨潮…</div></div>
+
+  <div id="hint">
+    <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走</span>
+    <span>鼠标 看</span>
+    <span><kbd>Shift</kbd> 快</span>
+    <span><kbd>Esc</kbd> 松开鼠标</span>
+    <span style="color:rgba(255,255,255,.34)">沿着海岸一直走，诗会一段一段出现</span>
+  </div>
+
+  <div id="subs"></div>
+  <div id="ticks"></div>
+
+  <div id="enter"><div class="btn">走进去</div></div>
+  <div id="touch"><div id="stick"><b></b></div></div>
+</div>
+
+<aside id="rail">
+  <div id="railbar">
+    <button id="railtoggle" title="折叠 / 展开时间线" aria-label="折叠时间线">›</button>
+    <div class="rb-txt">
+      <div class="a">Polish timeline</div>
+      <div class="b">它是怎么被磨出来的</div>
+    </div>
+  </div>
+  <div id="tl"></div>
+  <div id="railfoot">
+    <div class="rows">
+      <div class="row"><span class="k">loop</span><span class="v">Gauntlet 独立 critic + Ralph 一轮一事</span></div>
+      <div class="row"><span class="k">harness</span><span class="v">Claude Code</span></div>
+      <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
+      <div class="row"><span class="k">effort</span><span class="v sand">high</span></div>
+      <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">—</span></div>
+      <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">循环进行中</span></div>
+    </div>
+    <div class="lnks">
+      <a href="../">← 三个世界</a>
+      <a href="POEM.md">原文 / 译文</a>
+      <a href="POLISH.md">打磨 prompt</a>
+      <a href="log.jsonl">log.jsonl</a>
+    </div>
+  </div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+<script src="../shared/timeline.js"></script>
+<script src="log.js"></script>
+<script>
+/* =========================================================================
+ * 无尽世界的海岸 — Gitanjali 60
+ * One file, no build, three.js from CDN.
+ * Sections: POEM → CAMS → SKY → SEA → SAND → PLAYER → SUBS → LOOP → UI
+ * ========================================================================= */
+(function () {
+'use strict';
+
+var Q = new URLSearchParams(location.search);
+var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen time, no UI
+var FROZEN_T = 14.0;                                   // deterministic clock for shots
+var SHOT_FRAMES = 4;                                   // shot mode renders this many, then stops
+var shotFrames = 0;
+
+/* ---------------------------------------------------------------- POEM -- */
+/* Five stanzas. Walking the endless shore walks the poem. */
+var STANZAS = [
+  { en: 'On the seashore of endless worlds children meet.<br>The infinite sky is motionless overhead and the restless water is boisterous.',
+    zh: '在无尽世界的海岸上，孩子们相聚。<br>头顶是无垠的天，一动不动；脚下是不安的水，喧哗不止。' },
+  { en: 'They build their houses with sand and they play with empty shells.<br>With withered leaves they weave their boats and smilingly float them on the vast deep.',
+    zh: '他们用沙筑起自己的屋子，他们拿空贝壳做游戏。<br>他们把枯叶编成小船，笑着，把它们放到深不可测的海上去。' },
+  { en: 'They know not how to swim, they know not how to cast nets.<br>Pearl fishers dive for pearls, merchants sail in their ships, while children gather pebbles and scatter them again.',
+    zh: '他们不会游泳，他们不会撒网。<br>采珠人潜下去取珠，商人们扬帆远行；孩子们只是拾起石子，又把石子撒开。' },
+  { en: 'The sea surges up with laughter and pale gleams the smile of the sea beach.<br>Death-dealing waves sing meaningless ballads to the children, even like a mother while rocking her baby’s cradle.',
+    zh: '海涌起来，大笑；海滩的微笑，苍白地亮着。<br>那些带来死亡的浪，对孩子们唱着没有意思的歌谣——像一个母亲，摇着她婴儿的摇篮时那样。' },
+  { en: 'Tempest roams in the pathless sky, ships get wrecked in the trackless water, death is abroad and children play.<br>On the seashore of endless worlds is the great meeting of children.',
+    zh: '风暴在没有路的天上游荡，船在没有航迹的水上碎裂，死亡在外面走着，而孩子们游戏。<br>在无尽世界的海岸上，是孩子们盛大的相聚。' }
+];
+var STANZA_SPAN = 150; // metres of shore per stanza
+
+/* ---------------------------------------------------------------- CAMS -- */
+/* Six fixed cameras, frozen at round 1. Never change these — cross-round
+ * screenshots are only comparable because the eye does not move. */
+var CAMS = [
+  { name: 'arrival',    pos: [  8, 1.70,  14], look: [  3, 1.20, -60] },
+  { name: 'children',   pos: [ 14, 0.95,  25], look: [ 22, 0.75,  12] },
+  { name: 'boats',      pos: [ -6, 0.55,  -4], look: [ -9, 0.95, -70] },
+  { name: 'horizon',    pos: [  0, 2.30,  16], look: [-30, 3.60,-260] },
+  { name: 'shore-line', pos: [-40, 0.42,  12], look: [180, 1.10,  -6] },
+  { name: 'above',      pos: [ 10,26.00,  78], look: [  0, 0.00, -90] }
+];
+
+/* ----------------------------------------------------------- RENDERER -- */
+var canvas = document.getElementById('view');
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;
+
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 6000);
+
+/* The palette of a pale, luminous, slightly overcast hour: the beach smiles,
+ * but the smile is pale. Everything else is tuned to these five colours. */
+var PAL = {
+  skyTop:  new THREE.Color(0x7d9cb6),
+  skyHaze: new THREE.Color(0xd7d1c2),
+  sun:     new THREE.Color(0xfff2dc),
+  seaDeep: new THREE.Color(0x1d3b4b),
+  seaShal: new THREE.Color(0x5e9e9c),
+  sand:    new THREE.Color(0xbcaa89),
+  sandWet: new THREE.Color(0x7c7263)
+};
+var FOG = new THREE.Color(0xc0c1bb);
+scene.fog = new THREE.Fog(FOG, 300, 2600);
+
+var SUNDIR = new THREE.Vector3(-0.34, 0.20, -0.92).normalize(); // low, ahead-left, over the sea
+
+/* ----------------------------------------------------------------- SKY -- */
+/* "The infinite sky is motionless overhead." So: no clouds move up there.
+ * A dome, a gradient, one pale sun-smear near the horizon. Nothing animates. */
+var sky = new THREE.Mesh(
+  new THREE.SphereGeometry(3000, 48, 32),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: {
+      uTop:  { value: PAL.skyTop }, uHaze: { value: PAL.skyHaze },
+      uSun:  { value: PAL.sun },    uSunDir: { value: SUNDIR },
+      uTime: { value: 0 },          uStormAz: { value: Math.PI }
+    },
+    vertexShader: [
+      'varying vec3 vDir;',
+      'void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }'
+    ].join('\n'),
+    fragmentShader: [
+      'varying vec3 vDir; uniform vec3 uTop,uHaze,uSun,uSunDir; uniform float uTime,uStormAz;',
+      'float hs(vec2 p){ return fract(sin(dot(p, vec2(41.7, 289.1)))*43758.5453); }',
+      'float ns(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
+      '  return mix(mix(hs(i),hs(i+vec2(1,0)),f.x), mix(hs(i+vec2(0,1)),hs(i+vec2(1,1)),f.x), f.y); }',
+      'float fbm(vec2 p){ float v=0.0, a=0.5;',
+      '  for(int i=0;i<5;i++){ v += a*ns(p); p *= 2.03; a *= 0.5; } return v; }',
+      'void main(){',
+      '  float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);',
+      '  float t = pow(clamp((h-0.5)*2.0,0.0,1.0), 0.78);',
+      '  vec3 col = mix(uHaze, uTop, t);',
+      /* the sun does not burn here; it soaks */
+      '  float d = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);',
+      '  col += uSun * pow(d, 12.0) * 0.26;',
+      '  col += uSun * pow(d, 2.5) * 0.045;',
+      /* a faint band right at the seam, so sky and sea meet without a hard edge */
+      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*9.0,0.0,1.0), 2.0)*0.45);',
+      /* --------------------------------------------------------------------
+       * "Tempest roams in the pathless sky."  Two lines of this poem look like
+       * a contradiction — the sky is motionless overhead, AND a tempest roams
+       * it — and they are not. The stillness is what is over YOU. The tempest
+       * is always somewhere else, far out, drifting along the horizon, never
+       * arriving. So the storm lives in a band that never climbs past about
+       * twelve degrees, and its bearing wanders forever. Look up and nothing
+       * is happening. Look out and something is.
+       * ------------------------------------------------------------------ */
+      '  float az = atan(vDir.x, vDir.z);',
+      '  float el = vDir.y;',
+      '  float da = mod(az - uStormAz + 3.14159, 6.28318) - 3.14159;',
+      '  float across = 1.0 - smoothstep(0.0, 0.78, abs(da));',
+      '  float top = 0.055 + 0.265 * across;',                 /* an anvil, tallest at its heart */
+      /* domain-warp the noise first, or the cloud comes out a smooth lens
+       * instead of weather */
+      '  vec2 q = vec2(da*3.4, el*13.0);',
+      '  float warp = fbm(q*1.7 + vec2(uTime*0.010, 0.0));',
+      '  float n = fbm(q + vec2(warp*1.6 + uTime*0.009, warp*1.1));',
+      '  float bulge = top * (0.62 + 0.55*n);',
+      '  float body = (1.0 - smoothstep(bulge*0.72, bulge, el)) * step(-0.02, el);',
+      '  float mass = smoothstep(0.20, 0.62, clamp(across*1.25, 0.0, 1.0) * body);',
+      /* rain hanging out of the base, straight down into the water */
+      '  float base = top * 0.42;',
+      '  float veil = (1.0 - smoothstep(base*0.55, base*1.5, el)) * step(-0.02, el) * clamp(across*1.3,0.0,1.0);',
+      '  float streak = fbm(vec2(da*46.0, el*26.0 - uTime*0.30));',
+      '  veil *= smoothstep(0.26, 0.74, streak);',
+      '  col = mix(col, vec3(0.235,0.250,0.282), veil);',
+      '  vec3 stormCol = mix(vec3(0.078,0.084,0.100), vec3(0.330,0.342,0.372), n*n);',
+      /* a little light still gets in under the anvil, but only a little */
+      '  stormCol += vec3(0.20,0.20,0.19) * pow(1.0 - clamp(el/max(top,0.001),0.0,1.0), 4.0) * 0.30;',
+      '  col = mix(col, stormCol, mass * 0.96);',
+      /* lightning, for whoever is standing there when it happens */
+      '  float bolt = fract(sin(floor(uTime*0.62)*91.37)*43758.5453);',
+      '  float flash = step(0.86, bolt) * pow(1.0 - fract(uTime*0.62), 14.0);',
+      '  col += vec3(0.85,0.86,0.95) * mass * flash * 1.5;',
+      '  gl_FragColor = vec4(col, 1.0);',
+      '  #include <tonemapping_fragment>',
+      '  #include <colorspace_fragment>',
+      '}'
+    ].join('\n')
+  })
+);
+sky.frustumCulled = false;
+scene.add(sky);
+
+scene.add(new THREE.HemisphereLight(0xdfe4e8, 0xa08e73, 1.05));
+var sun = new THREE.DirectionalLight(0xfff0d8, 1.25);
+sun.position.copy(SUNDIR).multiplyScalar(300);
+scene.add(sun);
+
+/* ----------------------------------------------------------------- SEA -- */
+/* Restless, boisterous, and it laughs. Gerstner-ish sum of four waves, normals
+ * derived analytically, foam where crests break and where the water is thin. */
+var SEA_SIZE = 4200;
+var seaUniforms = {
+  uTime:     { value: 0 },
+  uDeep:     { value: PAL.seaDeep },
+  uShal:     { value: PAL.seaShal },
+  uSky:      { value: PAL.skyHaze },
+  uSunDir:   { value: SUNDIR },
+  uSunCol:   { value: PAL.sun },
+  uFogCol:   { value: FOG },
+  uFogNear:  { value: 900 },
+  uFogFar:   { value: 5200 },
+  uStormAz:  { value: Math.PI }
+};
+/* One source of truth for the wave field. The GLSL below is generated from
+ * these numbers, and seaHeightJS() reads the same array, so the shader and the
+ * things floating on the water can never drift apart again.
+ *   dir x, dir z, amplitude (m), wavelength (m) */
+var WAVES = [
+  [ 0.00, -1.00, 1.35, 42.0],
+  [ 0.26, -0.97, 0.72, 23.0],
+  [-0.19, -0.98, 0.40, 12.5],
+  [ 0.44, -0.90, 0.20,  6.2]
+];
+var WAVE_SPEED = 0.62;   // sets the rhythm: the big swell arrives every ~8.5s
+var WAVE_STEEP = 1.05;   // horizontal Gerstner pull — this is what rears the face up
+
+/* shoal(): the whole difference between a swell and a breaker. A wave that
+ * feels the bottom does not fade out politely; it slows, stacks up on itself,
+ * rears about eleven metres from the sand — right where the children are
+ * standing — and falls over. */
+var SHOAL_GLSL = [
+  'float shoal(float d){',
+  '  float runUp = smoothstep(-1.2, 7.0, d);',
+  '  float deep  = mix(0.55, 1.0, smoothstep(0.0, 80.0, d));',
+  '  float rear  = 1.0 + 2.40 * exp(-pow((d - 11.0) / 8.0, 2.0));',
+  '  return runUp * deep * rear;',
+  '}'
+].join('\n');
+
+var WAVE_GLSL = (function () {
+  var out = ['const float WSPEED = ' + WAVE_SPEED.toFixed(3) + ';',
+             'const float WSTEEP = ' + WAVE_STEEP.toFixed(3) + ';'];
+  WAVES.forEach(function (w, i) {
+    var L = Math.hypot(w[0], w[1]);
+    out.push('const vec4 W' + i + ' = vec4(' +
+      (w[0] / L).toFixed(4) + ', ' + (w[1] / L).toFixed(4) + ', ' +
+      w[2].toFixed(3) + ', ' + w[3].toFixed(2) + ');');
+  });
+  out.push(SHOAL_GLSL);
+  out.push('float wavePhase(vec4 w, vec2 p, float t){');
+  out.push('  float k = 6.28318 / w.w;');
+  out.push('  return k * dot(w.xy, p) - sqrt(9.8 / k) * k * t * WSPEED;');
+  out.push('}');
+  /* One pass over the wave field that hands back height, the analytic surface
+   * slope, and the full Gerstner displacement at once. It replaces the five
+   * finite-difference evaluations the vertex stage used to do and the four the
+   * fragment stage did per pixel — which is the difference between this scene
+   * being renderable in software and not. Sampled in UNDISPLACED coordinates,
+   * which is where the height field is actually defined. */
+  out.push('void seaField(vec2 p, float t, out float h, out vec2 dh, out vec3 disp){');
+  out.push('  float d = -p.y;');
+  out.push('  float f = shoal(d);');
+  out.push('  float fz = shoal(d - 0.5) - shoal(d + 0.5);');
+  out.push('  float H = 0.0; vec2 dH = vec2(0.0); vec2 pull = vec2(0.0);');
+  WAVES.forEach(function (w, i) {
+    out.push('  { float k = 6.28318 / W' + i + '.w;');
+    out.push('    float ph = k * dot(W' + i + '.xy, p) - sqrt(9.8 / k) * k * t * WSPEED;');
+    out.push('    float sn = sin(ph), cs = cos(ph);');
+    out.push('    H += W' + i + '.z * sn;');
+    out.push('    dH += W' + i + '.z * k * W' + i + '.xy * cs;');
+    out.push('    pull += W' + i + '.xy * (W' + i + '.z * WSTEEP * cs); }');
+  });
+  out.push('  h = H * f;');
+  out.push('  dh = dH * f; dh.y += fz * H;');
+  /* the horizontal term is what sharpens a crest into a face instead of
+   * leaving it a rounded hump */
+  out.push('  disp = vec3(pull.x * f, h, pull.y * f);');
+  out.push('}');
+  return out.join('\n');
+})();
+
+var seaGeo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, 620, 620);
+seaGeo.rotateX(-Math.PI / 2);
+var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
+  uniforms: seaUniforms,
+  vertexShader: [
+    'uniform float uTime; varying vec3 vW; varying vec2 vP0; varying float vFoam;',
+    WAVE_GLSL,
+    'void main(){',
+    '  vec4 wp0 = modelMatrix * vec4(position, 1.0);',
+    '  vec2 p0 = wp0.xz;',
+    '  vP0 = p0;',
+    '  float h; vec2 dh; vec3 disp;',
+    '  seaField(p0, uTime, h, dh, disp);',
+    '  vec3 wp = wp0.xyz + disp;',
+    '  float d = -p0.y;',
+    /* foam has three sources: crests that are genuinely toppling, the band
+     * where the shoaling wave is breaking, and the sheet of white left on the
+     * sand behind it */
+    '  float slope = length(dh);',
+    '  float crest = smoothstep(0.85, 1.95, disp.y) * smoothstep(0.16, 0.58, slope);',
+    '  float rollers = 0.5 + 0.5*sin(wavePhase(W0, p0, uTime) - 0.85);',
+    '  float breakBand = exp(-pow((d - 10.0) / 7.5, 2.0));',
+    '  float surf = breakBand * pow(rollers, 2.2) * 1.30;',
+    '  float wash = smoothstep(2.2, -1.2, d) * 0.36;',
+    '  vFoam = clamp(crest + surf + wash, 0.0, 1.0);',
+    '  vW = wp;',
+    '  gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);',
+    '}'
+  ].join('\n'),
+  fragmentShader: [
+    'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime,uStormAz;',
+    'varying vec3 vW; varying vec2 vP0; varying float vFoam;',
+    WAVE_GLSL,
+    'void main(){',
+    '  float dist = length(cameraPosition - vW);',
+    '  float lod = clamp(dist / 300.0, 0.0, 1.0);',
+    /* normals come from the UNDISPLACED domain, which is where the height
+     * field is actually defined; sampling at the displaced position was an
+     * approximation that got worse the steeper the waves became */
+    '  float h; vec2 dh; vec3 disp;',
+    '  seaField(vP0, uTime, h, dh, disp);',
+    '  vec3 n = normalize(vec3(-dh.x, 1.0, -dh.y));',
+    /* flatten the normal with distance: near the horizon one pixel covers many
+     * wavelengths, and keeping the detail there only produces moire */
+    '  n = normalize(mix(n, vec3(0.0,1.0,0.0), lod * lod * 0.80));',
+    '  vec3 v = normalize(cameraPosition - vW);',
+    '  float depth = clamp((-vP0.y) / 210.0, 0.0, 1.0);',
+    '  vec3 base = mix(uShal, uDeep, pow(depth, 0.55));',
+    /* a breaking wave is lit through: the thin water at the crest glows */
+    '  float thin = smoothstep(0.7, 2.2, vW.y) * pow(max(dot(-v, normalize(uSunDir)), 0.0) * 0.5 + 0.5, 2.0);',
+    '  base += vec3(0.10, 0.26, 0.24) * thin;',
+    '  float fres = pow(1.0 - max(dot(n, v), 0.0), 4.2);',
+    '  vec3 refl = uSky * 0.80 + vec3(0.03, 0.05, 0.07);',
+    '  vec3 col = mix(base, refl, clamp(fres*0.72, 0.0, 0.55));',
+    '  vec3 hv = normalize(normalize(uSunDir) + v);',
+    '  col += uSunCol * pow(max(dot(n, hv), 0.0), 190.0) * 1.35;',
+    '  col += uSunCol * pow(max(dot(n, hv), 0.0), 18.0) * 0.10;',
+    '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.78);',
+    '  col = mix(col, vec3(0.94,0.94,0.92), foam * 0.85);',
+    '  float fa = atan(vW.x - cameraPosition.x, vW.z - cameraPosition.z);',
+    '  float dda = mod(fa - uStormAz + 3.14159, 6.28318) - 3.14159;',
+    '  float under = (1.0 - smoothstep(0.10, 0.70, abs(dda))) * smoothstep(320.0, 1500.0, dist);',
+    '  col = mix(col, col * vec3(0.44, 0.47, 0.56), under * 0.80);',
+    '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, dist));',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '  #include <tonemapping_fragment>',
+    '  #include <colorspace_fragment>',
+    '}'
+  ].join('\n')
+}));
+sea.position.set(0, 0, -SEA_SIZE / 2 + 30);
+sea.frustumCulled = false;
+scene.add(sea);
+
+/* ---------------------------------------------------------------- SAND -- */
+/* The beach runs along +X and -X without end; the sea is at -Z.
+ * A gentle ramp down into the water, a darker wet band the tide keeps polished. */
+var SAND_W = 4200, SAND_D = 1000;
+var TAU = Math.PI * 2;
+function sandHeight(x, z) {
+  // z = 0 is the waterline; +z walks inland and rises, -z is the shelf going under
+  // seaward the bottom must fall faster than the waves trough: the deepest
+  // trough now runs past -5m around eleven metres out, so 0.78/m clears it
+  var ramp = z > 0 ? z * 0.030 : z * 0.78;
+  var dune = Math.max(0, z - 120) * 0.055;
+  // periods of 80m / 400m / 20m all divide the 400m re-tile step, so the shore
+  // can repeat forever without the dunes jumping under your feet
+  var ripple = Math.sin(x * (TAU / 80)) * 0.07 + Math.sin(x * (TAU / 400) + z * 0.02) * 0.14
+             + Math.sin(x * (TAU / 25) + z * 0.31) * 0.035;
+  var grain = Math.sin(x * (TAU / 20) + z * 0.17) * 0.012;
+  return ramp + dune + ripple * Math.min(1, Math.max(0, z) / 26) + grain;
+}
+var sandGeo = new THREE.PlaneGeometry(SAND_W, SAND_D, 520, 150);
+sandGeo.rotateX(-Math.PI / 2);
+(function shapeSand() {
+  var pos = sandGeo.attributes.position, off = SAND_D / 2 - 160; // 160m of shelf under the water
+  for (var i = 0; i < pos.count; i++) {
+    var x = pos.getX(i), z = pos.getZ(i) + off;
+    pos.setZ(i, z);
+    pos.setY(i, sandHeight(x, z));
+  }
+  sandGeo.computeVertexNormals();
+})();
+var sandUniforms = {
+  uSand:    { value: PAL.sand },
+  uWet:     { value: PAL.sandWet },
+  uTime:    { value: 0 },
+  uSunDir:  { value: SUNDIR },
+  uFogCol:  { value: FOG },
+  uFogNear: { value: 420 },
+  uFogFar:  { value: 2800 }
+};
+var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
+  uniforms: sandUniforms,
+  vertexShader: [
+    'varying vec3 vW; varying vec3 vN;',
+    'void main(){ vec4 wp = modelMatrix*vec4(position,1.0); vW = wp.xyz; vN = normalize(normalMatrix*normal);',
+    '  gl_Position = projectionMatrix*viewMatrix*wp; }'
+  ].join('\n'),
+  fragmentShader: [
+    'uniform vec3 uSand,uWet,uSunDir,uFogCol; uniform float uTime,uFogNear,uFogFar;',
+    'varying vec3 vW; varying vec3 vN;',
+    'float hash(vec2 p){ return fract(sin(dot(p, vec2(41.7, 289.1)))*43758.5453); }',
+    'float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
+    '  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }',
+    'void main(){',
+    '  vec3 n = normalize(vN);',
+    '  float g = noise(vW.xz*2.6)*0.5 + noise(vW.xz*11.0)*0.26 + noise(vW.xz*46.0)*0.14;',
+    /* the tide breathes: the wet line creeps up and back */
+    /* the run-up follows the rhythm of the breaker that made it, and sweeps
+     * along the shore rather than surging everywhere at once — the slow,
+     * repeating rock the poem calls a cradle */
+    '  float surge = pow(max(sin(uTime*0.735 + vW.x*0.021), 0.0), 0.70);',
+    '  float edge = 2.4 + 4.0*surge + 0.9*sin(uTime*0.29 - vW.x*0.0145);',
+    '  float wet = 1.0 - smoothstep(edge - 0.8, edge + 4.5, vW.z);',
+    '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.35, 0.0, 1.0);',
+    '  vec3 col = mix(uSand, uWet, wet*0.92);',
+    /* the thin lace at the top of each run-up, where the water gives out */
+    '  float lace = smoothstep(1.1, 0.0, abs(vW.z - edge)) * smoothstep(0.0, 1.0, vW.z);',
+    '  col *= 0.80 + g*0.44;',
+    /* "pale gleams the smile of the sea beach": the wet strip returns the sky */
+    '  vec3 v = normalize(cameraPosition - vW);',
+    '  float fres = pow(1.0 - max(dot(n, v),0.0), 5.0);',
+    '  col = mix(col, vec3(0.90,0.90,0.87), fres*wet*0.85);',
+    '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
+    '  col *= 0.68 + lam*0.58;',
+    /* a scatter of dry shell-white specks, so the sand is never flat */
+    '  col = mix(col, vec3(0.955,0.955,0.935), lace * 0.80);',
+    '  float sp = step(0.9975, hash(floor(vW.xz*26.0)));',
+    '  col = mix(col, vec3(0.95,0.93,0.88), sp*(1.0-wet)*0.45);',
+    '  float d = length(cameraPosition - vW);',
+    '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, d));',
+    '  gl_FragColor = vec4(col,1.0);',
+    '  #include <tonemapping_fragment>',
+    '  #include <colorspace_fragment>',
+    '}'
+  ].join('\n')
+}));
+sand.frustumCulled = false;
+scene.add(sand);
+
+/* ------------------------------------------------------------- WRECKS -- */
+/* "ships get wrecked in the trackless water, death is abroad and children play."
+ * The children never look at these. That is the whole point of the poem, so the
+ * wrecks sit far out where you have to choose to look for them. */
+
+/* The JS side of the same wave field. It reads WAVES and mirrors shoal(), so
+ * anything floated on the water sits on the surface the shader actually draws.
+ * (It carries only the vertical term; the horizontal Gerstner pull moves a
+ * floating thing sideways by under a metre, which nothing here would notice.) */
+function seaHeightJS(x, z, t) {
+  var d = -z;
+  var ru = Math.min(1, Math.max(0, (d + 1.2) / 8.2));
+  var runUp = ru * ru * (3 - 2 * ru);
+  var dp = Math.min(1, Math.max(0, d / 80));
+  var deep = 0.55 + 0.45 * (dp * dp * (3 - 2 * dp));
+  var rear = 1 + 2.40 * Math.exp(-Math.pow((d - 11) / 8, 2));
+  var f = runUp * deep * rear;
+  var h = 0;
+  for (var i = 0; i < WAVES.length; i++) {
+    var w = WAVES[i], L = Math.hypot(w[0], w[1]);
+    var k = 6.28318 / w[3];
+    h += w[2] * Math.sin(k * ((w[0] / L) * x + (w[1] / L) * z) - Math.sqrt(9.8 / k) * k * t * WAVE_SPEED);
+  }
+  return h * f;
+}
+
+/* a hull as a parametric U-section that tapers to a prow and stops, torn off,
+ * partway down its own length */
+function hullGeometry(len, beam, depth, uEnd) {
+  var NU = 26, NT = 14, pos = [], idx = [];
+  function half(u) { return (beam / 2) * Math.pow(Math.sin(Math.PI * Math.min(u, 0.999)), 0.62); }
+  function dep(u) { return depth * (0.34 + 0.66 * Math.pow(Math.sin(Math.PI * Math.min(u, 0.999)), 0.5)); }
+  for (var i = 0; i <= NU; i++) {
+    var u = (i / NU) * uEnd;
+    for (var j = 0; j <= NT; j++) {
+      var t = -1 + 2 * (j / NT);
+      pos.push(half(u) * t, -dep(u) * (1 - t * t), len * (u - 0.5));
+    }
+  }
+  for (i = 0; i < NU; i++) for (var j2 = 0; j2 < NT; j2++) {
+    var a = i * (NT + 1) + j2, b = a + NT + 1;
+    idx.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  var g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return { geo: g, half: half, dep: dep };
+}
+
+var WOOD = new THREE.MeshLambertMaterial({ color: 0x4a3f33, side: THREE.DoubleSide });
+var WOOD_DARK = new THREE.MeshLambertMaterial({ color: 0x332c24 });
+var CANVAS_MAT = new THREE.MeshLambertMaterial({ color: 0xb9b2a0, side: THREE.DoubleSide, transparent: true, opacity: 0.93 });
+
+function buildWreck(len, list) {
+  var w = new THREE.Object3D();
+  var h = hullGeometry(len, len * 0.20, len * 0.135, 0.64);
+  var hull = new THREE.Mesh(h.geo, WOOD);
+  w.add(hull);
+
+  /* the ribs the missing stern left behind */
+  for (var i = 0; i < 5; i++) {
+    var u = 0.645 + i * 0.048;
+    var hb = h.half(u), dp = h.dep(u), reach = 1 - i * 0.16;
+    var pts = [];
+    for (var k = 0; k <= 8; k++) {
+      var t = -reach + 2 * reach * (k / 8);
+      pts.push(new THREE.Vector3(hb * t, -dp * (1 - t * t), len * (u - 0.5)));
+    }
+    var rib = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, len * 0.009, 5, false), WOOD_DARK);
+    w.add(rib);
+  }
+
+  /* a mast snapped off short, and the spar still hanging from it */
+  var mast = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.007, len * 0.013, len * 0.52, 7), WOOD_DARK);
+  mast.position.set(0, len * 0.20, -len * 0.10);
+  mast.rotation.z = 0.62; mast.rotation.x = -0.17;
+  w.add(mast);
+  var spar = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.005, len * 0.006, len * 0.30, 6), WOOD_DARK);
+  spar.position.set(-len * 0.14, len * 0.30, -len * 0.10);
+  spar.rotation.z = Math.PI / 2 - 0.35; spar.rotation.y = 0.5;
+  w.add(spar);
+
+  /* torn canvas, still caught on the spar */
+  var sailGeo = new THREE.PlaneGeometry(len * 0.26, len * 0.30, 7, 7);
+  (function tear() {
+    var p = sailGeo.attributes.position;
+    for (var v = 0; v < p.count; v++) {
+      var sx = p.getX(v), sy = p.getY(v);
+      var slack = (1 - Math.abs(sx) / (len * 0.13)) * (0.5 - sy / (len * 0.30));
+      p.setZ(v, Math.sin(sx * 1.4) * len * 0.02 * slack);
+      /* the lower corner is gone */
+      if (sy < -len * 0.06 && sx > len * 0.03) p.setY(v, sy + (sx / (len * 0.13)) * len * 0.09);
+    }
+    sailGeo.computeVertexNormals();
+  })();
+  var sail = new THREE.Mesh(sailGeo, CANVAS_MAT);
+  sail.position.set(-len * 0.16, len * 0.17, -len * 0.105);
+  sail.rotation.set(0.2, 0.55, -0.3);
+  w.add(sail);
+
+  w.userData.len = len;
+  scene.add(w);
+  list.push(w);
+  return w;
+}
+
+/* Three of them, re-tiled along an endless shore with a long period so a wreck
+ * never pops into being anywhere near you. */
+var WRECK_PERIOD = 3000;
+var wrecks = [];
+var WRECK_SPOTS = [
+  { x: -105, z: -385,  len: 44, list: 0.52, yaw: 0.9,  sink: 1.05 },
+  { x:  420, z: -880,  len: 46, list: -0.70, yaw: -2.1, sink: 0.55 },
+  { x: -760, z: -1650, len: 52, list: 0.34, yaw: 1.9,  sink: 0.20 }
+];
+WRECK_SPOTS.forEach(function (sp) { sp.obj = buildWreck(sp.len, wrecks); });
+
+function updateWrecks(t, camX) {
+  for (var i = 0; i < WRECK_SPOTS.length; i++) {
+    var sp = WRECK_SPOTS[i], o = sp.obj;
+    var x = sp.x + Math.round((camX - sp.x) / WRECK_PERIOD) * WRECK_PERIOD;
+    var bob = seaHeightJS(x, sp.z, t + i * 7.0);
+    o.position.set(x, sp.sink + bob * 0.55, sp.z);
+    /* it does not sail; it is worked on by the water */
+    o.rotation.set(Math.sin(t * 0.21 + i) * 0.035, sp.yaw, sp.list + Math.sin(t * 0.17 + i * 2.1) * 0.045);
+  }
+}
+
+/* ------------------------------------------------------------ CHILDREN -- */
+/* "On the seashore of endless worlds children meet." They are the subject of
+ * the poem, so they are the subject of the world: everything else here is the
+ * room they are playing in.
+ *
+ * Three rules shape this code:
+ *   - they MEET. Not scattered evenly along the sand — gathered into knots,
+ *     mostly facing each other.
+ *   - they never enter the water. Every child is clamped landward of the
+ *     waterline, because "they know not how to swim".
+ *   - where they stand must be DETERMINISTIC. A child's position comes from a
+ *     hash of which group it belongs to, never from runtime randomness, so the
+ *     six fixed cameras frame the same children in round 2 and round 9. */
+
+function groundY(x, z) { return sandHeight(x, Math.max(z, 0.2)); }
+
+var TAU2 = Math.PI * 2;
+function h1(n) { var v = Math.sin(n * 127.1) * 43758.5453; return v - Math.floor(v); }
+function h2(a, b) { return h1(a * 311.7 + b * 269.5 + 0.7); }
+
+var GROUP_SPAN = 16;     // metres of shore between one gathering and the next
+var CHILD_RANGE = 430;   // how far down the shore children are drawn
+var POOL = 320;          // instances held ready; groups are mapped into it each frame
+
+var SKIN  = [0x6b4a33, 0x8a6647, 0xa37a55, 0x5a3d2b, 0x9c7150];
+var CLOTH = [0xf0ece1, 0xc95a4e, 0x4a6fa5, 0xe0b04a, 0xf6f4ee, 0x7a9e7e, 0xd8d3c4, 0xb0553f];
+
+/* one rig, re-posed once per child per frame, read out into instanced meshes */
+var rig = new THREE.Object3D();
+var rHips = new THREE.Object3D();  rig.add(rHips);
+var rTorso = new THREE.Object3D(); rHips.add(rTorso);
+var rHead = new THREE.Object3D();  rHips.add(rHead);
+var rShoL = new THREE.Object3D(), rShoR = new THREE.Object3D();
+var rArmL = new THREE.Object3D(), rArmR = new THREE.Object3D();
+rHips.add(rShoL); rHips.add(rShoR); rShoL.add(rArmL); rShoR.add(rArmR);
+var rHipL = new THREE.Object3D(), rHipR = new THREE.Object3D();
+var rLegL = new THREE.Object3D(), rLegR = new THREE.Object3D();
+rHips.add(rHipL); rHips.add(rHipR); rHipL.add(rLegL); rHipR.add(rLegR);
+
+var LEG_L = 0.34, TORSO_L = 0.38, ARM_L = 0.285;   // child proportions: big head, short legs
+rTorso.position.y = TORSO_L / 2;
+rHead.position.y = TORSO_L + 0.128;
+rShoL.position.set( 0.132, TORSO_L - 0.048, 0);
+rShoR.position.set(-0.132, TORSO_L - 0.048, 0);
+rArmL.position.y = -ARM_L / 2;
+rArmR.position.y = -ARM_L / 2;
+rHipL.position.set( 0.061, 0, 0);
+rHipR.position.set(-0.061, 0, 0);
+rLegL.position.y = -LEG_L / 2;
+rLegR.position.y = -LEG_L / 2;
+
+function inst(geo, mat, n) {
+  var m = new THREE.InstancedMesh(geo, mat, n);
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled = false;
+  m.count = 0;
+  scene.add(m);
+  return m;
+}
+var matSkin  = new THREE.MeshLambertMaterial();
+var matCloth = new THREE.MeshLambertMaterial();
+var iTorso = inst(new THREE.CylinderGeometry(0.092, 0.122, TORSO_L, 9), matCloth, POOL);
+var iHead  = inst(new THREE.SphereGeometry(0.143, 12, 9), matSkin, POOL);
+var iArm   = inst(new THREE.CylinderGeometry(0.030, 0.040, ARM_L, 6), matSkin, POOL * 2);
+var iLeg   = inst(new THREE.CylinderGeometry(0.040, 0.052, LEG_L, 6), matSkin, POOL * 2);
+
+/* a soft blot of shade so nobody floats; cheaper and calmer than a shadow map */
+var shadowTex = (function () {
+  var c = document.createElement('canvas'); c.width = c.height = 64;
+  var g = c.getContext('2d').createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(0.55, 'rgba(0,0,0,0.22)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  var x = c.getContext('2d'); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+var shadowGeo = new THREE.PlaneGeometry(1, 1); shadowGeo.rotateX(-Math.PI / 2);
+var iShadow = inst(shadowGeo, new THREE.MeshBasicMaterial({
+  map: shadowTex, transparent: true, depthWrite: false, fog: true, opacity: 0.85
+}), POOL);
+
+var _c = new THREE.Color();
+var _dummy = new THREE.Object3D();
+(function paintChildren() {
+  for (var i = 0; i < POOL; i++) {
+    iTorso.setColorAt(i, _c.setHex(CLOTH[Math.floor(h1(i * 7.3) * CLOTH.length) % CLOTH.length]));
+    var sk = SKIN[Math.floor(h1(i * 3.1 + 11) * SKIN.length) % SKIN.length];
+    iHead.setColorAt(i, _c.setHex(sk));
+    iArm.setColorAt(i * 2, _c.setHex(sk));      iArm.setColorAt(i * 2 + 1, _c.setHex(sk));
+    iLeg.setColorAt(i * 2, _c.setHex(sk));      iLeg.setColorAt(i * 2 + 1, _c.setHex(sk));
+    iShadow.setColorAt(i, _c.setHex(0xffffff));
+  }
+  [iTorso, iHead, iArm, iLeg, iShadow].forEach(function (m) { m.instanceColor.needsUpdate = true; });
+})();
+
+/* the things their play is made of: sand houses, empty shells, pebbles */
+
+/* a sandcastle turret, drip-built in tiers, as a single lathe profile */
+var turretGeo = new THREE.LatheGeometry([
+  new THREE.Vector2(0.000, 0.335), new THREE.Vector2(0.052, 0.320),
+  new THREE.Vector2(0.056, 0.245), new THREE.Vector2(0.098, 0.236),
+  new THREE.Vector2(0.102, 0.172), new THREE.Vector2(0.148, 0.164),
+  new THREE.Vector2(0.152, 0.104), new THREE.Vector2(0.208, 0.096),
+  new THREE.Vector2(0.212, 0.044), new THREE.Vector2(0.285, 0.036),
+  new THREE.Vector2(0.300, 0.000)
+], 11);
+/* the low wall they push up around it with the sides of their hands */
+var wallGeo = new THREE.TorusGeometry(0.50, 0.062, 5, 14, Math.PI * 1.35);
+wallGeo.rotateX(-Math.PI / 2); wallGeo.scale(1, 0.62, 1);
+
+var shellGeo = new THREE.SphereGeometry(0.068, 7, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
+shellGeo.scale(1, 0.42, 0.78);
+var pebbleGeo = new THREE.IcosahedronGeometry(0.040, 0);
+pebbleGeo.scale(1, 0.66, 0.88);
+
+var matSandProp = new THREE.MeshLambertMaterial({ color: 0x8b7a5e });
+var matShell = new THREE.MeshLambertMaterial({ color: 0xf8f4ea });
+var matPebble = new THREE.MeshLambertMaterial({ color: 0x6d675e });
+
+var SHELL_POOL = 900, PEBBLE_POOL = 900, TURRET_POOL = 300, WALL_POOL = 110;
+var iTurret = inst(turretGeo, matSandProp, TURRET_POOL);
+var iWall   = inst(wallGeo, matSandProp, WALL_POOL);
+var iShell  = inst(shellGeo, matShell, SHELL_POOL);
+var iPebble = inst(pebbleGeo, matPebble, PEBBLE_POOL);
+
+/* ---- leaf boats -------------------------------------------------------- */
+/* "With withered leaves they weave their boats and smilingly float them on the
+ * vast deep." A leaf whose edges curl up is already a boat; that is the whole
+ * geometry. They only ever go outward, and they never come back. */
+var leafGeo = (function () {
+  var NU = 14, NT = 8, pos = [], idx = [];
+  for (var i = 0; i <= NU; i++) {
+    var u = i / NU;
+    var w = 0.102 * Math.pow(Math.sin(Math.PI * u), 0.75);   // pointed at both ends
+    for (var j = 0; j <= NT; j++) {
+      var t = -1 + 2 * (j / NT);
+      pos.push(w * t, 0.048 * t * t - 0.013 * Math.sin(Math.PI * u), 0.46 * (u - 0.5));
+    }
+  }
+  for (i = 0; i < NU; i++) for (var j2 = 0; j2 < NT; j2++) {
+    var a = i * (NT + 1) + j2, b = a + NT + 1;
+    idx.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  var g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+})();
+var BOATS = 190, BOAT_TILE = 120, BOAT_RUN = 150;  // metres a boat travels before it is gone
+var iBoat = inst(leafGeo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, flatShading: true }), BOATS);
+(function paintBoats() {
+  var LEAF = [0xbd9a55, 0xd0ab60, 0xa8873f, 0xc49b4e, 0x967a3d];
+  for (var i = 0; i < BOATS; i++) iBoat.setColorAt(i, _c.setHex(LEAF[i % LEAF.length]));
+  iBoat.instanceColor.needsUpdate = true;
+})();
+
+function updateBoats(t, camX) {
+  for (var i = 0; i < BOATS; i++) {
+    var lane = (h1(i * 5.7) - 0.5) * BOAT_TILE;
+    var bx = lane + Math.round((camX - lane) / BOAT_TILE) * BOAT_TILE;
+    var speed = 0.45 + h1(i * 2.3 + 4) * 0.42;
+    var prog = ((t * speed + h1(i * 9.1 + 31) * BOAT_RUN) % BOAT_RUN) / BOAT_RUN;
+    var z = -1.2 - prog * BOAT_RUN;
+    /* they wander a little as they go; nobody is steering */
+    var x = bx + Math.sin(t * 0.13 + i) * 1.4 + prog * (h1(i * 3.3 + 7) - 0.5) * 14;
+    var y = seaHeightJS(x, z, t);
+    var e = 0.6;
+    var slopeZ = seaHeightJS(x, z + e, t) - seaHeightJS(x, z - e, t);
+    var slopeX = seaHeightJS(x + e, z, t) - seaHeightJS(x - e, z, t);
+    _dummy.position.set(x, y + 0.035, z);
+    _dummy.rotation.set(-slopeZ / (2 * e), h1(i * 1.7) * 6.28 + Math.sin(t * 0.21 + i) * 0.25, slopeX / (2 * e));
+    _dummy.scale.setScalar(1.0 + h1(i * 4.9 + 2) * 0.6);
+    _dummy.updateMatrix();
+    iBoat.setMatrixAt(i, _dummy.matrix);
+  }
+  iBoat.count = BOATS;
+  iBoat.instanceMatrix.needsUpdate = true;
+}
+
+/* the five things a child on this shore is doing */
+var RUN = 0, BUILD = 1, DANCE = 2, SCATTER = 3, WATCH = 4;
+/* weighted so the shore is mostly motion: running, dancing, throwing */
+var STATE_MIX = [RUN, RUN, RUN, DANCE, DANCE, DANCE, BUILD, BUILD, SCATTER, SCATTER, WATCH];
+
+function poseChild(state, t, lean) {
+  var swing, a;
+  rHips.rotation.set(0, 0, 0);
+  rTorso.rotation.set(0, 0, 0);
+  rHead.rotation.set(0, 0, 0);
+  rShoL.rotation.set(0, 0, 0); rShoR.rotation.set(0, 0, 0);
+  rHipL.rotation.set(0, 0, 0); rHipR.rotation.set(0, 0, 0);
+
+  if (state === RUN) {
+    swing = Math.sin(t * 7.4);
+    rHipL.rotation.x =  swing * 0.95;
+    rHipR.rotation.x = -swing * 0.95;
+    rShoL.rotation.x = -swing * 1.05;
+    rShoR.rotation.x =  swing * 1.05;
+    rShoL.rotation.z =  0.22; rShoR.rotation.z = -0.22;
+    rTorso.rotation.x = 0.20;
+    rHips.position.y = LEG_L + Math.abs(Math.cos(t * 7.4)) * 0.045;
+  } else if (state === BUILD) {
+    /* crouched over the sand, both hands working */
+    a = Math.sin(t * 2.6);
+    rHips.position.y = LEG_L * 0.42;
+    rHipL.rotation.x = 1.45; rHipR.rotation.x = 1.30;
+    rTorso.rotation.x = 0.72 + a * 0.10;
+    rShoL.rotation.x = -1.55 + a * 0.30; rShoR.rotation.x = -1.45 - a * 0.30;
+    rShoL.rotation.z = 0.30; rShoR.rotation.z = -0.30;
+    rHead.rotation.x = 0.35;
+  } else if (state === DANCE) {
+    /* shouts and dances: arms thrown up, feet leaving the sand */
+    a = Math.sin(t * 4.2);
+    var hop = Math.max(0, Math.sin(t * 4.2)) * 0.22;
+    rHips.position.y = LEG_L + hop;
+    rShoL.rotation.x = -2.35 - a * 0.35; rShoR.rotation.x = -2.35 + a * 0.35;
+    rShoL.rotation.z = 0.55 + a * 0.20;  rShoR.rotation.z = -0.55 + a * 0.20;
+    rHipL.rotation.x = -0.35 * a; rHipR.rotation.x = 0.35 * a;
+    rTorso.rotation.y = a * 0.30;
+    rHead.rotation.x = -0.30;
+  } else if (state === SCATTER) {
+    /* gather pebbles and scatter them again: down, up, open the hand, repeat */
+    var ph = (t * 0.55) % 1;
+    var down = ph < 0.42 ? ph / 0.42 : 0;
+    var up = ph >= 0.42 ? (ph - 0.42) / 0.58 : 0;
+    rHips.position.y = LEG_L - down * LEG_L * 0.48;
+    rHipL.rotation.x = down * 1.30; rHipR.rotation.x = down * 1.15;
+    rTorso.rotation.x = down * 0.70;
+    rShoR.rotation.x = -down * 1.55 - up * 2.2;
+    rShoL.rotation.x = -down * 1.20 + up * 0.25;
+    rShoR.rotation.z = -0.25 - up * 0.45;
+    rShoL.rotation.z = 0.25;
+    rHead.rotation.x = down * 0.45 - up * 0.25;
+  } else {
+    /* just standing in the ring, looking at whoever is talking */
+    a = Math.sin(t * 1.15);
+    rHips.position.y = LEG_L + a * 0.012;
+    rShoL.rotation.x = a * 0.10;  rShoR.rotation.x = -a * 0.10;
+    rShoL.rotation.z = 0.13; rShoR.rotation.z = -0.13;
+    rTorso.rotation.y = a * 0.09;
+    rHead.rotation.y = Math.sin(t * 0.7 + 1.2) * 0.35;
+  }
+  rTorso.rotation.x += lean;
+}
+
+var _m = new THREE.Matrix4();
+function readPart(node, mesh, slot) { mesh.setMatrixAt(slot, node.matrixWorld); }
+
+var PROP_RANGE = 190;   // props are small; drawing them to the horizon is waste
+function updateChildren(t, camX) {
+  var gMin = Math.floor((camX - CHILD_RANGE) / GROUP_SPAN);
+  var gMax = Math.ceil((camX + CHILD_RANGE) / GROUP_SPAN);
+  var n = 0, nSh = 0, nPb = 0, nTu = 0, nWa = 0;
+
+  function putProp(mesh, slot, x, y, z, rot, sc) {
+    _dummy.position.set(x, y, z);
+    _dummy.rotation.set(0, rot, 0);
+    _dummy.scale.setScalar(sc);
+    _dummy.updateMatrix();
+    mesh.setMatrixAt(slot, _dummy.matrix);
+  }
+
+  for (var g = gMin; g <= gMax && n < POOL; g++) {
+    var ax = g * GROUP_SPAN + (h2(g, 1) - 0.5) * 26;
+    var az = 5.2 + h2(g, 2) * 10.5;              // just landward of where the water reaches
+    var size = 4 + Math.floor(h2(g, 3) * 7);      // 4..10 children in a knot
+
+    for (var c = 0; c < size && n < POOL; c++) {
+      var state = c === 0 ? BUILD : c === 1 ? SCATTER
+                : STATE_MIX[Math.floor(h2(g, 50 + c) * STATE_MIX.length)];
+      var ring = h2(g, 10 + c) * TAU2;
+      var rad = 0.8 + h2(g, 30 + c) * 3.2;
+      var spd = 0.75 + h2(g, 70 + c) * 0.7;
+      var ph = h2(g, 90 + c) * 40;
+
+      var cx, cz, yaw;
+      if (state === RUN) {
+        /* runners circle the knot they belong to, so even the running children
+         * are still part of the meeting rather than passing through it */
+        var orb = ring + t * spd * 0.42;
+        var orad = rad + 1.6;
+        cx = ax + Math.cos(orb) * orad;
+        cz = az + Math.sin(orb) * orad * 0.75;
+        yaw = -orb + Math.PI / 2;
+      } else {
+        cx = ax + Math.cos(ring) * rad;
+        cz = az + Math.sin(ring) * rad * 0.75;
+        /* face the middle of your own group, roughly — this is what "meet" looks like */
+        yaw = Math.atan2(ax - cx, az - cz) + (h2(g, 110 + c) - 0.5) * 0.9;
+      }
+      cz = Math.max(4.2, Math.min(34, cz));       // never into the water
+
+      var scale = 0.80 + h2(g, 130 + c) * 0.44;   // a range of ages, four years old to ten
+      poseChild(state, t * spd + ph, (h2(g, 150 + c) - 0.5) * 0.12);
+
+      rig.position.set(cx, groundY(cx, cz), cz);
+      rig.rotation.y = yaw;
+      rig.scale.setScalar(scale);
+      rig.updateMatrixWorld(true);
+
+      readPart(rTorso, iTorso, n);
+      readPart(rHead, iHead, n);
+      readPart(rArmL, iArm, n * 2);  readPart(rArmR, iArm, n * 2 + 1);
+      readPart(rLegL, iLeg, n * 2);  readPart(rLegR, iLeg, n * 2 + 1);
+
+      _m.makeScale(scale * 1.05, 1, scale * 0.78);
+      _m.setPosition(cx, rig.position.y + 0.012, cz);
+      iShadow.setMatrixAt(n, _m);
+      n++;
+
+      if (Math.abs(cx - camX) > PROP_RANGE) continue;
+
+      /* empty shells and pebbles lie where the children are, not evenly over
+       * the sand — they were carried here and dropped */
+      for (var q = 0; q < 3 && nSh < SHELL_POOL; q++) {
+        var sa = h2(g, 170 + c * 3 + q) * TAU2, sr = 0.5 + h2(g, 200 + c * 3 + q) * 2.6;
+        var sx = cx + Math.cos(sa) * sr, sz = Math.max(3.4, cz + Math.sin(sa) * sr);
+        putProp(iShell, nSh++, sx, groundY(sx, sz) + 0.008, sz,
+                h2(g, 230 + c * 3 + q) * TAU2, 0.7 + h2(g, 260 + c * 3 + q) * 0.7);
+      }
+      if (nPb < PEBBLE_POOL) {
+        var pa = h2(g, 290 + c) * TAU2, pr = 0.4 + h2(g, 310 + c) * 2.2;
+        var px = cx + Math.cos(pa) * pr, pz = Math.max(3.4, cz + Math.sin(pa) * pr);
+        putProp(iPebble, nPb++, px, groundY(px, pz) + 0.006, pz, h2(g, 330 + c) * TAU2,
+                0.8 + h2(g, 350 + c) * 0.8);
+      }
+
+      /* what the builders are building, right where they are reaching */
+      if (state === BUILD && nTu + 3 <= TURRET_POOL) {
+        var fx = cx - Math.sin(yaw) * 0.62, fz = cz - Math.cos(yaw) * 0.62;
+        for (var u = 0; u < 3; u++) {
+          var ta = h2(g, 370 + c * 3 + u) * TAU2, tr = h2(g, 400 + c * 3 + u) * 0.42;
+          var tx = fx + Math.cos(ta) * tr, tz = fz + Math.sin(ta) * tr;
+          putProp(iTurret, nTu++, tx, groundY(tx, tz) - 0.01, tz, ta,
+                  (0.95 + h2(g, 430 + c * 3 + u) * 0.80) * scale);
+        }
+        if (nWa < WALL_POOL) putProp(iWall, nWa++, fx, groundY(fx, fz) - 0.02, fz, yaw + 2.6, 0.95 * scale);
+      }
+
+      /* pebbles gathered and scattered again: the stones actually leave the
+       * hand, fly, land — and then it starts over, for no reason at all */
+      if (state === SCATTER) {
+        var sph = ((t * spd + ph) * 0.55) % 1;
+        if (sph >= 0.42) {
+          var tau = (sph - 0.42) / 0.58 * 0.95;
+          var hx = cx - Math.sin(yaw) * 0.22, hz = cz - Math.cos(yaw) * 0.22;
+          var hy = groundY(cx, cz) + 0.64 * scale;
+          for (var b = 0; b < 5 && nPb < PEBBLE_POOL; b++) {
+            var spread = (h2(g, 460 + c * 5 + b) - 0.5) * 1.5;
+            var vf = 2.0 + h2(g, 490 + c * 5 + b) * 1.6;
+            var vy = 2.1 + h2(g, 520 + c * 5 + b) * 1.5;
+            var dx2 = -Math.sin(yaw + spread), dz2 = -Math.cos(yaw + spread);
+            var bx2 = hx + dx2 * vf * tau, bz2 = hz + dz2 * vf * tau;
+            var by2 = hy + vy * tau - 4.9 * tau * tau;
+            putProp(iPebble, nPb++, bx2, Math.max(groundY(bx2, bz2) + 0.006, by2), bz2,
+                    tau * 9.0, 0.8 + h2(g, 550 + c * 5 + b) * 0.7);
+          }
+        }
+      }
+    }
+  }
+
+  iTurret.count = nTu; iWall.count = nWa; iShell.count = nSh; iPebble.count = nPb;
+  iTurret.instanceMatrix.needsUpdate = true; iWall.instanceMatrix.needsUpdate = true;
+  iShell.instanceMatrix.needsUpdate = true; iPebble.instanceMatrix.needsUpdate = true;
+  iTorso.count = n; iHead.count = n; iShadow.count = n;
+  iArm.count = n * 2; iLeg.count = n * 2;
+  iTorso.instanceMatrix.needsUpdate = true;
+  iHead.instanceMatrix.needsUpdate = true;
+  iArm.instanceMatrix.needsUpdate = true;
+  iLeg.instanceMatrix.needsUpdate = true;
+  iShadow.instanceMatrix.needsUpdate = true;
+}
+
+/* -------------------------------------------------------------- PLAYER -- */
+var EYE = 1.70;
+var player = {
+  pos: new THREE.Vector3(8, 0, 16),
+  vel: new THREE.Vector3(),
+  yaw: 0,            // three.js looks down -Z at yaw 0, and -Z is the sea
+  pitch: -0.05
+};
+var keys = Object.create(null);
+var locked = false;
+
+
+addEventListener('keydown', function (e) {
+  keys[e.code] = true;
+  if (e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', function (e) { keys[e.code] = false; });
+
+var enterEl = document.getElementById('enter');
+var hintEl = document.getElementById('hint');
+function requestLook() { canvas.requestPointerLock && canvas.requestPointerLock(); }
+enterEl.addEventListener('click', requestLook);
+canvas.addEventListener('click', function () { if (!locked) requestLook(); });
+document.addEventListener('pointerlockchange', function () {
+  locked = document.pointerLockElement === canvas;
+  enterEl.classList.toggle('gone', locked);
+  hintEl.classList.toggle('dim', locked);
+});
+document.addEventListener('mousemove', function (e) {
+  if (!locked) return;
+  player.yaw   -= e.movementX * 0.0022;
+  player.pitch -= e.movementY * 0.0022;
+  player.pitch = Math.max(-1.25, Math.min(1.15, player.pitch));
+});
+
+/* touch: left half drags a stick, right half looks */
+var touchWrap = document.getElementById('touch'), stick = document.getElementById('stick'), knob = stick.firstElementChild;
+var touchMove = { x: 0, y: 0 }, moveId = null, lookId = null, lastLook = { x: 0, y: 0 };
+if (matchMedia('(pointer: coarse)').matches) {
+  touchWrap.classList.add('on');
+  enterEl.querySelector('.btn').textContent = '走进去（左边拖动，右边转头）';
+  enterEl.addEventListener('click', function (e) { e.stopPropagation(); enterEl.classList.add('gone'); hintEl.classList.add('dim'); });
+  touchWrap.addEventListener('touchstart', function (e) {
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      var t = e.changedTouches[i];
+      if (t.clientX < innerWidth * 0.5 && moveId === null) moveId = t.identifier;
+      else if (lookId === null) { lookId = t.identifier; lastLook.x = t.clientX; lastLook.y = t.clientY; }
+    }
+  }, { passive: true });
+  touchWrap.addEventListener('touchmove', function (e) {
+    var r = stick.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      var t = e.changedTouches[i];
+      if (t.identifier === moveId) {
+        var dx = (t.clientX - cx) / (r.width / 2), dy = (t.clientY - cy) / (r.height / 2);
+        var m = Math.min(1, Math.hypot(dx, dy)) || 0, a = Math.atan2(dy, dx);
+        touchMove.x = Math.cos(a) * m; touchMove.y = Math.sin(a) * m;
+        knob.style.transform = 'translate(' + (touchMove.x * 32) + 'px,' + (touchMove.y * 32) + 'px)';
+      } else if (t.identifier === lookId) {
+        player.yaw -= (t.clientX - lastLook.x) * 0.005;
+        player.pitch -= (t.clientY - lastLook.y) * 0.005;
+        player.pitch = Math.max(-1.25, Math.min(1.15, player.pitch));
+        lastLook.x = t.clientX; lastLook.y = t.clientY;
+      }
+    }
+  }, { passive: true });
+  function endTouch(e) {
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      var id = e.changedTouches[i].identifier;
+      if (id === moveId) { moveId = null; touchMove.x = touchMove.y = 0; knob.style.transform = ''; }
+      if (id === lookId) lookId = null;
+    }
+  }
+  touchWrap.addEventListener('touchend', endTouch, { passive: true });
+  touchWrap.addEventListener('touchcancel', endTouch, { passive: true });
+}
+
+function stepPlayer(dt) {
+  var fwd = 0, side = 0;
+  if (keys.KeyW || keys.ArrowUp) fwd += 1;
+  if (keys.KeyS || keys.ArrowDown) fwd -= 1;
+  if (keys.KeyD || keys.ArrowRight) side += 1;
+  if (keys.KeyA || keys.ArrowLeft) side -= 1;
+  fwd -= touchMove.y; side += touchMove.x;
+
+  var speed = (keys.ShiftLeft || keys.ShiftRight) ? 13.5 : 5.2;
+  var sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+  var wx = (-sin * fwd + cos * side), wz = (-cos * fwd - sin * side);
+  var len = Math.hypot(wx, wz);
+  if (len > 1) { wx /= len; wz /= len; }
+
+  var target = new THREE.Vector3(wx * speed, 0, wz * speed);
+  player.vel.lerp(target, 1 - Math.pow(0.0009, dt));
+  player.pos.x += player.vel.x * dt;
+  player.pos.z += player.vel.z * dt;
+
+  /* "They know not how to swim." Neither do you: the water turns you back. */
+  if (player.pos.z < 0.9) {
+    player.pos.z += (0.9 - player.pos.z) * Math.min(1, dt * 7.0);
+    player.vel.z *= 0.6;
+  }
+  if (player.pos.z > 260) player.pos.z = 260;
+
+  var y = groundY(player.pos.x, player.pos.z) + EYE;
+  /* a small gait, so walking feels like walking */
+  var bob = Math.sin(walkPhase) * 0.035 * Math.min(1, player.vel.length() / 5);
+  camera.position.set(player.pos.x, y + bob, player.pos.z);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+}
+var walkPhase = 0;
+
+/* ---------------------------------------------------------------- SUBS -- */
+var subsEl = document.getElementById('subs'), ticksEl = document.getElementById('ticks');
+STANZAS.forEach(function () { ticksEl.appendChild(document.createElement('i')); });
+var shownStanza = -1;
+function stanzaAt(x) {
+  var i = Math.floor(((x % (STANZA_SPAN * STANZAS.length)) + STANZA_SPAN * STANZAS.length) % (STANZA_SPAN * STANZAS.length) / STANZA_SPAN);
+  return Math.max(0, Math.min(STANZAS.length - 1, i));
+}
+function showStanza(i) {
+  if (i === shownStanza) return;
+  shownStanza = i;
+  var old = subsEl.firstElementChild;
+  if (old) { old.classList.add('out'); setTimeout(function () { old.remove(); }, 900); }
+  var s = STANZAS[i];
+  var g = document.createElement('div');
+  g.className = 'grp out';
+  g.innerHTML = '<p class="en">' + s.en + '</p><p class="zh">' + s.zh + '</p>';
+  subsEl.appendChild(g);
+  requestAnimationFrame(function () { requestAnimationFrame(function () { g.classList.remove('out'); }); });
+  Array.prototype.forEach.call(ticksEl.children, function (t, k) { t.classList.toggle('on', k === i); });
+}
+
+/* ---------------------------------------------------------------- LOOP -- */
+var clock = new THREE.Clock();
+var simT = 0;
+function resize() {
+  var r = canvas.getBoundingClientRect();
+  var w = Math.max(1, r.width | 0), h = Math.max(1, r.height | 0);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+function applyShotCamera() {
+  var c = CAMS[SHOT - 1];
+  camera.position.set(c.pos[0], c.pos[1], c.pos[2]);
+  camera.rotation.order = 'YXZ';
+  camera.lookAt(new THREE.Vector3(c.look[0], c.look[1], c.look[2]));
+  showStanza(stanzaAt(c.pos[0]));
+}
+
+function frame() {
+  if (!SHOT || shotFrames < SHOT_FRAMES) requestAnimationFrame(frame);
+  if (SHOT) shotFrames++;
+  var dt = Math.min(clock.getDelta(), 0.05);
+  if (SHOT) {
+    simT = FROZEN_T;
+    applyShotCamera();
+  } else {
+    simT += dt;
+    walkPhase += dt * 8.5 * Math.min(1, player.vel.length() / 5);
+    stepPlayer(dt);
+    showStanza(stanzaAt(player.pos.x));
+  }
+  seaUniforms.uTime.value = simT;
+  sandUniforms.uTime.value = simT;
+  sky.material.uniforms.uTime.value = simT;
+  /* it roams: never here, never gone */
+  var stormAz = Math.PI + 0.62 * Math.sin(simT * 0.0125) + 0.22 * Math.sin(simT * 0.041);
+  sky.material.uniforms.uStormAz.value = stormAz;
+  seaUniforms.uStormAz.value = stormAz;
+  updateChildren(simT, camera.position.x);
+  updateWrecks(simT, camera.position.x);
+  updateBoats(simT, camera.position.x);
+  sky.position.copy(camera.position);
+  sea.position.x = Math.round(camera.position.x / 200) * 200;
+  sand.position.x = Math.round(camera.position.x / 400) * 400; // the shore never ends
+  renderer.render(scene, camera);
+}
+
+/* ------------------------------------------------------------------ UI -- */
+var railToggle = document.getElementById('railtoggle');
+railToggle.addEventListener('click', function () {
+  var col = document.body.classList.toggle('rail-collapsed');
+  railToggle.textContent = col ? '‹' : '›';
+  try { localStorage.setItem('g60.rail', col ? '1' : '0'); } catch (e) {}
+  setTimeout(resize, 320);
+});
+try { if (localStorage.getItem('g60.rail') === '1') railToggle.click(); } catch (e) {}
+
+if (window.PolishTimeline) {
+  PolishTimeline.mount({
+    el: '#tl', log: 'log.jsonl',
+    onReady: function (rounds) {
+      var n = rounds.length;
+      document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
+      var stopped = rounds.filter(function (r) { return r.stop; }).pop();
+      if (stopped) {
+        document.getElementById('ft-rounds').textContent = n + ' 轮';
+        document.getElementById('ft-stop').textContent = stopped.stop_reason || '循环结束';
+      }
+    }
+  });
+}
+
+if (SHOT) document.body.classList.add('shot');
+resize();
+frame();
+
+/* hold the boot veil until the first real frame has actually landed */
+requestAnimationFrame(function () {
+  requestAnimationFrame(function () {
+    var b = document.getElementById('boot');
+    b.classList.add('gone');
+    setTimeout(function () { b.remove(); }, 800);
+    if (SHOT) { document.body.setAttribute('data-shot-ready', '1'); }
+  });
+});
+
+/* a small handle for poking at the world from the console / from the shot harness */
+window.__G60 = {
+  scene: scene, camera: camera, player: player, CAMS: CAMS,
+  children: { torso: iTorso, head: iHead, shadow: iShadow },
+  boats: iBoat, seaHeightJS: seaHeightJS,
+  groupsNear: function (x) {
+    var out = [], gMin = Math.floor((x - CHILD_RANGE) / GROUP_SPAN), gMax = Math.ceil((x + CHILD_RANGE) / GROUP_SPAN);
+    for (var g = gMin; g <= gMax; g++) {
+      out.push({ g: g, x: +(g * GROUP_SPAN + (h2(g,1)-0.5)*26).toFixed(1),
+                 z: +(3.0 + h2(g,2)*19).toFixed(1), n: 3 + Math.floor(h2(g,3)*5) });
+    }
+    return out;
+  }
+};
+
+})();
+</script>
+</body>
+</html>
