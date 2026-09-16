@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>湘夫人 · 可漫游世界</title>
-<link rel="stylesheet" href="../shared/site.css">
-<link rel="stylesheet" href="../shared/timeline.css">
 <style>
-  /* 叠在画布上的字永远是暗底上的字，所以用固定值，不跟随浅色主题 */
-  :root{ --veil:#e8e2d6; --veil-dim:#a89f8e; --veil-faint:#6f6858; }
+  :root{
+    --ink:#e8e2d6; --ink-dim:#a89f8e; --ink-faint:#6f6858;
+    --bg:#0b0d12; --panel:#11141b; --line:#232833;
+    --gold:#c9a24a; --water:#2f5f66;
+  }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
     font-family:"Songti SC","Noto Serif CJK SC","Source Han Serif SC",Georgia,"Times New Roman",serif;
@@ -25,64 +26,63 @@
   #subtitle.on{opacity:1}
   #subtitle .zh{font-size:clamp(17px,2.1vw,27px);letter-spacing:.22em;line-height:1.9;
     text-shadow:0 2px 18px rgba(0,0,0,.95),0 0 40px rgba(0,0,0,.7)}
-  #subtitle .en{margin-top:.7em;font-size:clamp(11px,1.05vw,14px);color:var(--veil-dim);
+  #subtitle .en{margin-top:.7em;font-size:clamp(11px,1.05vw,14px);color:var(--ink-dim);
     letter-spacing:.06em;font-style:italic;text-shadow:0 2px 12px rgba(0,0,0,.9)}
   #title{position:absolute;left:28px;top:22px;pointer-events:none;
     text-shadow:0 2px 16px rgba(0,0,0,.9)}
   #title h1{margin:0;font-size:20px;font-weight:400;letter-spacing:.5em}
-  #title p{margin:.5em 0 0;font-size:11px;color:var(--veil-dim);letter-spacing:.24em}
-  #hint{position:absolute;left:28px;bottom:20px;font-size:11px;color:var(--veil-faint);
+  #title p{margin:.5em 0 0;font-size:11px;color:var(--ink-dim);letter-spacing:.24em}
+  #hint{position:absolute;left:28px;bottom:20px;font-size:11px;color:var(--ink-faint);
     letter-spacing:.14em;pointer-events:none;text-shadow:0 1px 10px #000}
   #enter{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     flex-direction:column;gap:18px;background:rgba(6,8,12,.78);cursor:pointer;
     backdrop-filter:blur(3px);transition:opacity .8s ease}
   #enter.gone{opacity:0;pointer-events:none}
-  #enter .k{font-size:15px;letter-spacing:.42em;color:var(--veil)}
-  #enter .s{font-size:11px;letter-spacing:.2em;color:var(--veil-faint)}
+  #enter .k{font-size:15px;letter-spacing:.42em;color:var(--ink)}
+  #enter .s{font-size:11px;letter-spacing:.2em;color:var(--ink-faint)}
   #compass{position:absolute;right:20px;top:20px;font-size:11px;letter-spacing:.2em;
-    color:var(--veil-faint);pointer-events:none;text-shadow:0 1px 8px #000}
+    color:var(--ink-faint);pointer-events:none;text-shadow:0 1px 8px #000}
 
-  /* ---- right: the polish timeline（全站共用的那一条） ---- */
-  #rail{flex:0 0 var(--rail,372px);width:var(--rail,372px);height:100%;
-    display:flex;flex-direction:column;background:var(--bg-raise);
-    border-left:1px solid var(--line);overflow:hidden;
-    transition:flex-basis .28s ease,width .28s ease}
-  body.rail-collapsed #rail{flex-basis:42px;width:42px}
-  body.rail-collapsed #rail>*:not(#railbar){display:none}
-  body.rail-collapsed #railbar .rb-txt{display:none}
-  #railbar{flex:none;display:flex;align-items:center;gap:9px;padding:11px 12px;
-    border-bottom:1px solid var(--line);background:var(--bg-raise)}
-  #railbar button{flex:none;width:20px;height:20px;border:1px solid var(--line);border-radius:4px;
-    background:transparent;color:var(--ink-dim);cursor:pointer;font-family:var(--mono);
-    font-size:11px;line-height:1;display:grid;place-items:center;padding:0}
-  #railbar button:hover{color:var(--ink);border-color:var(--ink-faint)}
-  .rb-txt{min-width:0}
-  .rb-txt .a{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--ink-faint)}
-  .rb-txt .b{font-family:var(--serif);font-size:14px;color:var(--ink);margin-top:1px}
-  #tl{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain}
-  #tl::-webkit-scrollbar{width:9px}
-  #tl::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
-  #railfoot{flex:none;border-top:1px solid var(--line);padding:12px 16px 14px;background:var(--bg-sink)}
-  #railfoot .rows{display:grid;gap:2px}
-  #railfoot .row{display:flex;gap:8px;font-family:var(--mono);font-size:10.5px;line-height:1.7}
-  #railfoot .row .k{flex:none;width:5.2em;color:var(--ink-faint)}
-  #railfoot .row .v{color:var(--ink);min-width:0}
-  #railfoot .row .v.sand{color:var(--sand)}
-  #railfoot .lnks{margin-top:10px;display:flex;gap:12px;flex-wrap:wrap;
-    font-family:var(--mono);font-size:10.5px}
-  #railfoot .lnks a{color:var(--ink-dim);text-decoration:none;border-bottom:1px solid var(--line)}
-  #railfoot .lnks a:hover{color:var(--sand);border-color:var(--sand)}
+  /* ---- timeline panel ---- */
+  #tl{flex:0 0 360px;max-width:360px;background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;transition:margin-right .35s ease}
+  #tl.collapsed{margin-right:-360px}
+  #tl header{padding:18px 20px 14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+  #tl header h2{margin:0;font-size:13px;font-weight:400;letter-spacing:.34em;color:var(--ink)}
+  #tl header p{margin:.6em 0 0;font-size:10.5px;color:var(--ink-faint);letter-spacing:.1em;line-height:1.7}
+  #rounds{flex:1 1 auto;overflow-y:auto;padding:6px 0 10px}
+  .rd{border-bottom:1px solid #1a1e27}
+  .rd>summary{list-style:none;cursor:pointer;padding:13px 20px;display:flex;gap:11px;align-items:baseline}
+  .rd>summary::-webkit-details-marker{display:none}
+  .rd .n{font-size:10px;color:var(--gold);letter-spacing:.16em;flex:0 0 auto;min-width:34px}
+  .rd .ch{font-size:12.5px;color:var(--ink);line-height:1.6;flex:1 1 auto}
+  .rd .vd{font-size:10px;letter-spacing:.1em;flex:0 0 auto;color:var(--ink-faint)}
+  .rd[open]>summary{background:#161a23}
+  .rd .body{padding:2px 20px 16px 65px}
+  .rd .body dt{font-size:9.5px;color:var(--ink-faint);letter-spacing:.2em;margin-top:10px}
+  .rd .body dd{margin:.4em 0 0;font-size:12px;color:var(--ink-dim);line-height:1.75}
+  .rd .shots{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:10px}
+  .rd .shots a{display:block;aspect-ratio:16/10;background:#0a0c10;border:1px solid var(--line);
+    overflow:hidden}
+  .rd .shots img{width:100%;height:100%;object-fit:cover;display:block;opacity:.85}
+  .rd .shots a:hover img{opacity:1}
+  .v-win{color:var(--gold)}
+  #empty{padding:22px 20px;font-size:11.5px;color:var(--ink-faint);line-height:2;letter-spacing:.08em}
+  #meta{flex:0 0 auto;border-top:1px solid var(--line);padding:14px 20px 16px;
+    font-size:10px;color:var(--ink-faint);line-height:2.05;letter-spacing:.08em}
+  #meta b{color:var(--ink-dim);font-weight:400}
+  #meta a{color:var(--ink-faint)}
+  #toggle{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:5;
+    width:22px;height:74px;background:var(--panel);border:1px solid var(--line);border-right:none;
+    color:var(--ink-faint);cursor:pointer;font-size:11px;padding:0;line-height:74px}
+  #toggle:hover{color:var(--ink)}
 
-  /* 取证模式：只留世界。字幕也收起来 —— critic 要在不看字幕的情况下认这首诗 */
-  body.shot #rail, body.shot #hint, body.shot #enter,
-  body.shot #subtitle, body.shot #title, body.shot #compass{display:none !important}
-
-  @media (max-width:860px){
+  @media (max-width:900px){
     #app{flex-direction:column}
-    #stage{flex:1 1 56%}
-    #rail{flex:0 0 44%;width:100%;border-left:0;border-top:1px solid var(--line)}
-    body.rail-collapsed #rail{flex-basis:42px;width:100%}
+    #tl{flex:0 0 46%;max-width:none;border-left:none;border-top:1px solid var(--line)}
+    #tl.collapsed{margin-right:0;margin-bottom:-46%}
+    #toggle{top:auto;bottom:0;right:10px;transform:none;width:74px;height:22px;line-height:22px;
+      border:1px solid var(--line);border-bottom:none}
     #title{left:16px;top:14px}
   }
 </style>
@@ -97,37 +97,32 @@
     <div id="subtitle"><div class="zh"></div><div class="en"></div></div>
     <div id="hint">WASD / 方向键 行走 · 鼠标拖动 转身 · Shift 疾行 · 触屏拖动即可</div>
     <div id="enter"><div class="k">走 进 洞 庭</div><div class="s">click / tap to enter</div></div>
+    <button id="toggle" title="时间线">‹</button>
   </div>
-  <aside id="rail">
-    <div id="railbar">
-      <button id="railtoggle" title="折叠 / 展开时间线" aria-label="折叠时间线">›</button>
-      <div class="rb-txt">
-        <div class="a">Polish timeline</div>
-        <div class="b">它是怎么被磨出来的</div>
-      </div>
-    </div>
-    <div id="tl"></div>
-    <div id="railfoot">
-      <div class="rows">
-        <div class="row"><span class="k">loop</span><span class="v">Gauntlet 独立 critic + Ralph 一轮一事</span></div>
-        <div class="row"><span class="k">harness</span><span class="v">Claude Code</span></div>
-        <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
-        <div class="row"><span class="k">effort</span><span class="v sand">medium</span></div>
-        <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">—</span></div>
-        <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">循环进行中</span></div>
-      </div>
-      <div class="lnks">
-        <a href="../">← 三个世界</a>
-        <a href="POEM.md">原文 / 译文</a>
-        <a href="POLISH.md">打磨 prompt</a>
-        <a href="log.jsonl">log.jsonl</a>
-      </div>
+  <aside id="tl">
+    <header>
+      <h2>打 磨 时 间 线</h2>
+      <p>每一轮只改一个最大缺口；critic 独立评审，没看过 builder 的解释。</p>
+    </header>
+    <div id="rounds"><div id="empty">读取 log.jsonl…</div></div>
+    <div id="meta">
+      <b>loop</b> Gauntlet 式独立 critic + Ralph 式一轮一事<br>
+      <b>harness</b> Claude Code<br>
+      <b>模型</b> Opus 5（非 fast）<br>
+      <b>推理强度</b> medium<br>
+      <b>轮数</b> <span id="m-rounds">1</span> / 10 · <b>停止原因</b> <span id="m-stop">进行中</span><br>
+      <a href="../">← 返回诗世界首页</a>
     </div>
   </aside>
 </div>
 
-<script src="../shared/timeline.js"></script>
-<script src="log.js"></script>
+<!--log-fallback-start-->
+<script type="application/x-ndjson" id="log-fallback">
+{"round": 1, "changed": "第一份可以走进去的洞庭：天/水/北渚/白薠/木叶/九嶷剪影，WASD + 触控漫游，右栏时间线读 log.jsonl", "critic_verdict": "接近了", "critic_note": "秋风木叶、洞庭空波与白薠远望的空茫等待感对了，但六张几乎同一片湖天，缺少《湘夫人》独有的辨识物。", "biggest_gap": "在水中央建起那座荷盖香草之屋，让至少一个机位正对它而她始终不来。", "shots": ["shots/1/1-beizhu.png", "shots/1/2-dongtingbo.png", "shots/1/3-muyexia.png", "shots/1/4-jiuyi.png", "shots/1/5-chengwang.png", "shots/1/6-dengdai.png"]}
+{"round": 2, "changed": "筑室兮水中：木桩上的紫坛、一根根荪壁、桂栋兰橑、荷叶压成的屋顶、辛夷楣与白玉镇，四周三百片浮在波上的荷叶；顺手把九嶷从东边挪回南边", "critic_verdict": "接近了", "critic_note": "秋风木叶、白薠、水中荷屋、九嶷剪影都在，氛围克制耐看，但可辨识度多半靠字幕，等待的「错位与不安」几乎缺席。", "biggest_gap": "加上罾挂树上、鸟萃蘋中、麋入庭中这组错位实体，让画面自己说「不对劲」。", "shots": ["shots/2/1-beizhu.png", "shots/2/2-dongtingbo.png", "shots/2/3-muyexia.png", "shots/2/4-jiuyi.png", "shots/2/5-chengwang.png", "shots/2/6-dengdai.png"]}
+{"round": 3, "changed": "错位：江皋上七株空树，三张罾挂在树上；五处蘋中落着鸟；麋走进为她盖的屋子在门前低头吃草；蛟的背脊在水裔上拱起两处", "critic_verdict": "接近了", "critic_note": "白薠、罾挂木上、水中荷屋、九嶷与落叶都在，秋暮与空无也对，但第 3、6 机位偏空景，「等待落空」尚未压过风景。", "biggest_gap": "加一件顺流漂远的衣袖（捐余袂），让每个机位都能看见它慢慢漂走。", "shots": ["shots/3/1-beizhu.png", "shots/3/2-dongtingbo.png", "shots/3/3-muyexia.png", "shots/3/4-jiuyi.png", "shots/3/5-chengwang.png", "shots/3/6-dengdai.png"]}
+</script>
+<!--log-fallback-end-->
 
 <script>
 /* =====================================================================
@@ -167,9 +162,6 @@ const M = {
 const WATER_Y = 0.0;
 const EYE = 1.62;
 const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-east shore
-/* ?shot=1 —— 取证模式。一次性 headless 截图跑在 SwiftShader 上（没有 GPU），
-   所以同一个世界要用少一点的草、浪和叶子重画一遍：构图不变，密度降下来。 */
-const SHOT = new URLSearchParams(location.search).has('shot');
 
 /* deterministic hash noise, shared by JS + (mirrored) shaders */
 function h2(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
@@ -306,7 +298,7 @@ function makeWaterGrid(G) {
     gl.STATIC_DRAW);
   return { vb, ib, n: idx.length };
 }
-const water = makeWaterGrid(SHOT ? 96 : (uintOK ? 220 : 180));
+const water = makeWaterGrid(uintOK ? 220 : 180);
 
 const WAVE_GLSL = `
   // 洞庭波 — crossing swells, all running with the wind
@@ -368,7 +360,7 @@ const waterP = prog(`
 
 /* ---------- terrain (the shoal) ---------- */
 function makeTerrain() {
-  const G = SHOT ? 132 : 240, SPAN = 150, v = [], idx = [];
+  const G = 240, SPAN = 150, v = [], idx = [];
   for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
     const x = (i / G * 2 - 1) * SPAN, z = (j / G * 2 - 1) * SPAN - 40;
     const y = terrainH(x, z);
@@ -471,7 +463,7 @@ const peakP = prog(`
 
 /* ---------- 白薠 : sedge blades on the shoal ---------- */
 function makeBlades() {
-  const v = [], N = SHOT ? 9000 : 26000;
+  const v = [], N = 26000;
   let placed = 0, guard = 0;
   while (placed < N && guard < N * 40) {
     guard++;
@@ -527,7 +519,7 @@ const bladeP = prog(`
 `);
 
 /* ---------- 木叶下 : the leaves, always coming down ---------- */
-const NLEAF = SHOT ? 280 : 620;
+const NLEAF = 620;
 const leaves = [];
 for (let i = 0; i < NLEAF; i++) leaves.push({
   x: (Math.random() * 2 - 1) * 70, y: Math.random() * 26 - 1, z: (Math.random() * 2 - 1) * 70,
@@ -704,7 +696,7 @@ function makeHouse() {
     }
   }
   // 屋外的水面上，荷叶一直铺到远处；有几枝还没开的花
-  for (let i = 0; i < (SHOT ? 120 : 210); i++) {
+  for (let i = 0; i < 210; i++) {
     const a = h2(i, 2.3) * Math.PI * 2;
     const r = 8.0 + Math.pow(h2(i, 5.1), 0.55) * 27;
     const x = HX + Math.cos(a) * r, z = HZ + Math.sin(a) * r * 0.80;
@@ -837,7 +829,7 @@ function makeWrongness() {
 
   /* 蘋：一片浮草，鸟就落在这里 */
   function pingPatch(cx, cz, r, seed, nBird) {
-    for (let i = 0; i < (SHOT ? 70 : 150); i++) {
+    for (let i = 0; i < 150; i++) {
       const a = h2(seed + i, 1.3) * Math.PI * 2;
       const d = Math.sqrt(h2(seed + i, 4.1)) * r;
       const k = h2(seed + i, 9.2);
@@ -919,89 +911,17 @@ function makeWrongness() {
 }
 const wrong = makeWrongness();
 
-/* ---------- 捐余袂兮江中，遗余褋兮澧浦 ----------
-   她没有来。于是把袖子解下来，扔进水里，让它自己漂走。
-   这几片素绢是这个世界里唯一还在移动、而且再也不回来的东西。   */
-function waveJS(x, z, t) {
-  return 0.240 * Math.sin(0.130*x + 0.098*z + t * 0.92)
-       + 0.155 * Math.sin(-0.089*x + 0.176*z + t * 1.21)
-       + 0.072 * Math.sin(0.305*x - 0.121*z + t * 1.74)
-       + 0.036 * Math.sin(0.470*x + 0.395*z + t * 2.55)
-       + 0.017 * Math.sin(-0.760*x + 0.510*z + t * 3.40);
-}
-const CLOTHS = [
-  // 袂：解下来的袖子。它们被放在那几个定机位一定看得见的地方 —— 这是全世界唯一
-  // 还在走、而且再也不回来的东西。
-  { x:  2.6, z: -26.0, ang: 0.42, vx: 0.060, vz: 0.098, w: 4.4, h: 1.70, tone: 1.06 },
-  { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.6, h: 1.35, tone: 1.00 },
-  { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.4, h: 1.30, tone: 1.03 },
-  { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 4.0, h: 1.55, tone: 1.02 },
-  { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 4.2, h: 1.60, tone: 0.98 },
-  // 褋：落在澧浦的浅滩上，盖在白薠上，再也漂不动了
-  { x:  4.2, z: -70.6, ang: 1.92, w: 3.4, h: 1.75, tone: 0.95, snag: true },
-];
-const CU = 12, CV = 5;
-const clothData = new Float32Array(CLOTHS.length * CU * CV * 6 * 10);
-const clothBuf = buf(clothData, gl.DYNAMIC_DRAW);
-const CLOTH_N = CLOTHS.length * CU * CV * 6;
-function updateCloths(t) {
-  let o = 0;
-  const P = [0, 0, 0];
-  for (const C of CLOTHS) {
-    const cx = C.x + (C.vx || 0) * t, cz = C.z + (C.vz || 0) * t;
-    const ca = Math.cos(C.ang + (C.snag ? 0 : t * 0.010)), sa = Math.sin(C.ang + (C.snag ? 0 : t * 0.010));
-    const base = C.snag ? Math.max(terrainH(cx, cz), WATER_Y) + 0.62 : WATER_Y;
-    const at = (u, v, out) => {
-      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h;
-      const x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca;
-      // 绢很软：它贴着浪起伏，自己还在抖
-      const flut = C.snag
-        ? 0.035 * Math.sin(t * 2.3 + lx * 3.1) * (0.4 + 0.6 * Math.abs(lz))
-        : 0.075 * Math.sin(t * 1.55 + lx * 2.3 + lz * 1.7)
-          + 0.045 * Math.sin(t * 2.70 - lx * 3.7);
-      out[0] = x; out[1] = base + 0.045 + (C.snag ? 0 : waveJS(x, z, t)) + flut; out[2] = z;
-      return out;
-    };
-    const a = [0,0,0], b = [0,0,0], c = [0,0,0], d = [0,0,0];
-    for (let i = 0; i < CU; i++) for (let j = 0; j < CV; j++) {
-      at(i / CU, j / CV, a); at((i+1) / CU, j / CV, b);
-      at((i+1) / CU, (j+1) / CV, c); at(i / CU, (j+1) / CV, d);
-      for (const tri of [[a,b,c], [a,c,d]]) {
-        const ux = tri[1][0]-tri[0][0], uy = tri[1][1]-tri[0][1], uz = tri[1][2]-tri[0][2];
-        const vx = tri[2][0]-tri[0][0], vy = tri[2][1]-tri[0][1], vz = tri[2][2]-tri[0][2];
-        let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
-        const l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
-        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-        // 生绢：边上被水泡得发暗
-        const edge = 0.80 + 0.24 * Math.min(1, Math.min(i, CU - 1 - i) / 2.4);
-        const g = C.tone * edge;
-        for (const q of tri) {
-          clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
-          clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
-          clothData[o++] = 0.880 * g; clothData[o++] = 0.852 * g; clothData[o++] = 0.790 * g;
-          clothData[o++] = 0;
-        }
-      }
-    }
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, clothData);
-}
-
 /* ---------- camera + input ---------- */
 const cam = { x: 6, y: 0, z: 16, yaw: Math.PI, pitch: -0.055, vy: 0 };
 const keys = Object.create(null);
 /* 固定机位：?cam=x,z,yaw,pitch  — used for the six reproducible screenshots */
 (function () {
-  const qs = new URLSearchParams(location.search);
-  const q = qs.get('cam');
-  if (q) {
-    const n = q.split(',').map(Number);
-    if (n.length >= 4 && n.every(v => isFinite(v))) {
-      cam.x = n[0]; cam.z = n[1]; cam.yaw = n[2]; cam.pitch = n[3];
-    }
+  const q = new URLSearchParams(location.search).get('cam');
+  if (!q) return;
+  const n = q.split(',').map(Number);
+  if (n.length >= 4 && n.every(v => isFinite(v))) {
+    cam.x = n[0]; cam.z = n[1]; cam.yaw = n[2]; cam.pitch = n[3];
   }
-  // ?shot=1 —— 取证模式由 body.shot 的样式接管（见上面的 CSS）
 })();
 let entered = false, pointerLocked = false, lastT = 0, T0 = 0;
 
@@ -1073,8 +993,6 @@ const LINES = [
     en: 'Dim, blurred, I look into the distance — only the running water, going on, going on.' },
   { x:  14, z: -76, r: 16, zh: '鸟何萃兮蘋中？罾何为兮木上？',
     en: 'Why do the birds gather in the duckweed? Why is the fishing net hung in a tree?' },
-  { x: -24, z:  -4, r: 15, zh: '捐余袂兮江中，遗余褋兮澧浦。',
-    en: 'I throw my sleeve away into the river, I leave my under-robe on the Li\'s far shore.' },
   { x:  30, z:  -4, r: 17, zh: '麋何食兮庭中？蛟何为兮水裔？',
     en: 'Why is the elk feeding in my courtyard? Why is the water-dragon at the river\'s edge?' },
   { x:   0, z:  40, r: 14, zh: '筑室兮水中，葺之兮荷盖。',
@@ -1131,7 +1049,7 @@ function invert(o, m) {   // full 4x4 inverse (used only for the sky ray)
 }
 
 function resize() {
-  const dpr = SHOT ? 1 : Math.min(devicePixelRatio || 1, 2);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
   const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
@@ -1194,8 +1112,6 @@ function step(dt, t) {
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, leafBuf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, leafData);
-
-  updateCloths(t);
 
   updateSubtitle();
   const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
@@ -1288,14 +1204,6 @@ function draw(t) {
   gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
   gl.drawArrays(gl.TRIANGLES, 0, wrong.n);
 
-  // 捐余袂兮江中
-  gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
-  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
-  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
-  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
-  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
-  gl.drawArrays(gl.TRIANGLES, 0, CLOTH_N);
-
   // sedge
   gl.useProgram(bladeP);
   gl.uniformMatrix4fv(bladeP.u.uVP, false, vp);
@@ -1346,31 +1254,61 @@ if (gl) {
 }
 
 /* =====================================================================
-   右栏：打磨时间线 —— 三个世界共用 shared/timeline.js，读同一份 log.jsonl
+   右栏：打磨时间线 — reads log.jsonl
    ===================================================================== */
-if (window.PolishTimeline) {
-  PolishTimeline.mount({
-    el: '#tl', log: 'log.jsonl',
-    onReady: function (rounds) {
-      const n = rounds.length;
-      document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
-      const stopped = rounds.filter(r => r.stop).pop();
-      if (stopped) {
-        document.getElementById('ft-rounds').textContent = n + ' 轮';
-        document.getElementById('ft-stop').textContent = stopped.stop_reason || stopped.stop || '循环结束';
-      }
-    }
-  });
+const VERDICT_CLASS = v => /我们赢/.test(v || '') ? 'v-win' : '';
+function renderRounds(rows) {
+  const box = document.getElementById('rounds');
+  if (!rows.length) {
+    box.innerHTML = '<div id="empty">还没有记录。第一轮跑完后，这里会出现每一轮改了什么、' +
+      'critic 怎么说、以及那一轮的 6 张截图。</div>';
+    return;
+  }
+  rows.sort((a, b) => (b.round || 0) - (a.round || 0));
+  box.innerHTML = rows.map((r, i) => {
+    const shots = (r.shots || []).map(s =>
+      `<a href="${s}" target="_blank" rel="noreferrer"><img loading="lazy" src="${s}" alt=""></a>`).join('');
+    return `<details class="rd"${i === 0 ? ' open' : ''}>
+      <summary>
+        <span class="n">R${String(r.round).padStart(2, '0')}</span>
+        <span class="ch">${esc(r.changed || '')}</span>
+        <span class="vd ${VERDICT_CLASS(r.critic_verdict)}">${esc(r.critic_verdict || '')}</span>
+      </summary>
+      <div class="body">
+        <dl>
+          <dt>CRITIC</dt><dd>${esc(r.critic_note || r.critic_verdict || '—')}</dd>
+          <dt>最 大 缺 口</dt><dd>${esc(r.biggest_gap || '—')}</dd>
+        </dl>
+        ${shots ? `<div class="shots">${shots}</div>` : ''}
+        ${r.round ? `<dl><dt>快 照</dt><dd><a href="versions/${r.round}/index.html">versions/${r.round}/index.html</a></dd></dl>` : ''}
+      </div>
+    </details>`;
+  }).join('');
+  const maxR = Math.max.apply(null, rows.map(r => r.round || 0));
+  document.getElementById('m-rounds').textContent = maxR;
+  const stopped = rows.filter(r => r.stop).pop();
+  if (stopped) document.getElementById('m-stop').textContent = stopped.stop;
 }
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function parseNdjson(text) {
+  return text.split('\n').map(l => l.trim()).filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+}
+fetch('log.jsonl', { cache: 'no-store' })
+  .then(r => r.ok ? r.text() : Promise.reject())
+  .then(t => renderRounds(parseNdjson(t)))
+  .catch(() => renderRounds(parseNdjson(document.getElementById('log-fallback').textContent)));
 
-const railToggle = document.getElementById('railtoggle');
-railToggle.addEventListener('click', () => {
-  const col = document.body.classList.toggle('rail-collapsed');
-  railToggle.textContent = col ? '‹' : '›';
-  try { localStorage.setItem('xfr.rail', col ? '1' : '0'); } catch (e) {}
+/* panel toggle */
+const tl = document.getElementById('tl'), toggle = document.getElementById('toggle');
+toggle.addEventListener('click', () => {
+  tl.classList.toggle('collapsed');
+  toggle.textContent = tl.classList.contains('collapsed')
+    ? (innerWidth <= 900 ? '˄' : '›') : (innerWidth <= 900 ? '˅' : '‹');
 });
-try { if (localStorage.getItem('xfr.rail') === '1') railToggle.click(); } catch (e) {}
-if (SHOT) document.body.classList.add('shot');
+if (innerWidth <= 900) toggle.textContent = '˅';
 </script>
 </body>
 </html>
