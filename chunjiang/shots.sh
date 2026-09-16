@@ -9,7 +9,9 @@ R="${1:?usage: shots.sh <round> [port]}"
 PORT="${2:-8732}"
 DIR=$(cd "$(dirname "$0")" && pwd)
 OUT="$DIR/shots/$R"; mkdir -p "$OUT"
-CTF="${POEM_CTF:-/Users/chener/.cache/puppeteer/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing}"
+# Chrome for Testing's --screenshot writes nothing on this machine (not even a blank
+# page) and never exits; chrome-headless-shell of the same version works, ~4s a frame.
+CTF="${POEM_CTF:-/Users/chener/.cache/puppeteer/chrome-headless-shell/mac_arm-150.0.7871.24/chrome-headless-shell-mac-arm64/chrome-headless-shell}"
 LOCK=/tmp/poem-world-shot.lock
 # cameras 1 / 4 / 5: the moon over the water, the sandbar underfoot, the drifting boat
 NAMES="1-moonrise 4-sandbar 5-boat"
@@ -43,7 +45,7 @@ for n in $NAMES; do
   # form, but on macOS it does not reliably survive exec into Chrome, so a shell
   # watchdog backs it up — whichever fires first, nothing runs past 90 seconds.
   nice -n 10 perl -e 'alarm 90; exec @ARGV' -- \
-       "$CTF" --headless=new --disable-gpu --use-angle=swiftshader --hide-scrollbars \
+       "$CTF" --disable-gpu --use-angle=swiftshader --hide-scrollbars \
        --mute-audio --no-first-run --no-default-browser-check --disable-extensions \
        --virtual-time-budget=5000 --window-size=960,600 \
        --user-data-dir="$TMP" --screenshot="$OUT/$n.png" \
