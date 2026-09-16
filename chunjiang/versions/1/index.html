@@ -158,28 +158,28 @@ var shotFrames = 0;
 /* ---------------------------------------------------------------- POEM -- */
 /* Eight stations. Each is a place in the world, not a page of text. */
 var STATIONS = [
-  { id: 'tide',   x:   0, z:  13, r: 5.5,
+  { id: 'tide',   x:   0, z:  30, r: 13,
     zh: '春江潮水连海平，海上明月共潮生。',
     en: "The spring river's tide runs level with the sea;\nover the sea, the bright moon rises with the tide." },
-  { id: 'path',   x:  -9, z:   6, r: 5.0,
+  { id: 'path',   x: -14, z:   6, r: 11,
     zh: '滟滟随波千万里，何处春江无月明。',
     en: 'Glittering, it follows the waves ten thousand li —\nwhere, on this spring river, is there no moonlight?' },
-  { id: 'grove',  x:  12, z:  -3, r: 5.0,
+  { id: 'grove',  x:  22, z:  -4, r: 12,
     zh: '江流宛转绕芳甸，月照花林皆似霰。',
     en: 'The river winds round the fragrant meadow;\nmoonlight on the flowering grove turns it all to sleet.' },
-  { id: 'sand',   x:   1, z:  -1, r: 4.0,
+  { id: 'sand',   x:   2, z:  -2, r: 10,
     zh: '空里流霜不觉飞，汀上白沙看不见。',
     en: 'Frost drifts through the air and no one feels it fly;\non the sandbar the white sand cannot be told apart.' },
-  { id: 'moon',   x:  -3, z: -13, r: 5.5,
+  { id: 'moon',   x:  -4, z: -26, r: 13,
     zh: '江天一色无纤尘，皎皎空中孤月轮。',
     en: 'River and sky, one colour, without a grain of dust;\nbright and alone in the emptiness, the wheel of the moon.' },
-  { id: 'ages',   x:   9, z: -11, r: 5.0,
+  { id: 'ages',   x:  20, z: -24, r: 11,
     zh: '人生代代无穷已，江月年年只相似。',
     en: 'Human lives, generation after generation, never end;\nthe river’s moon, year after year, looks only the same.' },
-  { id: 'boat',   x: -11, z:  -9, r: 5.0,
+  { id: 'boat',   x: -24, z: -16, r: 12,
     zh: '谁家今夜扁舟子？何处相思明月楼？',
     en: 'Whose small boat is out tonight?\nWhere is the moonlit tower that is missing someone?' },
-  { id: 'trees',  x:   6, z:  12, r: 5.0,
+  { id: 'trees',  x:  10, z:  18, r: 11,
     zh: '不知乘月几人归，落月摇情满江树。',
     en: 'No one knows how many ride the moonlight home —\nthe setting moon shakes its feeling out over the river trees.' }
 ];
@@ -192,12 +192,12 @@ var OPEN_WATER = {
 /* Six fixed cameras, frozen at round 1. Never change these — cross-round
  * screenshots are comparable only because the eye does not move. */
 var CAMS = [
-  { name: 'moonrise',    x:   0, z:  12, yaw: Math.PI,  pitch: -0.010 },
-  { name: 'moon-path',   x:  -7, z:   5, yaw: 2.86,     pitch: -0.020 },
-  { name: 'flower-grove',x:   9, z:   1, yaw: 3.62,     pitch: -0.020 },
-  { name: 'sandbar',     x:   2, z:  -3, yaw: 1.62,     pitch: -0.055 },
-  { name: 'boat',        x: -10, z:  -8, yaw: 2.30,     pitch: -0.020 },
-  { name: 'river-trees', x:   5, z:  10, yaw: 0.35,     pitch:  0.000 }
+  { name: 'moonrise',    x:   0, z:  26, yaw: Math.PI,  pitch: -0.010 },
+  { name: 'moon-path',   x: -13, z:   7, yaw: 2.86,     pitch: -0.020 },
+  { name: 'flower-grove',x:  17, z:   2, yaw: 3.62,     pitch: -0.020 },
+  { name: 'sandbar',     x:   3, z:  -4, yaw: 1.62,     pitch: -0.055 },
+  { name: 'boat',        x: -21, z: -14, yaw: 2.30,     pitch: -0.020 },
+  { name: 'river-trees', x:   9, z:  16, yaw: 0.35,     pitch:  0.000 }
 ];
 
 /* --------------------------------------------------------------- WORLD -- */
@@ -236,10 +236,9 @@ function rnd() { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296;
 
 /* the sandbar (汀): a low island of white sand, its edge soft, not a cliff */
 function edgeR(th) {
-  /* a small bar, not an island: the river has to own the frame */
-  return 17 + 3.0 * Math.sin(th * 2 + 0.7) + 1.5 * Math.sin(th * 5 - 1.1) + 0.8 * Math.sin(th * 9 + 2.3);
+  return 34 + 6.0 * Math.sin(th * 2 + 0.7) + 3.0 * Math.sin(th * 5 - 1.1) + 1.6 * Math.sin(th * 9 + 2.3);
 }
-var BAR = 5.2;                       // a low dune: high enough to see the river from
+var BAR = 0.9;                       // how high the sand stands above the water
 function gh(x, z) {
   var r = Math.hypot(x, z);
   var R = edgeR(Math.atan2(z, x));
@@ -268,30 +267,22 @@ for (var i2 = 0; i2 < 1500; i2++) {
 /* 花林: a grove whose blossom reads as sleet under the moon */
 var grove = [];
 for (var i3 = 0; i3 < 16; i3++) {
-  var a3 = -0.62 + i3 * 0.088, r3 = 62 + (i3 % 4) * 5.5;
-  grove.push({ x: Math.cos(a3) * r3, z: Math.sin(a3) * r3, h: 4.6 + rnd() * 3.0, seed: rnd() * 6.28 });
+  var a3 = -0.25 + i3 * 0.105, r3 = 20 + (i3 % 4) * 2.4;
+  grove.push({ x: Math.cos(a3) * r3, z: Math.sin(a3) * r3, h: 3.2 + rnd() * 2.1, seed: rnd() * 6.28 });
 }
 
 /* 江树: the far bank, a low line of trees the setting moon shakes */
 var bank = [];
-for (var c4 = 0; c4 < 11; c4++) {            // clumps, with gaps of open water between them
-  var ca = rnd() * Math.PI * 2;
-  var cr = 165 + rnd() * 85;
-  var n4 = 3 + Math.floor(rnd() * 6);
-  for (var i4 = 0; i4 < n4; i4++) {
-    var a4 = ca + (rnd() - 0.5) * 0.14;
-    var r4 = cr + (rnd() - 0.5) * 26;
-    bank.push({ x: Math.cos(a4) * r4, z: Math.sin(a4) * r4, h: 5 + rnd() * 9, w: 0.5 + rnd() * 1.1 });
-  }
+for (var i4 = 0; i4 < 70; i4++) {
+  var a4 = rnd() * Math.PI * 2;
+  bank.push({ x: Math.cos(a4) * (150 + rnd() * 70), z: Math.sin(a4) * (150 + rnd() * 70), h: 4 + rnd() * 5 });
 }
 
 /* 扁舟: one small boat, drifting, never arriving */
-/* Placed so that the station whose subtitle names them can see them: the boat
- * crosses the view from the 'boat' camera, the tower stands beyond it. */
-var boat = { th: -1.72, r: 54, drift: 0.0065 };
+var boat = { th: 2.05, r: 52, drift: 0.0065 };
 
 /* 明月楼: a tower on the far bank with exactly one window lit */
-var TOWER = { x: 48, z: -78 };
+var TOWER = { x: -74, z: -58 };
 
 /* --------------------------------------------------------------- DRAW  -- */
 function seg(a, b, col, w) {
@@ -350,55 +341,25 @@ function drawFarBank() {
     var b = bank[k];
     var p = project({ x: b.x, y: 0, z: b.z }), q = project({ x: b.x, y: b.h, z: b.z });
     if (!p || !q) continue;
-    /* a tree on the far bank is a smudge, not a post: soft, thin, nearly gone */
-    var grad = ctx.createLinearGradient(0, p.y, 0, q.y);
-    grad.addColorStop(0, 'rgba(146,168,196,.20)');
-    grad.addColorStop(1, 'rgba(146,168,196,0)');
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = Math.max(0.9, b.w * p.s * 4);
+    ctx.strokeStyle = 'rgba(150,172,198,.16)';
+    ctx.lineWidth = Math.max(1, 1.6 * p.s * 6);
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
   }
-  /* 明月楼 — 何处相思明月楼: one window, lit, and the water carries it back */
-  var TW = 6.2, roof = 'rgba(20,27,40,.96)', wall = 'rgba(32,42,58,.94)';
-  function storey(y0, y1, half) {
-    poly([{ x: TOWER.x - half, y: y0, z: TOWER.z }, { x: TOWER.x + half, y: y0, z: TOWER.z },
-          { x: TOWER.x + half, y: y1, z: TOWER.z }, { x: TOWER.x - half, y: y1, z: TOWER.z }], wall, null);
-  }
-  function eaves(y, half, lift) {
-    poly([{ x: TOWER.x - half, y: y, z: TOWER.z }, { x: TOWER.x + half, y: y, z: TOWER.z },
-          { x: TOWER.x + half * 0.52, y: y + lift, z: TOWER.z },
-          { x: TOWER.x - half * 0.52, y: y + lift, z: TOWER.z }], roof, null);
-  }
-  storey(0, 9.5, TW * 0.72);
-  eaves(9.5, TW * 1.05, 2.1);
-  storey(11.6, 18.4, TW * 0.58);
-  eaves(18.4, TW * 0.92, 2.4);
-  var wp = project({ x: TOWER.x + 1.7, y: 14.2, z: TOWER.z - 0.25 });
+  /* 明月楼 */
+  var wallC = 'rgba(28,38,54,.92)';
+  poly([{ x: TOWER.x - 5, y: 0, z: TOWER.z }, { x: TOWER.x + 5, y: 0, z: TOWER.z },
+        { x: TOWER.x + 5, y: 13, z: TOWER.z }, { x: TOWER.x - 5, y: 13, z: TOWER.z }], wallC, null);
+  poly([{ x: TOWER.x - 7, y: 13, z: TOWER.z }, { x: TOWER.x + 7, y: 13, z: TOWER.z },
+        { x: TOWER.x + 3.6, y: 16.5, z: TOWER.z }, { x: TOWER.x - 3.6, y: 16.5, z: TOWER.z }],
+       'rgba(22,30,44,.95)', null);
+  var wp = project({ x: TOWER.x + 1.4, y: 8.4, z: TOWER.z - 0.2 });
   if (wp) {
-    var ws = Math.max(2.4, 2.2 * wp.s);
-    var gl = ctx.createRadialGradient(wp.x, wp.y, 0, wp.x, wp.y, ws * 7);
-    gl.addColorStop(0, 'rgba(255,206,138,.40)');
-    gl.addColorStop(0.35, 'rgba(255,196,124,.13)');
-    gl.addColorStop(1, 'rgba(255,196,124,0)');
-    ctx.fillStyle = gl; ctx.fillRect(wp.x - ws * 7, wp.y - ws * 7, ws * 14, ws * 14);
-    ctx.fillStyle = 'rgba(255,222,168,.90)';
-    ctx.fillRect(wp.x - ws * 0.55, wp.y - ws * 0.85, ws * 1.1, ws * 1.7);
-    /* 玉户帘中卷不去 — the lamp lies down on the river and will not be rolled away */
-    var base = project({ x: TOWER.x + 1.7, y: 0, z: TOWER.z - 0.25 });
-    if (base) {
-      for (var ri = 0; ri < 16; ri++) {
-        var t = ri / 16;
-        var yy = base.y + t * Math.max(8, 26 * base.s * 3);
-        var wob = Math.sin(T * 1.1 + ri * 0.8) * (1 + t * 4);
-        var len = ws * (1.0 + t * 3.2);
-        ctx.strokeStyle = 'rgba(255,206,140,' + (0.20 * (1 - t)).toFixed(3) + ')';
-        ctx.lineWidth = Math.max(0.8, ws * 0.35 * (1 - t * 0.6));
-        ctx.beginPath();
-        ctx.moveTo(base.x - len / 2 + wob, yy);
-        ctx.lineTo(base.x + len / 2 + wob, yy);
-        ctx.stroke();
-      }
-    }
+    var s = Math.max(1.6, 1.5 * wp.s);
+    var gl = ctx.createRadialGradient(wp.x, wp.y, 0, wp.x, wp.y, s * 5);
+    gl.addColorStop(0, 'rgba(255,206,140,.34)'); gl.addColorStop(1, 'rgba(255,206,140,0)');
+    ctx.fillStyle = gl; ctx.fillRect(wp.x - s * 5, wp.y - s * 5, s * 10, s * 10);
+    ctx.fillStyle = 'rgba(255,216,158,.78)';
+    ctx.fillRect(wp.x - s * 0.5, wp.y - s * 0.8, s, s * 1.5);
   }
 }
 
@@ -418,66 +379,27 @@ function drawWater(moonP) {
   ctx.beginPath(); ctx.rect(0, hy, W, H - hy); ctx.clip();
   ctx.fillStyle = g; ctx.fillRect(0, hy, W, H - hy);
 
-  /* 滟滟随波千万里 — the moon breaks on the waves into a road that finds you.
-   * Sampled along the moon's own azimuth, widening with distance, glittering. */
+  /* 滟滟随波千万里 — the moon breaks on the waves into a road that finds you */
   if (moonP) {
-    var mdx = MOON.x - cam.x, mdz = MOON.z - cam.z;
-    var ml = Math.hypot(mdx, mdz) || 1;
-    var ux = mdx / ml, uz = mdz / ml;          // toward the moon, along the water
-    var px = -uz, pz = ux;                     // across the road
-    for (var d = 0; d < 190; d++) {
-      var t = d / 190;
-      var dist = 2.5 * Math.pow(1.037, d);     // dense near the eye, sparse far off
-      if (dist > 560) break;
-      var half = 0.7 + dist * 0.055;           // the road opens out as it goes away
-      var glints = dist < 30 ? 4 : 7;
-      for (var gi = 0; gi < glints; gi++) {
-        var hsh = Math.sin(d * 12.9898 + gi * 78.233) * 43758.5453;
-        hsh = hsh - Math.floor(hsh);                        // deterministic 0..1
-        var off = (hsh * 2 - 1) * half;
-        off += Math.sin(T * 0.8 + d * 0.35 + gi) * half * 0.22;   // 随波
-        var wx = cam.x + ux * dist + px * off;
-        var wz = cam.z + uz * dist + pz * off;
-        var p = project({ x: wx, y: 0, z: wz });
-        if (!p) continue;
-        var flick = 0.45 + 0.55 * Math.sin(T * 1.9 + d * 0.9 + gi * 2.1);
-        var near = 1 - Math.min(1, Math.abs(off) / half);          // brightest on the axis
-        var alpha = (0.12 + 0.70 * flick) * near * near * (0.55 + 0.45 * t);
-        if (alpha < 0.012) continue;
-        var len = Math.max(3.0, (0.7 + 1.5 * hsh) * p.s * 3.2);
-        ctx.strokeStyle = 'rgba(226,240,255,' + alpha.toFixed(3) + ')';
-        ctx.lineWidth = Math.max(0.9, p.s * 0.75);
-        ctx.beginPath();
-        ctx.moveTo(p.x - len / 2, p.y);
-        ctx.lineTo(p.x + len / 2, p.y);
-        ctx.stroke();
-      }
+    var k, n = 150;
+    for (k = 0; k < n; k++) {
+      var t = k / n;
+      var dist = 6 + t * t * 900;                    // sample the water away from the eye
+      var wx = cam.x + Math.sin(cam.yaw) * 0, wz = 0;
+      var p = project({ x: MOON.x * (dist / MOON.dist) + cam.x * (1 - dist / MOON.dist),
+                        y: 0,
+                        z: MOON.z * (dist / MOON.dist) + cam.z * (1 - dist / MOON.dist) });
+      if (!p) continue;
+      var wob = Math.sin(T * 0.9 + k * 0.7) * (1 - t) * 14 + Math.sin(T * 1.7 + k * 1.9) * 5;
+      var wlen = Math.max(3, (1 - t) * 74 + 10) * (0.5 + 0.5 * Math.abs(Math.sin(k * 2.3 + T * 0.6)));
+      var alpha = (0.05 + 0.16 * Math.abs(Math.sin(k * 1.3 + T * 0.8))) * (0.25 + 0.75 * (1 - t));
+      ctx.strokeStyle = 'rgba(216,232,250,' + alpha.toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.7, (1 - t) * 2.4);
+      ctx.beginPath();
+      ctx.moveTo(p.x - wlen / 2 + wob, p.y);
+      ctx.lineTo(p.x + wlen / 2 + wob, p.y);
+      ctx.stroke();
     }
-  }
-
-  /* 春江潮水连海平 — the tide itself: long crests crossing the moon's road,
-   * walking slowly in towards the sandbar. */
-  for (var ti = 0; ti < 26; ti++) {
-    var period = 17;
-    var td = 9 + ti * period - ((T * 3.1) % period);
-    if (td < 4) continue;
-    var tw = 26 + td * 0.75;
-    var mdx2 = MOON.x - cam.x, mdz2 = MOON.z - cam.z;
-    var ml2 = Math.hypot(mdx2, mdz2) || 1;
-    var ax = mdx2 / ml2, az = mdz2 / ml2;
-    var bx2 = -az, bz2 = ax;
-    ctx.beginPath(); var st2 = false;
-    for (var sI = -10; sI <= 10; sI++) {
-      var ss = sI / 10;
-      var swell = Math.sin(ss * 3.1 + ti * 0.9 + T * 0.35) * (0.7 + td * 0.012);
-      var qx = cam.x + ax * (td + swell) + bx2 * (ss * tw);
-      var qz = cam.z + az * (td + swell) + bz2 * (ss * tw);
-      var q = project({ x: qx, y: 0, z: qz });
-      if (!q) { st2 = false; continue; }
-      if (!st2) { ctx.moveTo(q.x, q.y); st2 = true; } else ctx.lineTo(q.x, q.y);
-    }
-    ctx.strokeStyle = 'rgba(178,204,236,' + (0.10 * Math.max(0, 1 - td / 210)).toFixed(3) + ')';
-    ctx.lineWidth = 1.1; ctx.stroke();
   }
 
   /* 江流宛转 — the current itself, long curved lines rather than straight ones */
@@ -505,106 +427,58 @@ function drawWater(moonP) {
 }
 
 function drawBoat() {
-  /* 谁家今夜扁舟子 — it drifts across, it does not arrive */
+  /* 谁家今夜扁舟子 — it drifts, it does not arrive */
   var a = boat.th + T * boat.drift;
   var bx = Math.cos(a) * boat.r, bz = Math.sin(a) * boat.r;
-  var bob = Math.sin(T * 0.7) * 0.09;
-  var tilt = Math.sin(T * 0.53) * 0.05;
-  /* the hull: a shallow crescent, wider than it is tall, the way a river skiff sits */
+  var bob = Math.sin(T * 0.7) * 0.10;
   var hull = [
-    { x: bx - 5.4, y: 0.58 + bob + tilt, z: bz },
-    { x: bx - 3.0, y: 0.02 + bob, z: bz },
-    { x: bx + 3.0, y: 0.02 + bob, z: bz },
-    { x: bx + 5.4, y: 0.58 + bob - tilt, z: bz },
-    { x: bx + 4.5, y: 1.42 + bob - tilt, z: bz },
-    { x: bx - 4.5, y: 1.42 + bob + tilt, z: bz }
+    { x: bx - 2.6, y: 0.10 + bob, z: bz }, { x: bx + 2.6, y: 0.10 + bob, z: bz },
+    { x: bx + 1.8, y: 0.72 + bob, z: bz }, { x: bx - 1.8, y: 0.72 + bob, z: bz }
   ];
-  poly(hull, 'rgba(12,18,29,.97)', 'rgba(216,232,252,.62)');
-  /* the awning: the one curved line that says "boat" and not "plank" */
-  var aw = [
-    { x: bx - 2.6, y: 1.42 + bob, z: bz }, { x: bx + 2.6, y: 1.42 + bob, z: bz },
-    { x: bx + 1.7, y: 3.25 + bob, z: bz }, { x: bx - 1.7, y: 3.25 + bob, z: bz }
-  ];
-  poly(aw, 'rgba(18,25,38,.95)', 'rgba(206,224,246,.40)');
-  /* one small lantern: the only warm thing out on the water */
-  var lp = project({ x: bx + 0.7, y: 2.30 + bob, z: bz });
-  if (lp) {
-    var ls = Math.max(1.4, 1.1 * lp.s);
-    var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, ls * 6);
-    lg.addColorStop(0, 'rgba(255,198,126,.55)');
-    lg.addColorStop(1, 'rgba(255,198,126,0)');
-    ctx.fillStyle = lg; ctx.fillRect(lp.x - ls * 6, lp.y - ls * 6, ls * 12, ls * 12);
-    ctx.fillStyle = 'rgba(255,224,176,.92)';
-    ctx.fillRect(lp.x - ls * 0.35, lp.y - ls * 0.45, ls * 0.7, ls * 0.9);
-  }
-  /* its reflection: the hull broken into a few rungs of light under it */
-  var bp = project({ x: bx, y: 0, z: bz });
-  if (bp) {
-    for (var k = 0; k < 9; k++) {
-      var t = k / 9;
-      var yy = bp.y + t * Math.max(5, 14 * bp.s * 2.2);
-      var wob = Math.sin(T * 1.3 + k) * (0.6 + t * 3);
-      var len = Math.max(4, (3.0 - t * 1.4) * bp.s * 2.2);
-      ctx.strokeStyle = 'rgba(200,220,244,' + (0.16 * (1 - t)).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(0.8, 1.6 * (1 - t * 0.5));
-      ctx.beginPath();
-      ctx.moveTo(bp.x - len / 2 + wob, yy);
-      ctx.lineTo(bp.x + len / 2 + wob, yy);
-      ctx.stroke();
-    }
-  }
+  poly(hull, 'rgba(18,25,38,.95)', 'rgba(198,216,238,.30)');
+  seg({ x: bx - 0.5, y: 0.72 + bob, z: bz }, { x: bx - 0.2, y: 2.5 + bob, z: bz },
+      'rgba(198,216,238,.26)', 1.2);
+  /* its reflection, the only thing under it */
+  seg({ x: bx - 2.2, y: -0.02, z: bz }, { x: bx + 2.2, y: -0.02, z: bz },
+      'rgba(198,216,238,.10)', 3);
 }
 
 function drawSandbar() {
-  /* The bar is one polygon: the lip loop, clipped against the near plane and closed
-   * along the bottom of the screen. Reconstructing it per screen column produced a
-   * comb whose teeth let the river show through. */
-  var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-  var cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-  var f = (H * 0.5) / Math.tan(cam.fov * 0.5);
-  var NEAR = 0.15;
-
-  function view(pt) {                         // world → camera space
-    var dx = pt.x - cam.x, dy = 0 - cam.y, dz = pt.z - cam.z;
-    var X = dx * cy - dz * sy;
-    var Zf = dx * sy + dz * cy;
-    var Y = dy * cp - Zf * sp;
-    var Z = dy * sp + Zf * cp;
-    return { X: X, Y: Y, Z: Z };
+  /* the bar is drawn as everything below its own skyline, so the water stops at its edge */
+  var hy = waterTop();
+  var NB = 220, i6, b;
+  var sky = new Float64Array(NB); sky.fill(1e9);
+  for (i6 = 0; i6 < EDGE.length; i6++) {
+    var e = EDGE[i6];
+    var p = project({ x: e.x, y: 0, z: e.z });
+    if (!p) continue;
+    b = Math.floor(p.x / W * NB);
+    if (b < 0 || b >= NB) continue;
+    if (p.y < sky[b]) sky[b] = p.y;
   }
-  function toScreen(v) {
-    return { x: W * 0.5 + v.X * f / v.Z, y: H * 0.5 - v.Y * f / v.Z };
+  var any = false;
+  for (b = 0; b < NB; b++) if (sky[b] < 1e8) { any = true; break; }
+  var line = new Float64Array(NB);
+  for (b = 0; b < NB; b++) {
+    if (sky[b] < 1e8) { line[b] = sky[b]; continue; }
+    if (!any) { line[b] = hy; continue; }
+    var l = b - 1; while (l >= 0 && sky[l] > 1e8) l--;
+    var r = b + 1; while (r < NB && sky[r] > 1e8) r++;
+    if (l < 0 && r >= NB) line[b] = hy;
+    else if (l < 0) line[b] = Math.min(sky[r], hy);
+    else if (r >= NB) line[b] = Math.min(sky[l], hy);
+    else line[b] = Math.min(sky[l] + (sky[r] - sky[l]) * ((b - l) / (r - l)), hy);
   }
-  function mix(a, b, t) {
-    return { X: a.X + (b.X - a.X) * t, Y: a.Y + (b.Y - a.Y) * t, Z: a.Z + (b.Z - a.Z) * t };
-  }
-
-  var vs = [], i9;
-  for (i9 = 0; i9 < EDGE.length; i9++) vs.push(view(EDGE[i9]));
-
-  var chain = [];                             // Sutherland–Hodgman against Z > NEAR
-  for (i9 = 0; i9 < vs.length; i9++) {
-    var a = vs[i9], b = vs[(i9 + 1) % vs.length];
-    var ain = a.Z > NEAR, bin = b.Z > NEAR;
-    if (ain) chain.push(a);
-    if (ain !== bin) chain.push(mix(a, b, (NEAR - a.Z) / (b.Z - a.Z)));
-  }
-  if (chain.length > 2) {
-    var pts = [];
-    for (i9 = 0; i9 < chain.length; i9++) pts.push(toScreen(chain[i9]));
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (i9 = 1; i9 < pts.length; i9++) ctx.lineTo(pts[i9].x, pts[i9].y);
-    /* the two cut ends run straight down off the bottom of the frame */
-    ctx.lineTo(pts[pts.length - 1].x, H + 4);
-    ctx.lineTo(pts[0].x, H + 4);
-    ctx.closePath();
-    var g = ctx.createLinearGradient(0, H * 0.42, 0, H);
-    g.addColorStop(0, '#3a4256');      // 汀上白沙: pale, but never pale enough to find its edge
-    g.addColorStop(0.5, '#454d61');
-    g.addColorStop(1, '#515a6f');
-    ctx.fillStyle = g; ctx.fill();
-  }
+  ctx.beginPath();
+  ctx.moveTo(0, H + 2);
+  for (b = 0; b < NB; b++) ctx.lineTo((b + 0.5) / NB * W, Math.min(line[b], H + 2));
+  ctx.lineTo(W, H + 2);
+  ctx.closePath();
+  var g = ctx.createLinearGradient(0, H * 0.5, 0, H);
+  g.addColorStop(0, '#2b3243');     // 汀上白沙看不见: pale, but never white enough to see its edge
+  g.addColorStop(0.5, '#343c4e');
+  g.addColorStop(1, '#3d4658');
+  ctx.fillStyle = g; ctx.fill();
 
   /* the waterline itself, a thread of moonlight */
   ctx.beginPath(); var st = false;
