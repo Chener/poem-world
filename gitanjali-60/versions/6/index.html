@@ -189,8 +189,8 @@
       <div class="row"><span class="k">harness</span><span class="v">Claude Code</span></div>
       <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
       <div class="row"><span class="k">effort</span><span class="v sand">high</span></div>
-      <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">10</span></div>
-      <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">10 轮到</span></div>
+      <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">—</span></div>
+      <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">循环进行中</span></div>
     </div>
     <div class="lnks">
       <a href="../">← 三个世界</a>
@@ -261,7 +261,7 @@ var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 6000);
 /* The palette of a pale, luminous, slightly overcast hour: the beach smiles,
  * but the smile is pale. Everything else is tuned to these five colours. */
 var PAL = {
-  skyTop:  new THREE.Color(0x6a8dac),
+  skyTop:  new THREE.Color(0x7d9cb6),
   skyHaze: new THREE.Color(0xd7d1c2),
   sun:     new THREE.Color(0xfff2dc),
   seaDeep: new THREE.Color(0x1d3b4b),
@@ -298,27 +298,15 @@ var sky = new THREE.Mesh(
       'float fbm(vec2 p){ float v=0.0, a=0.5;',
       '  for(int i=0;i<5;i++){ v += a*ns(p); p *= 2.03; a *= 0.5; } return v; }',
       'void main(){',
-      /* A vault, not a backdrop. The old gradient was written in terms of
-       * half-sphere height, which put nearly all of its range above 30 degrees -
-       * and these cameras almost never look up there, so every frame got the
-       * flat pale bottom of the ramp and the sky read as blank paper. Elevation
-       * to a fractional power puts the gradient where the eye actually is, low
-       * down, so the dome has depth from the first metre above the horizon. */
-      '  float el = vDir.y;',
-      '  float elc = clamp(el, 0.0, 1.0);',
-      '  float t = pow(elc, 0.42);',
+      '  float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);',
+      '  float t = pow(clamp((h-0.5)*2.0,0.0,1.0), 0.78);',
       '  vec3 col = mix(uHaze, uTop, t);',
-      /* and it keeps deepening overhead, so there is a weight above you */
-      '  col = mix(col, uTop * 0.74, pow(elc, 2.0) * 0.62);',
       /* the sun does not burn here; it soaks */
       '  float d = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);',
       '  col += uSun * pow(d, 12.0) * 0.26;',
       '  col += uSun * pow(d, 2.5) * 0.045;',
-      /* a light that is simply everywhere, the way an overcast noon is */
-      '  col += uSun * pow(elc, 1.4) * 0.055;',
-      /* a seam at the horizon so sky and sea meet without a cut - but a narrow
-       * one: the old band was six degrees wide and swallowed the horizon */
-      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*16.0,0.0,1.0), 2.0)*0.32);',
+      /* a faint band right at the seam, so sky and sea meet without a hard edge */
+      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*9.0,0.0,1.0), 2.0)*0.45);',
       /* --------------------------------------------------------------------
        * "Tempest roams in the pathless sky."  Two lines of this poem look like
        * a contradiction — the sky is motionless overhead, AND a tempest roams
@@ -329,6 +317,7 @@ var sky = new THREE.Mesh(
        * is happening. Look out and something is.
        * ------------------------------------------------------------------ */
       '  float az = atan(vDir.x, vDir.z);',
+      '  float el = vDir.y;',
       '  float da = mod(az - uStormAz + 3.14159, 6.28318) - 3.14159;',
       '  float across = 1.0 - smoothstep(0.0, 0.78, abs(da));',
       '  float top = 0.055 + 0.265 * across;',                 /* an anvil, tallest at its heart */
@@ -388,18 +377,12 @@ var seaUniforms = {
 /* One source of truth for the wave field. The GLSL below is generated from
  * these numbers, and seaHeightJS() reads the same array, so the shader and the
  * things floating on the water can never drift apart again.
- *
- * Calibrated to a shore break, roughly a metre of face. The previous values ran
- * to an 8.5m trough-to-crest range at the break line, and the result was the
- * opposite of dramatic: a 1.6m crest six metres from a 1.7m eye is a wall seen
- * edge-on, and it flattens into a featureless sheet that hides every wave
- * behind it. A wave you can see over is a wave you can see.
  *   dir x, dir z, amplitude (m), wavelength (m) */
 var WAVES = [
-  [ 0.00, -1.00, 0.86, 42.0],
-  [ 0.26, -0.97, 0.43, 23.0],
-  [-0.19, -0.98, 0.23, 12.5],
-  [ 0.44, -0.90, 0.12,  6.2]
+  [ 0.00, -1.00, 1.35, 42.0],
+  [ 0.26, -0.97, 0.72, 23.0],
+  [-0.19, -0.98, 0.40, 12.5],
+  [ 0.44, -0.90, 0.20,  6.2]
 ];
 var WAVE_SPEED = 0.62;   // sets the rhythm: the big swell arrives every ~8.5s
 var WAVE_STEEP = 1.05;   // horizontal Gerstner pull — this is what rears the face up
@@ -410,9 +393,9 @@ var WAVE_STEEP = 1.05;   // horizontal Gerstner pull — this is what rears the 
  * standing — and falls over. */
 var SHOAL_GLSL = [
   'float shoal(float d){',
-  '  float runUp = smoothstep(-1.0, 5.5, d);',
+  '  float runUp = smoothstep(-1.2, 7.0, d);',
   '  float deep  = mix(0.55, 1.0, smoothstep(0.0, 80.0, d));',
-  '  float rear  = 1.0 + 1.90 * exp(-pow((d - 14.0) / 8.5, 2.0));',
+  '  float rear  = 1.0 + 2.40 * exp(-pow((d - 11.0) / 8.0, 2.0));',
   '  return runUp * deep * rear;',
   '}'
 ].join('\n');
@@ -437,15 +420,6 @@ var WAVE_GLSL = (function () {
    * fragment stage did per pixel — which is the difference between this scene
    * being renderable in software and not. Sampled in UNDISPLACED coordinates,
    * which is where the height field is actually defined. */
-  /* White water does not blink out the instant the wave that made it moves on.
-   * Foam as a pure function of the current phase left the surf zone empty most
-   * of the time - one roller every 8.4 seconds - so any frozen frame was likely
-   * to catch flat water. This jumps to 1 as the crest topples and thins over the
-   * rest of the cycle. */
-  out.push('float foamTrail(vec4 w, vec2 p, float t){');
-  out.push('  float u = fract((wavePhase(w, p, t) - 0.85) / 6.28318);');
-  out.push('  return exp(-u * 2.6);');
-  out.push('}');
   out.push('void seaField(vec2 p, float t, out float h, out vec2 dh, out vec3 disp){');
   out.push('  float d = -p.y;');
   out.push('  float f = shoal(d);');
@@ -487,17 +461,11 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
      * where the shoaling wave is breaking, and the sheet of white left on the
      * sand behind it */
     '  float slope = length(dh);',
-    '  float crest = smoothstep(0.42, 1.15, disp.y) * smoothstep(0.12, 0.45, slope);',
-    /* two trains of different period break at different distances, so there is
-     * always white water somewhere in the surf zone */
-    '  float outer = exp(-pow((d - 15.0) / 11.0, 2.0));',
-    '  float inner = exp(-pow((d -  5.0) /  6.0, 2.0));',
-    '  float surf = outer * foamTrail(W0, p0, uTime) * 1.20',
-    '             + inner * foamTrail(W1, p0, uTime) * 0.85;',
-    /* the sheet at the very edge advances and retreats on the same surge the
-     * sand paints its swash from, so the two agree about where the water is */
-    '  float surge = pow(max(sin(uTime*0.735 + p0.x*0.021), 0.0), 0.70);',
-    '  float wash = smoothstep(1.2 + 3.4*surge, -1.2, d) * 0.42;',
+    '  float crest = smoothstep(0.85, 1.95, disp.y) * smoothstep(0.16, 0.58, slope);',
+    '  float rollers = 0.5 + 0.5*sin(wavePhase(W0, p0, uTime) - 0.85);',
+    '  float breakBand = exp(-pow((d - 10.0) / 7.5, 2.0));',
+    '  float surf = breakBand * pow(rollers, 2.2) * 1.30;',
+    '  float wash = smoothstep(2.2, -1.2, d) * 0.36;',
     '  vFoam = clamp(crest + surf + wash, 0.0, 1.0);',
     '  vW = wp;',
     '  gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);',
@@ -505,9 +473,6 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
   ].join('\n'),
   fragmentShader: [
     'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime,uStormAz;',
-    'float hw(vec2 p){ return fract(sin(dot(p, vec2(41.7, 289.1)))*43758.5453); }',
-    'float nw(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
-    '  return mix(mix(hw(i),hw(i+vec2(1,0)),f.x), mix(hw(i+vec2(0,1)),hw(i+vec2(1,1)),f.x), f.y); }',
     'varying vec3 vW; varying vec2 vP0; varying float vFoam;',
     WAVE_GLSL,
     'void main(){',
@@ -526,16 +491,8 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  float depth = clamp((-vP0.y) / 210.0, 0.0, 1.0);',
     '  vec3 base = mix(uShal, uDeep, pow(depth, 0.55));',
     /* a breaking wave is lit through: the thin water at the crest glows */
-    '  float thin = smoothstep(0.35, 1.25, vW.y) * pow(max(dot(-v, normalize(uSunDir)), 0.0) * 0.5 + 0.5, 2.0);',
+    '  float thin = smoothstep(0.7, 2.2, vW.y) * pow(max(dot(-v, normalize(uSunDir)), 0.0) * 0.5 + 0.5, 2.0);',
     '  base += vec3(0.10, 0.26, 0.24) * thin;',
-    /* A breaking wave has a face, and the face is in its own shadow: it leans
-     * away from the light and the water behind it is deep. Without this the
-     * swell had no volume, and white spray in front of a white sky had nothing
-     * to be seen against. */
-    '  float steep = smoothstep(0.20, 0.78, length(dh));',
-    '  float face = steep * smoothstep(-0.2, 0.9, disp.y);',
-    '  base *= 1.0 - 0.42 * face;',
-    '  base = mix(base, uDeep * 0.72, steep * 0.30);',
     '  float fres = pow(1.0 - max(dot(n, v), 0.0), 4.2);',
     '  vec3 refl = uSky * 0.80 + vec3(0.03, 0.05, 0.07);',
     '  vec3 col = mix(base, refl, clamp(fres*0.72, 0.0, 0.55));',
@@ -543,15 +500,7 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 190.0) * 1.35;',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 18.0) * 0.10;',
     '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.78);',
-    /* Foam is not paint. It sits ON the water and is lit by the same light, so
-     * it has to keep the shading underneath it - otherwise every wave it covers
-     * flattens into a white shelf, which is exactly what was happening. And it
-     * is made of bubbles, so it breaks up rather than covering evenly. */
-    '  float ftex = nw(vP0 * 1.7) * 0.50 + nw(vP0 * 5.5) * 0.32 + nw(vP0 * 17.0) * 0.18;',
-    '  foam = smoothstep(0.30, 0.86, foam * 0.75 + ftex * foam);',
-    '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
-    '  vec3 foamCol = vec3(0.97,0.97,0.95) * (0.58 + 0.50 * lam);',
-    '  col = mix(col, foamCol, foam * 0.90);',
+    '  col = mix(col, vec3(0.94,0.94,0.92), foam * 0.85);',
     '  float fa = atan(vW.x - cameraPosition.x, vW.z - cameraPosition.z);',
     '  float dda = mod(fa - uStormAz + 3.14159, 6.28318) - 3.14159;',
     '  float under = (1.0 - smoothstep(0.10, 0.70, abs(dda))) * smoothstep(320.0, 1500.0, dist);',
@@ -575,8 +524,8 @@ var TAU = Math.PI * 2;
 function sandHeight(x, z) {
   // z = 0 is the waterline; +z walks inland and rises, -z is the shelf going under
   // seaward the bottom must fall faster than the waves trough: the deepest
-  // deepest trough is under 2m at the break line, so 0.55/m clears it
-  var ramp = z > 0 ? z * 0.030 : z * 0.55;
+  // trough now runs past -5m around eleven metres out, so 0.78/m clears it
+  var ramp = z > 0 ? z * 0.030 : z * 0.78;
   var dune = Math.max(0, z - 120) * 0.055;
   // periods of 80m / 400m / 20m all divide the 400m re-tile step, so the shore
   // can repeat forever without the dunes jumping under your feet
@@ -618,47 +567,29 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     'float hash(vec2 p){ return fract(sin(dot(p, vec2(41.7, 289.1)))*43758.5453); }',
     'float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
     '  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }',
-    'float surgeAt(float x, float t){',
-    '  return pow(max(sin(t*0.735 + x*0.021), 0.0), 0.70);',
-    '}',
-    'float swashEdge(float x, float t){',
-    '  return 2.6 + 5.4*surgeAt(x, t) + 1.0*sin(t*0.29 - x*0.0145);',
-    '}',
     'void main(){',
     '  vec3 n = normalize(vN);',
     '  float g = noise(vW.xz*2.6)*0.5 + noise(vW.xz*11.0)*0.26 + noise(vW.xz*46.0)*0.14;',
-    /* ------------------------------------------------------------------
-     * "pale gleams the smile of the sea beach."
-     *
-     * A beach does not have a wet part and a dry part. It has a band that the
-     * last wave reached and left behind, mirror-bright while the film of water
-     * is still on it, dulling as it drains. So instead of asking "is this point
-     * under the water line", we ask "how long ago did the water last reach it",
-     * by walking the swash back through the past few seconds. That gives a
-     * bright leading edge with a fading apron behind it, which is the smile.
-     * ---------------------------------------------------------------- */
-    '  float edge = swashEdge(vW.x, uTime);',
-    /* how recently the water last stood here: 1 = still wet, 0 = long dry */
-    '  float wet = 0.0;',
-    '  for (int i = 0; i < 8; i++) {',
-    '    float back = float(i) * 1.05;',
-    '    float reach = smoothstep(swashEdge(vW.x, uTime - back) + 0.45,',
-    '                             swashEdge(vW.x, uTime - back) - 0.45, vW.z);',
-    '    wet = max(wet, reach * (1.0 - back / 9.5));',
-    '  }',
-    '  wet = clamp(wet + (1.0 - smoothstep(0.0, 1.6, vW.z)) * 0.35, 0.0, 1.0);',
-    '  vec3 col = mix(uSand, uWet, wet * 0.88);',
-    '  col *= 0.80 + g*0.44;',
-    '  vec3 v = normalize(cameraPosition - vW);',
-    /* wet sand at a grazing angle is a mirror, and what it mirrors is the sky */
-    '  float fres = pow(1.0 - max(dot(n, v), 0.0), 3.4);',
-    '  vec3 sheen = vec3(0.855, 0.872, 0.892);',
-    '  col = mix(col, sheen, clamp(fres * pow(wet, 0.85) * 0.95, 0.0, 0.76));',
-    '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
-    '  col *= 0.68 + lam*0.58;',
+    /* the tide breathes: the wet line creeps up and back */
+    /* the run-up follows the rhythm of the breaker that made it, and sweeps
+     * along the shore rather than surging everywhere at once — the slow,
+     * repeating rock the poem calls a cradle */
+    '  float surge = pow(max(sin(uTime*0.735 + vW.x*0.021), 0.0), 0.70);',
+    '  float edge = 2.4 + 4.0*surge + 0.9*sin(uTime*0.29 - vW.x*0.0145);',
+    '  float wet = 1.0 - smoothstep(edge - 0.8, edge + 4.5, vW.z);',
+    '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.35, 0.0, 1.0);',
+    '  vec3 col = mix(uSand, uWet, wet*0.92);',
     /* the thin lace at the top of each run-up, where the water gives out */
     '  float lace = smoothstep(1.1, 0.0, abs(vW.z - edge)) * smoothstep(0.0, 1.0, vW.z);',
-    '  col = mix(col, vec3(0.965,0.965,0.945), lace * 0.85);',
+    '  col *= 0.80 + g*0.44;',
+    /* "pale gleams the smile of the sea beach": the wet strip returns the sky */
+    '  vec3 v = normalize(cameraPosition - vW);',
+    '  float fres = pow(1.0 - max(dot(n, v),0.0), 5.0);',
+    '  col = mix(col, vec3(0.90,0.90,0.87), fres*wet*0.85);',
+    '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
+    '  col *= 0.68 + lam*0.58;',
+    /* a scatter of dry shell-white specks, so the sand is never flat */
+    '  col = mix(col, vec3(0.955,0.955,0.935), lace * 0.80);',
     '  float sp = step(0.9975, hash(floor(vW.xz*26.0)));',
     '  col = mix(col, vec3(0.95,0.93,0.88), sp*(1.0-wet)*0.45);',
     '  float d = length(cameraPosition - vW);',
@@ -672,113 +603,6 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
 sand.frustumCulled = false;
 scene.add(sand);
 
-/* -------------------------------------------------------------- SPRAY -- */
-/* "The sea surges up with laughter."
- *
- * Every frame of this world had empty air in it. A wave that breaks and throws
- * nothing is a wave you have to be told about; the spray is the part you can
- * actually see from the sand. Each puff is launched when the crest at its own
- * stretch of shore topples - the same wave phase the foam uses, so the spray
- * and the white water belong to the same wave - then follows a plain ballistic
- * arc and fades. No simulation state: position is a pure function of (which
- * stretch of shore, what time), so the fixed cameras see the same spray every
- * time they are pointed here. */
-
-function wavePhaseJS(w, x, z, t) {
-  var L = Math.hypot(w[0], w[1]), k = 6.28318 / w[3];
-  return k * ((w[0] / L) * x + (w[1] / L) * z) - Math.sqrt(9.8 / k) * k * t * WAVE_SPEED;
-}
-/* Spray timing runs off the OBLIQUE train, not the head-on one. W0 travels
- * straight at the beach, so its phase does not vary along x at all: every
- * metre of shore breaks in the same instant, and spray was therefore either
- * everywhere or nowhere - and at the frozen instant, nowhere. W1 comes in at
- * an angle, so the break runs along the shore the way a real one does. */
-var SPRAY_WAVE = WAVES[1];
-var SPRAY_PERIOD = (function () {
-  var k = 6.28318 / SPRAY_WAVE[3];
-  return 6.28318 / (Math.sqrt(9.8 / k) * k * WAVE_SPEED);
-})();
-
-var SPRAY_CELLS = 150, SPRAY_PER_CELL = 8, SPRAY_TILE = 240;
-var SPRAY_N = SPRAY_CELLS * SPRAY_PER_CELL;
-var SPRAY_LIFE = 1.70, SPRAY_Z = -13.0;
-
-var sprayTex = (function () {
-  var c = document.createElement('canvas'); c.width = c.height = 64;
-  var x = c.getContext('2d');
-  var g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,0.95)');
-  g.addColorStop(0.45, 'rgba(255,255,255,0.40)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
-  var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-})();
-
-var sprayGeo = new THREE.PlaneGeometry(1, 1);
-var sprayOpacity = new THREE.InstancedBufferAttribute(new Float32Array(SPRAY_N), 1);
-sprayGeo.setAttribute('aOpacity', sprayOpacity);
-var iSpray = new THREE.InstancedMesh(sprayGeo, new THREE.ShaderMaterial({
-  uniforms: { uMap: { value: sprayTex } },
-  transparent: true, depthWrite: false,
-  vertexShader: [
-    'attribute float aOpacity; varying float vO; varying vec2 vUv;',
-    'void main(){ vO = aOpacity; vUv = uv;',
-    '  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }'
-  ].join('\n'),
-  fragmentShader: [
-    'uniform sampler2D uMap; varying float vO; varying vec2 vUv;',
-    'void main(){',
-    '  float a = texture2D(uMap, vUv).a * vO;',
-    '  if (a < 0.004) discard;',
-    '  gl_FragColor = vec4(0.965, 0.975, 0.985, a);',
-    '  #include <tonemapping_fragment>',
-    '  #include <colorspace_fragment>',
-    '}'
-  ].join('\n')
-}), SPRAY_N);
-iSpray.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-iSpray.frustumCulled = false;
-iSpray.count = 0;
-scene.add(iSpray);
-
-function updateSpray(t, camX) {
-  var n = 0;
-  var cell = SPRAY_TILE / SPRAY_CELLS;
-  var x0 = Math.round(camX / SPRAY_TILE) * SPRAY_TILE - SPRAY_TILE / 2;
-  for (var c = 0; c < SPRAY_CELLS; c++) {
-    var x = x0 + (c + 0.5) * cell;
-    /* seconds since the crest at this stretch of shore toppled */
-    var zc = SPRAY_Z + 3.0 - h1(c * 1.31) * 6.8;
-    var u = wavePhaseJS(SPRAY_WAVE, x, zc, t) / 6.28318
-          + 0.13 * Math.sin(x * 0.09) + 0.21 * Math.sin(x * 0.031 + 1.7)
-          + 0.08 * Math.sin(x * 0.27);
-    u = u - Math.floor(u);
-    var age = u * SPRAY_PERIOD;
-    if (age > SPRAY_LIFE) continue;
-    var surf = seaHeightJS(x, zc, t);
-    for (var k = 0; k < SPRAY_PER_CELL; k++) {
-      var j = c * SPRAY_PER_CELL + k;
-      var vy = 4.4 + h1(j * 1.7) * 4.6;
-      var vz = 1.2 + h1(j * 2.9 + 5) * 2.4;      // carried shoreward as it flies
-      var jx = (h1(j * 4.1 + 11) - 0.5) * cell * 2.4;
-      var y = surf + 0.35 + vy * age - 4.9 * age * age;
-      var gy = -0.15;
-      if (y < gy) continue;                       // it has fallen back into the sea
-      _dummy.position.set(x + jx, y, zc + vz * age);
-      _dummy.quaternion.copy(camera.quaternion);  // face the eye
-      var grow = 0.60 + age * 1.70 + h1(j * 3.3 + 2) * 0.70;
-      _dummy.scale.set(grow, grow, grow);
-      _dummy.updateMatrix();
-      iSpray.setMatrixAt(n, _dummy.matrix);
-      sprayOpacity.array[n] = Math.max(0, 1 - age / SPRAY_LIFE) * 0.95;
-      n++;
-    }
-  }
-  iSpray.count = n;
-  iSpray.instanceMatrix.needsUpdate = true;
-  sprayOpacity.needsUpdate = true;
-}
-
 /* ------------------------------------------------------------- WRECKS -- */
 /* "ships get wrecked in the trackless water, death is abroad and children play."
  * The children never look at these. That is the whole point of the poem, so the
@@ -790,11 +614,11 @@ function updateSpray(t, camX) {
  * floating thing sideways by under a metre, which nothing here would notice.) */
 function seaHeightJS(x, z, t) {
   var d = -z;
-  var ru = Math.min(1, Math.max(0, (d + 1.0) / 6.5));
+  var ru = Math.min(1, Math.max(0, (d + 1.2) / 8.2));
   var runUp = ru * ru * (3 - 2 * ru);
   var dp = Math.min(1, Math.max(0, d / 80));
   var deep = 0.55 + 0.45 * (dp * dp * (3 - 2 * dp));
-  var rear = 1 + 1.90 * Math.exp(-Math.pow((d - 14) / 8.5, 2));
+  var rear = 1 + 2.40 * Math.exp(-Math.pow((d - 11) / 8, 2));
   var f = runUp * deep * rear;
   var h = 0;
   for (var i = 0; i < WAVES.length; i++) {
@@ -1460,7 +1284,6 @@ function frame() {
   updateChildren(simT, camera.position.x);
   updateWrecks(simT, camera.position.x);
   updateBoats(simT, camera.position.x);
-  updateSpray(simT, camera.position.x);
   sky.position.copy(camera.position);
   sea.position.x = Math.round(camera.position.x / 200) * 200;
   sand.position.x = Math.round(camera.position.x / 400) * 400; // the shore never ends
@@ -1502,14 +1325,7 @@ requestAnimationFrame(function () {
     var b = document.getElementById('boot');
     b.classList.add('gone');
     setTimeout(function () { b.remove(); }, 800);
-    if (SHOT) {
-      document.body.setAttribute('data-shot-ready', '1');
-      /* so a headless --dump-dom can report what the frame contained */
-      document.body.setAttribute('data-counts',
-        'children=' + iTorso.count + ' boats=' + iBoat.count +
-        ' spray=' + iSpray.count + ' turrets=' + iTurret.count +
-        ' shells=' + iShell.count + ' pebbles=' + iPebble.count);
-    }
+    if (SHOT) { document.body.setAttribute('data-shot-ready', '1'); }
   });
 });
 

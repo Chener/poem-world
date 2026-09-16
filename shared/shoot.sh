@@ -18,9 +18,15 @@ PORT="${3:-8731}"
 CAMS="1-arrival 2-children 6-above"
 OUT="$W/shots/$R"
 LOCK=/tmp/poem-world-shot.lock
-CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing}"
+# chrome-headless-shell, NOT the full Chrome for Testing binary. In Chrome 150 the
+# full binary's --screenshot flag is dead: it writes no file and never exits, even on
+# about:blank (verified). chrome-headless-shell is the same version's headless-only
+# artifact from the same puppeteer cache, it has no window to show, it still supports
+# --screenshot, and it exits the moment the file is written - about four seconds a
+# frame instead of hanging until the alarm.
+CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome-headless-shell/mac_arm-150.0.7871.24/chrome-headless-shell-mac-arm64/chrome-headless-shell}"
 
-[ -x "$CTF" ] || { echo "no Chrome for Testing at: $CTF" >&2; exit 1; }
+[ -x "$CTF" ] || { echo "no chrome-headless-shell at: $CTF" >&2; exit 1; }
 mkdir -p "$OUT"
 
 # Never open a browser on a machine that is already loaded: three workers running
@@ -50,18 +56,31 @@ until mkdir "$LOCK" 2>/dev/null; do
 done
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
 
+# Chrome for Testing has wedged for twenty minutes twice on this machine, so every
+# capture gets a hard wall-clock ceiling. macOS has no timeout(1); perl's alarm does
+# the job. --virtual-time-budget only needs to be long enough for three.js to settle,
+# it is NOT a licence to hang until the frame is finished.
+SHOT_ALARM=90
 for c in $CAMS; do
   n="${c%%-*}"
   prof=$(mktemp -d /tmp/pw-shot-profile.XXXXXX)
-  nice -n 10 "$CTF" --headless=new --disable-gpu --use-angle=swiftshader \
+  rm -f "$OUT/$c.png"
+  nice -n 10 perl -e 'alarm shift; exec @ARGV' "$SHOT_ALARM" \
+         "$CTF" --disable-gpu --use-angle=swiftshader \
          --hide-scrollbars --mute-audio --no-first-run --no-default-browser-check \
          --disable-extensions --disable-background-networking \
          --user-data-dir="$prof" \
-         --window-size=960,600 --virtual-time-budget=30000 \
+         --window-size=960,600 --virtual-time-budget=5000 \
          --screenshot="$PWD/$OUT/$c.png" \
          "http://127.0.0.1:$PORT/$W/index.html?shot=$n" >/dev/null 2>&1 || true
   rm -rf "$prof"
-  [ -s "$OUT/$c.png" ] || { echo "  FAILED: $OUT/$c.png" >&2; exit 1; }
+  if [ ! -s "$OUT/$c.png" ]; then
+    # Skip the rest of the round rather than wait: a wedged Chrome will not get
+    # better on the next camera, and the loop is supposed to keep moving.
+    rm -f "$OUT/$c.png"
+    echo "  TIMED OUT or failed after ${SHOT_ALARM}s: $c — skipping this round's shots" >&2
+    exit 2
+  fi
   echo "  $OUT/$c.png"
 done
 echo "round $R: 3 shots in $OUT"
