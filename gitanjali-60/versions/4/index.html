@@ -281,20 +281,14 @@ var sky = new THREE.Mesh(
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
       uTop:  { value: PAL.skyTop }, uHaze: { value: PAL.skyHaze },
-      uSun:  { value: PAL.sun },    uSunDir: { value: SUNDIR },
-      uTime: { value: 0 },          uStormAz: { value: Math.PI }
+      uSun:  { value: PAL.sun },    uSunDir: { value: SUNDIR }
     },
     vertexShader: [
       'varying vec3 vDir;',
       'void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }'
     ].join('\n'),
     fragmentShader: [
-      'varying vec3 vDir; uniform vec3 uTop,uHaze,uSun,uSunDir; uniform float uTime,uStormAz;',
-      'float hs(vec2 p){ return fract(sin(dot(p, vec2(41.7, 289.1)))*43758.5453); }',
-      'float ns(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
-      '  return mix(mix(hs(i),hs(i+vec2(1,0)),f.x), mix(hs(i+vec2(0,1)),hs(i+vec2(1,1)),f.x), f.y); }',
-      'float fbm(vec2 p){ float v=0.0, a=0.5;',
-      '  for(int i=0;i<5;i++){ v += a*ns(p); p *= 2.03; a *= 0.5; } return v; }',
+      'varying vec3 vDir; uniform vec3 uTop,uHaze,uSun,uSunDir;',
       'void main(){',
       '  float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);',
       '  float t = pow(clamp((h-0.5)*2.0,0.0,1.0), 0.78);',
@@ -305,42 +299,6 @@ var sky = new THREE.Mesh(
       '  col += uSun * pow(d, 2.5) * 0.045;',
       /* a faint band right at the seam, so sky and sea meet without a hard edge */
       '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*9.0,0.0,1.0), 2.0)*0.45);',
-      /* --------------------------------------------------------------------
-       * "Tempest roams in the pathless sky."  Two lines of this poem look like
-       * a contradiction — the sky is motionless overhead, AND a tempest roams
-       * it — and they are not. The stillness is what is over YOU. The tempest
-       * is always somewhere else, far out, drifting along the horizon, never
-       * arriving. So the storm lives in a band that never climbs past about
-       * twelve degrees, and its bearing wanders forever. Look up and nothing
-       * is happening. Look out and something is.
-       * ------------------------------------------------------------------ */
-      '  float az = atan(vDir.x, vDir.z);',
-      '  float el = vDir.y;',
-      '  float da = mod(az - uStormAz + 3.14159, 6.28318) - 3.14159;',
-      '  float across = 1.0 - smoothstep(0.0, 0.78, abs(da));',
-      '  float top = 0.055 + 0.265 * across;',                 /* an anvil, tallest at its heart */
-      /* domain-warp the noise first, or the cloud comes out a smooth lens
-       * instead of weather */
-      '  vec2 q = vec2(da*3.4, el*13.0);',
-      '  float warp = fbm(q*1.7 + vec2(uTime*0.010, 0.0));',
-      '  float n = fbm(q + vec2(warp*1.6 + uTime*0.009, warp*1.1));',
-      '  float bulge = top * (0.62 + 0.55*n);',
-      '  float body = (1.0 - smoothstep(bulge*0.72, bulge, el)) * step(-0.02, el);',
-      '  float mass = smoothstep(0.20, 0.62, clamp(across*1.25, 0.0, 1.0) * body);',
-      /* rain hanging out of the base, straight down into the water */
-      '  float base = top * 0.42;',
-      '  float veil = (1.0 - smoothstep(base*0.55, base*1.5, el)) * step(-0.02, el) * clamp(across*1.3,0.0,1.0);',
-      '  float streak = fbm(vec2(da*46.0, el*26.0 - uTime*0.30));',
-      '  veil *= smoothstep(0.26, 0.74, streak);',
-      '  col = mix(col, vec3(0.235,0.250,0.282), veil);',
-      '  vec3 stormCol = mix(vec3(0.078,0.084,0.100), vec3(0.330,0.342,0.372), n*n);',
-      /* a little light still gets in under the anvil, but only a little */
-      '  stormCol += vec3(0.20,0.20,0.19) * pow(1.0 - clamp(el/max(top,0.001),0.0,1.0), 4.0) * 0.30;',
-      '  col = mix(col, stormCol, mass * 0.96);',
-      /* lightning, for whoever is standing there when it happens */
-      '  float bolt = fract(sin(floor(uTime*0.62)*91.37)*43758.5453);',
-      '  float flash = step(0.86, bolt) * pow(1.0 - fract(uTime*0.62), 14.0);',
-      '  col += vec3(0.85,0.86,0.95) * mass * flash * 1.5;',
       '  gl_FragColor = vec4(col, 1.0);',
       '  #include <tonemapping_fragment>',
       '  #include <colorspace_fragment>',
@@ -369,8 +327,7 @@ var seaUniforms = {
   uSunCol:   { value: PAL.sun },
   uFogCol:   { value: FOG },
   uFogNear:  { value: 900 },
-  uFogFar:   { value: 5200 },
-  uStormAz:  { value: Math.PI }
+  uFogFar:   { value: 5200 }
 };
 var WAVE_GLSL = [
   /* w = (dirx, dirz, amplitude, wavelength) ; steepness folded into amplitude */
@@ -433,7 +390,7 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '}'
   ].join('\n'),
   fragmentShader: [
-    'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime,uStormAz;',
+    'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime;',
     'varying vec3 vW; varying float vH; varying float vFoam;',
     WAVE_GLSL,
     'void main(){',
@@ -458,12 +415,6 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 18.0) * 0.10;',
     '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.78);',
     '  col = mix(col, vec3(0.94,0.94,0.92), foam * 0.85);',
-    /* the water under the tempest goes out, the way it does when a squall
-     * drags its shadow across a sea you are looking at from a dry beach */
-    '  float fa = atan(vW.x - cameraPosition.x, vW.z - cameraPosition.z);',
-    '  float dda = mod(fa - uStormAz + 3.14159, 6.28318) - 3.14159;',
-    '  float under = (1.0 - smoothstep(0.10, 0.70, abs(dda))) * smoothstep(320.0, 1500.0, dist);',
-    '  col = mix(col, col * vec3(0.44, 0.47, 0.56), under * 0.80);',
     '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, dist));',
     '  gl_FragColor = vec4(col, 1.0);',
     '  #include <tonemapping_fragment>',
@@ -1228,11 +1179,6 @@ function frame() {
   }
   seaUniforms.uTime.value = simT;
   sandUniforms.uTime.value = simT;
-  sky.material.uniforms.uTime.value = simT;
-  /* it roams: never here, never gone */
-  var stormAz = Math.PI + 0.62 * Math.sin(simT * 0.0125) + 0.22 * Math.sin(simT * 0.041);
-  sky.material.uniforms.uStormAz.value = stormAz;
-  seaUniforms.uStormAz.value = stormAz;
   updateChildren(simT, camera.position.x);
   updateWrecks(simT, camera.position.x);
   updateBoats(simT, camera.position.x);

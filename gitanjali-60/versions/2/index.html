@@ -281,20 +281,14 @@ var sky = new THREE.Mesh(
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
       uTop:  { value: PAL.skyTop }, uHaze: { value: PAL.skyHaze },
-      uSun:  { value: PAL.sun },    uSunDir: { value: SUNDIR },
-      uTime: { value: 0 },          uStormAz: { value: Math.PI }
+      uSun:  { value: PAL.sun },    uSunDir: { value: SUNDIR }
     },
     vertexShader: [
       'varying vec3 vDir;',
       'void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }'
     ].join('\n'),
     fragmentShader: [
-      'varying vec3 vDir; uniform vec3 uTop,uHaze,uSun,uSunDir; uniform float uTime,uStormAz;',
-      'float hs(vec2 p){ return fract(sin(dot(p, vec2(41.7, 289.1)))*43758.5453); }',
-      'float ns(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
-      '  return mix(mix(hs(i),hs(i+vec2(1,0)),f.x), mix(hs(i+vec2(0,1)),hs(i+vec2(1,1)),f.x), f.y); }',
-      'float fbm(vec2 p){ float v=0.0, a=0.5;',
-      '  for(int i=0;i<5;i++){ v += a*ns(p); p *= 2.03; a *= 0.5; } return v; }',
+      'varying vec3 vDir; uniform vec3 uTop,uHaze,uSun,uSunDir;',
       'void main(){',
       '  float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);',
       '  float t = pow(clamp((h-0.5)*2.0,0.0,1.0), 0.78);',
@@ -305,42 +299,6 @@ var sky = new THREE.Mesh(
       '  col += uSun * pow(d, 2.5) * 0.045;',
       /* a faint band right at the seam, so sky and sea meet without a hard edge */
       '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*9.0,0.0,1.0), 2.0)*0.45);',
-      /* --------------------------------------------------------------------
-       * "Tempest roams in the pathless sky."  Two lines of this poem look like
-       * a contradiction — the sky is motionless overhead, AND a tempest roams
-       * it — and they are not. The stillness is what is over YOU. The tempest
-       * is always somewhere else, far out, drifting along the horizon, never
-       * arriving. So the storm lives in a band that never climbs past about
-       * twelve degrees, and its bearing wanders forever. Look up and nothing
-       * is happening. Look out and something is.
-       * ------------------------------------------------------------------ */
-      '  float az = atan(vDir.x, vDir.z);',
-      '  float el = vDir.y;',
-      '  float da = mod(az - uStormAz + 3.14159, 6.28318) - 3.14159;',
-      '  float across = 1.0 - smoothstep(0.0, 0.78, abs(da));',
-      '  float top = 0.055 + 0.265 * across;',                 /* an anvil, tallest at its heart */
-      /* domain-warp the noise first, or the cloud comes out a smooth lens
-       * instead of weather */
-      '  vec2 q = vec2(da*3.4, el*13.0);',
-      '  float warp = fbm(q*1.7 + vec2(uTime*0.010, 0.0));',
-      '  float n = fbm(q + vec2(warp*1.6 + uTime*0.009, warp*1.1));',
-      '  float bulge = top * (0.62 + 0.55*n);',
-      '  float body = (1.0 - smoothstep(bulge*0.72, bulge, el)) * step(-0.02, el);',
-      '  float mass = smoothstep(0.20, 0.62, clamp(across*1.25, 0.0, 1.0) * body);',
-      /* rain hanging out of the base, straight down into the water */
-      '  float base = top * 0.42;',
-      '  float veil = (1.0 - smoothstep(base*0.55, base*1.5, el)) * step(-0.02, el) * clamp(across*1.3,0.0,1.0);',
-      '  float streak = fbm(vec2(da*46.0, el*26.0 - uTime*0.30));',
-      '  veil *= smoothstep(0.26, 0.74, streak);',
-      '  col = mix(col, vec3(0.235,0.250,0.282), veil);',
-      '  vec3 stormCol = mix(vec3(0.078,0.084,0.100), vec3(0.330,0.342,0.372), n*n);',
-      /* a little light still gets in under the anvil, but only a little */
-      '  stormCol += vec3(0.20,0.20,0.19) * pow(1.0 - clamp(el/max(top,0.001),0.0,1.0), 4.0) * 0.30;',
-      '  col = mix(col, stormCol, mass * 0.96);',
-      /* lightning, for whoever is standing there when it happens */
-      '  float bolt = fract(sin(floor(uTime*0.62)*91.37)*43758.5453);',
-      '  float flash = step(0.86, bolt) * pow(1.0 - fract(uTime*0.62), 14.0);',
-      '  col += vec3(0.85,0.86,0.95) * mass * flash * 1.5;',
       '  gl_FragColor = vec4(col, 1.0);',
       '  #include <tonemapping_fragment>',
       '  #include <colorspace_fragment>',
@@ -369,30 +327,21 @@ var seaUniforms = {
   uSunCol:   { value: PAL.sun },
   uFogCol:   { value: FOG },
   uFogNear:  { value: 900 },
-  uFogFar:   { value: 5200 },
-  uStormAz:  { value: Math.PI }
+  uFogFar:   { value: 5200 }
 };
 var WAVE_GLSL = [
   /* w = (dirx, dirz, amplitude, wavelength) ; steepness folded into amplitude */
-  'const vec4 W0 = vec4( 0.00, -1.00, 1.15,  47.0);',
-  'const vec4 W1 = vec4( 0.26, -0.97, 0.66,  24.0);',
-  'const vec4 W2 = vec4(-0.19, -0.98, 0.37,  12.5);',
-  'const vec4 W3 = vec4( 0.44, -0.90, 0.19,   6.2);',
+  'const vec4 W0 = vec4( 0.00, -1.00, 0.62,  44.0);',
+  'const vec4 W1 = vec4( 0.26, -0.97, 0.34,  23.0);',
+  'const vec4 W2 = vec4(-0.19, -0.98, 0.20,  12.5);',
+  'const vec4 W3 = vec4( 0.44, -0.90, 0.10,   6.2);',
   'float wavePhase(vec4 w, vec2 p, float t){',
   '  float k = 6.28318 / w.w;',
   '  float c = sqrt(9.8 / k);',
   '  return k * dot(normalize(w.xy), p) - c * k * t * 0.42;',
   '}',
-  /* Waves do not simply fade out at the sand. They feel the bottom, rear up,
-   * and fall over. shoal() is that: a swell that gains about 2.3x around
-   * twenty metres out, then dies in the last few metres of run-up. */
-  'float shoreFall(vec2 p){',
-  '  float d = -p.y;',
-  '  float runUp = smoothstep(-1.5, 13.0, d);',
-  '  float deep  = mix(0.62, 1.0, smoothstep(0.0, 90.0, d));',
-  '  float rear  = 1.0 + 1.30 * exp(-pow((d - 21.0) / 15.0, 2.0));',
-  '  return runUp * deep * rear;',
-  '}',
+  /* shoreFall: waves die as they run up onto the sand (z > 0 is beach) */
+  'float shoreFall(vec2 p){ return clamp((-p.y - 1.0) / 26.0, 0.0, 1.0); }',
   'float seaHeight(vec2 p, float t){',
   '  float f = shoreFall(p); float h = 0.0;',
   '  h += W0.z * sin(wavePhase(W0, p, t));',
@@ -420,20 +369,16 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  float hx = seaHeight(xz + vec2(e,0.0), uTime) - seaHeight(xz - vec2(e,0.0), uTime);',
     '  float hz = seaHeight(xz + vec2(0.0,e), uTime) - seaHeight(xz - vec2(0.0,e), uTime);',
     '  float slope = length(vec2(hx,hz)) / (2.0*e);',
-    '  float crest = smoothstep(0.95, 2.05, h) * smoothstep(0.13, 0.52, slope);',
-    '  float d = -xz.y;',
-    '  float breakBand = exp(-pow((d - 15.0) / 11.0, 2.0));',
-    '  float rollers = 0.5 + 0.5*sin(wavePhase(W0, xz, uTime) - 0.9);',
-    '  float surf = breakBand * pow(rollers, 2.6) * 0.95;',
-    '  float wash = smoothstep(2.5, -1.0, d) * 0.30;',
-    '  vFoam = clamp(crest + surf + wash, 0.0, 1.0);',
+    '  float crest = smoothstep(0.30, 0.95, h) * smoothstep(0.05, 0.42, slope);',
+    '  float surf  = smoothstep(9.0, 0.5, -xz.y) * (0.40 + 0.60*sin(uTime*0.55 + xz.x*0.055));',
+    '  vFoam = clamp(crest + max(surf,0.0)*0.70, 0.0, 1.0);',
     '  vH = h;',
     '  vec4 wp = vec4(wp0.x, wp0.y + h, wp0.z, 1.0); vW = wp.xyz;',
     '  gl_Position = projectionMatrix * viewMatrix * wp;',
     '}'
   ].join('\n'),
   fragmentShader: [
-    'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime,uStormAz;',
+    'uniform vec3 uDeep,uShal,uSky,uSunDir,uSunCol,uFogCol; uniform float uFogNear,uFogFar,uTime;',
     'varying vec3 vW; varying float vH; varying float vFoam;',
     WAVE_GLSL,
     'void main(){',
@@ -456,14 +401,8 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  vec3 hv = normalize(normalize(uSunDir) + v);',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 190.0) * 1.35;',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 18.0) * 0.10;',
-    '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.78);',
+    '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.55);',
     '  col = mix(col, vec3(0.94,0.94,0.92), foam * 0.85);',
-    /* the water under the tempest goes out, the way it does when a squall
-     * drags its shadow across a sea you are looking at from a dry beach */
-    '  float fa = atan(vW.x - cameraPosition.x, vW.z - cameraPosition.z);',
-    '  float dda = mod(fa - uStormAz + 3.14159, 6.28318) - 3.14159;',
-    '  float under = (1.0 - smoothstep(0.10, 0.70, abs(dda))) * smoothstep(320.0, 1500.0, dist);',
-    '  col = mix(col, col * vec3(0.44, 0.47, 0.56), under * 0.80);',
     '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, dist));',
     '  gl_FragColor = vec4(col, 1.0);',
     '  #include <tonemapping_fragment>',
@@ -528,12 +467,10 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  vec3 n = normalize(vN);',
     '  float g = noise(vW.xz*2.6)*0.5 + noise(vW.xz*11.0)*0.26 + noise(vW.xz*46.0)*0.14;',
     /* the tide breathes: the wet line creeps up and back */
-    '  float edge = 3.3 + 2.2*sin(uTime*0.44 + vW.x*0.026) + 1.2*sin(uTime*0.31 - vW.x*0.0145);',
-    '  float wet = 1.0 - smoothstep(edge - 0.8, edge + 4.5, vW.z);',
-    '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.35, 0.0, 1.0);',
+    '  float tide = 9.5 + sin(uTime*0.11)*3.4;',
+    '  float wet = 1.0 - smoothstep(0.0, tide, vW.z);',
+    '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.4, 0.0, 1.0);',
     '  vec3 col = mix(uSand, uWet, wet*0.92);',
-    /* the thin lace at the top of each run-up, where the water gives out */
-    '  float lace = smoothstep(1.1, 0.0, abs(vW.z - edge)) * smoothstep(0.0, 1.0, vW.z);',
     '  col *= 0.80 + g*0.44;',
     /* "pale gleams the smile of the sea beach": the wet strip returns the sky */
     '  vec3 v = normalize(cameraPosition - vW);',
@@ -542,7 +479,6 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
     '  col *= 0.68 + lam*0.58;',
     /* a scatter of dry shell-white specks, so the sand is never flat */
-    '  col = mix(col, vec3(0.955,0.955,0.935), lace * 0.80);',
     '  float sp = step(0.9975, hash(floor(vW.xz*26.0)));',
     '  col = mix(col, vec3(0.95,0.93,0.88), sp*(1.0-wet)*0.45);',
     '  float d = length(cameraPosition - vW);',
@@ -555,136 +491,6 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
 }));
 sand.frustumCulled = false;
 scene.add(sand);
-
-/* ------------------------------------------------------------- WRECKS -- */
-/* "ships get wrecked in the trackless water, death is abroad and children play."
- * The children never look at these. That is the whole point of the poem, so the
- * wrecks sit far out where you have to choose to look for them. */
-
-/* A JS mirror of the sea surface, for floating things on. It must carry ALL
- * FOUR waves and the same shoal(): with only the first two it under-reports
- * the surface by up to half a metre, and anything floated on it spends most
- * of its life underneath the water. If the GLSL W0..W3 change, change these. */
-function seaHeightJS(x, z, t) {
-  var d = -z;
-  var runUp = Math.min(1, Math.max(0, (d + 1.5) / 14.5));
-  var deep = 0.62 + 0.38 * Math.min(1, Math.max(0, d / 90));
-  var rear = 1 + 1.30 * Math.exp(-Math.pow((d - 21) / 15, 2));
-  var f = runUp * runUp * (3 - 2 * runUp) * deep * rear;
-  var h = 0;
-  var W = [[0.00, -1.00, 1.15, 47.0], [0.26, -0.97, 0.66, 24.0],
-           [-0.19, -0.98, 0.37, 12.5], [0.44, -0.90, 0.19, 6.2]];
-  for (var i = 0; i < W.length; i++) {
-    var w = W[i], k = 6.28318 / w[3], c = Math.sqrt(9.8 / k);
-    var L = Math.hypot(w[0], w[1]);
-    h += w[2] * Math.sin(k * ((w[0] / L) * x + (w[1] / L) * z) - c * k * t * 0.42);
-  }
-  return h * f;
-}
-
-/* a hull as a parametric U-section that tapers to a prow and stops, torn off,
- * partway down its own length */
-function hullGeometry(len, beam, depth, uEnd) {
-  var NU = 26, NT = 14, pos = [], idx = [];
-  function half(u) { return (beam / 2) * Math.pow(Math.sin(Math.PI * Math.min(u, 0.999)), 0.62); }
-  function dep(u) { return depth * (0.34 + 0.66 * Math.pow(Math.sin(Math.PI * Math.min(u, 0.999)), 0.5)); }
-  for (var i = 0; i <= NU; i++) {
-    var u = (i / NU) * uEnd;
-    for (var j = 0; j <= NT; j++) {
-      var t = -1 + 2 * (j / NT);
-      pos.push(half(u) * t, -dep(u) * (1 - t * t), len * (u - 0.5));
-    }
-  }
-  for (i = 0; i < NU; i++) for (var j2 = 0; j2 < NT; j2++) {
-    var a = i * (NT + 1) + j2, b = a + NT + 1;
-    idx.push(a, b, a + 1, a + 1, b, b + 1);
-  }
-  var g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return { geo: g, half: half, dep: dep };
-}
-
-var WOOD = new THREE.MeshLambertMaterial({ color: 0x4a3f33, side: THREE.DoubleSide });
-var WOOD_DARK = new THREE.MeshLambertMaterial({ color: 0x332c24 });
-var CANVAS_MAT = new THREE.MeshLambertMaterial({ color: 0xb9b2a0, side: THREE.DoubleSide, transparent: true, opacity: 0.93 });
-
-function buildWreck(len, list) {
-  var w = new THREE.Object3D();
-  var h = hullGeometry(len, len * 0.20, len * 0.135, 0.64);
-  var hull = new THREE.Mesh(h.geo, WOOD);
-  w.add(hull);
-
-  /* the ribs the missing stern left behind */
-  for (var i = 0; i < 5; i++) {
-    var u = 0.645 + i * 0.048;
-    var hb = h.half(u), dp = h.dep(u), reach = 1 - i * 0.16;
-    var pts = [];
-    for (var k = 0; k <= 8; k++) {
-      var t = -reach + 2 * reach * (k / 8);
-      pts.push(new THREE.Vector3(hb * t, -dp * (1 - t * t), len * (u - 0.5)));
-    }
-    var rib = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, len * 0.009, 5, false), WOOD_DARK);
-    w.add(rib);
-  }
-
-  /* a mast snapped off short, and the spar still hanging from it */
-  var mast = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.007, len * 0.013, len * 0.52, 7), WOOD_DARK);
-  mast.position.set(0, len * 0.20, -len * 0.10);
-  mast.rotation.z = 0.62; mast.rotation.x = -0.17;
-  w.add(mast);
-  var spar = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.005, len * 0.006, len * 0.30, 6), WOOD_DARK);
-  spar.position.set(-len * 0.14, len * 0.30, -len * 0.10);
-  spar.rotation.z = Math.PI / 2 - 0.35; spar.rotation.y = 0.5;
-  w.add(spar);
-
-  /* torn canvas, still caught on the spar */
-  var sailGeo = new THREE.PlaneGeometry(len * 0.26, len * 0.30, 7, 7);
-  (function tear() {
-    var p = sailGeo.attributes.position;
-    for (var v = 0; v < p.count; v++) {
-      var sx = p.getX(v), sy = p.getY(v);
-      var slack = (1 - Math.abs(sx) / (len * 0.13)) * (0.5 - sy / (len * 0.30));
-      p.setZ(v, Math.sin(sx * 1.4) * len * 0.02 * slack);
-      /* the lower corner is gone */
-      if (sy < -len * 0.06 && sx > len * 0.03) p.setY(v, sy + (sx / (len * 0.13)) * len * 0.09);
-    }
-    sailGeo.computeVertexNormals();
-  })();
-  var sail = new THREE.Mesh(sailGeo, CANVAS_MAT);
-  sail.position.set(-len * 0.16, len * 0.17, -len * 0.105);
-  sail.rotation.set(0.2, 0.55, -0.3);
-  w.add(sail);
-
-  w.userData.len = len;
-  scene.add(w);
-  list.push(w);
-  return w;
-}
-
-/* Three of them, re-tiled along an endless shore with a long period so a wreck
- * never pops into being anywhere near you. */
-var WRECK_PERIOD = 3000;
-var wrecks = [];
-var WRECK_SPOTS = [
-  { x: -105, z: -385,  len: 44, list: 0.52, yaw: 0.9,  sink: 1.05 },
-  { x:  420, z: -880,  len: 46, list: -0.70, yaw: -2.1, sink: 0.55 },
-  { x: -760, z: -1650, len: 52, list: 0.34, yaw: 1.9,  sink: 0.20 }
-];
-WRECK_SPOTS.forEach(function (sp) { sp.obj = buildWreck(sp.len, wrecks); });
-
-function updateWrecks(t, camX) {
-  for (var i = 0; i < WRECK_SPOTS.length; i++) {
-    var sp = WRECK_SPOTS[i], o = sp.obj;
-    var x = sp.x + Math.round((camX - sp.x) / WRECK_PERIOD) * WRECK_PERIOD;
-    var bob = seaHeightJS(x, sp.z, t + i * 7.0);
-    o.position.set(x, sp.sink + bob * 0.55, sp.z);
-    /* it does not sail; it is worked on by the water */
-    o.rotation.set(Math.sin(t * 0.21 + i) * 0.035, sp.yaw, sp.list + Math.sin(t * 0.17 + i * 2.1) * 0.045);
-  }
-}
 
 /* ------------------------------------------------------------ CHILDREN -- */
 /* "On the seashore of endless worlds children meet." They are the subject of
@@ -767,7 +573,6 @@ var iShadow = inst(shadowGeo, new THREE.MeshBasicMaterial({
 }), POOL);
 
 var _c = new THREE.Color();
-var _dummy = new THREE.Object3D();
 (function paintChildren() {
   for (var i = 0; i < POOL; i++) {
     iTorso.setColorAt(i, _c.setHex(CLOTH[Math.floor(h1(i * 7.3) * CLOTH.length) % CLOTH.length]));
@@ -779,90 +584,6 @@ var _dummy = new THREE.Object3D();
   }
   [iTorso, iHead, iArm, iLeg, iShadow].forEach(function (m) { m.instanceColor.needsUpdate = true; });
 })();
-
-/* the things their play is made of: sand houses, empty shells, pebbles */
-
-/* a sandcastle turret, drip-built in tiers, as a single lathe profile */
-var turretGeo = new THREE.LatheGeometry([
-  new THREE.Vector2(0.000, 0.335), new THREE.Vector2(0.052, 0.320),
-  new THREE.Vector2(0.056, 0.245), new THREE.Vector2(0.098, 0.236),
-  new THREE.Vector2(0.102, 0.172), new THREE.Vector2(0.148, 0.164),
-  new THREE.Vector2(0.152, 0.104), new THREE.Vector2(0.208, 0.096),
-  new THREE.Vector2(0.212, 0.044), new THREE.Vector2(0.285, 0.036),
-  new THREE.Vector2(0.300, 0.000)
-], 11);
-/* the low wall they push up around it with the sides of their hands */
-var wallGeo = new THREE.TorusGeometry(0.50, 0.062, 5, 14, Math.PI * 1.35);
-wallGeo.rotateX(-Math.PI / 2); wallGeo.scale(1, 0.62, 1);
-
-var shellGeo = new THREE.SphereGeometry(0.068, 7, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-shellGeo.scale(1, 0.42, 0.78);
-var pebbleGeo = new THREE.IcosahedronGeometry(0.040, 0);
-pebbleGeo.scale(1, 0.66, 0.88);
-
-var matSandProp = new THREE.MeshLambertMaterial({ color: 0x8b7a5e });
-var matShell = new THREE.MeshLambertMaterial({ color: 0xf8f4ea });
-var matPebble = new THREE.MeshLambertMaterial({ color: 0x6d675e });
-
-var SHELL_POOL = 900, PEBBLE_POOL = 900, TURRET_POOL = 300, WALL_POOL = 110;
-var iTurret = inst(turretGeo, matSandProp, TURRET_POOL);
-var iWall   = inst(wallGeo, matSandProp, WALL_POOL);
-var iShell  = inst(shellGeo, matShell, SHELL_POOL);
-var iPebble = inst(pebbleGeo, matPebble, PEBBLE_POOL);
-
-/* ---- leaf boats -------------------------------------------------------- */
-/* "With withered leaves they weave their boats and smilingly float them on the
- * vast deep." A leaf whose edges curl up is already a boat; that is the whole
- * geometry. They only ever go outward, and they never come back. */
-var leafGeo = (function () {
-  var NU = 14, NT = 8, pos = [], idx = [];
-  for (var i = 0; i <= NU; i++) {
-    var u = i / NU;
-    var w = 0.102 * Math.pow(Math.sin(Math.PI * u), 0.75);   // pointed at both ends
-    for (var j = 0; j <= NT; j++) {
-      var t = -1 + 2 * (j / NT);
-      pos.push(w * t, 0.048 * t * t - 0.013 * Math.sin(Math.PI * u), 0.46 * (u - 0.5));
-    }
-  }
-  for (i = 0; i < NU; i++) for (var j2 = 0; j2 < NT; j2++) {
-    var a = i * (NT + 1) + j2, b = a + NT + 1;
-    idx.push(a, b, a + 1, a + 1, b, b + 1);
-  }
-  var g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx); g.computeVertexNormals();
-  return g;
-})();
-var BOATS = 190, BOAT_TILE = 120, BOAT_RUN = 150;  // metres a boat travels before it is gone
-var iBoat = inst(leafGeo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, flatShading: true }), BOATS);
-(function paintBoats() {
-  var LEAF = [0xbd9a55, 0xd0ab60, 0xa8873f, 0xc49b4e, 0x967a3d];
-  for (var i = 0; i < BOATS; i++) iBoat.setColorAt(i, _c.setHex(LEAF[i % LEAF.length]));
-  iBoat.instanceColor.needsUpdate = true;
-})();
-
-function updateBoats(t, camX) {
-  for (var i = 0; i < BOATS; i++) {
-    var lane = (h1(i * 5.7) - 0.5) * BOAT_TILE;
-    var bx = lane + Math.round((camX - lane) / BOAT_TILE) * BOAT_TILE;
-    var speed = 0.45 + h1(i * 2.3 + 4) * 0.42;
-    var prog = ((t * speed + h1(i * 9.1 + 31) * BOAT_RUN) % BOAT_RUN) / BOAT_RUN;
-    var z = -1.2 - prog * BOAT_RUN;
-    /* they wander a little as they go; nobody is steering */
-    var x = bx + Math.sin(t * 0.13 + i) * 1.4 + prog * (h1(i * 3.3 + 7) - 0.5) * 14;
-    var y = seaHeightJS(x, z, t);
-    var e = 0.6;
-    var slopeZ = seaHeightJS(x, z + e, t) - seaHeightJS(x, z - e, t);
-    var slopeX = seaHeightJS(x + e, z, t) - seaHeightJS(x - e, z, t);
-    _dummy.position.set(x, y + 0.035, z);
-    _dummy.rotation.set(-slopeZ / (2 * e), h1(i * 1.7) * 6.28 + Math.sin(t * 0.21 + i) * 0.25, slopeX / (2 * e));
-    _dummy.scale.setScalar(1.0 + h1(i * 4.9 + 2) * 0.6);
-    _dummy.updateMatrix();
-    iBoat.setMatrixAt(i, _dummy.matrix);
-  }
-  iBoat.count = BOATS;
-  iBoat.instanceMatrix.needsUpdate = true;
-}
 
 /* the five things a child on this shore is doing */
 var RUN = 0, BUILD = 1, DANCE = 2, SCATTER = 3, WATCH = 4;
@@ -933,28 +654,18 @@ function poseChild(state, t, lean) {
 var _m = new THREE.Matrix4();
 function readPart(node, mesh, slot) { mesh.setMatrixAt(slot, node.matrixWorld); }
 
-var PROP_RANGE = 190;   // props are small; drawing them to the horizon is waste
 function updateChildren(t, camX) {
   var gMin = Math.floor((camX - CHILD_RANGE) / GROUP_SPAN);
   var gMax = Math.ceil((camX + CHILD_RANGE) / GROUP_SPAN);
-  var n = 0, nSh = 0, nPb = 0, nTu = 0, nWa = 0;
-
-  function putProp(mesh, slot, x, y, z, rot, sc) {
-    _dummy.position.set(x, y, z);
-    _dummy.rotation.set(0, rot, 0);
-    _dummy.scale.setScalar(sc);
-    _dummy.updateMatrix();
-    mesh.setMatrixAt(slot, _dummy.matrix);
-  }
+  var n = 0;
 
   for (var g = gMin; g <= gMax && n < POOL; g++) {
     var ax = g * GROUP_SPAN + (h2(g, 1) - 0.5) * 26;
-    var az = 5.2 + h2(g, 2) * 10.5;              // just landward of where the water reaches
+    var az = 2.0 + h2(g, 2) * 9.5;                // the gathering sits at the water's edge
     var size = 4 + Math.floor(h2(g, 3) * 7);      // 4..10 children in a knot
 
     for (var c = 0; c < size && n < POOL; c++) {
-      var state = c === 0 ? BUILD : c === 1 ? SCATTER
-                : STATE_MIX[Math.floor(h2(g, 50 + c) * STATE_MIX.length)];
+      var state = STATE_MIX[Math.floor(h2(g, 50 + c) * STATE_MIX.length)];
       var ring = h2(g, 10 + c) * TAU2;
       var rad = 0.8 + h2(g, 30 + c) * 3.2;
       var spd = 0.75 + h2(g, 70 + c) * 0.7;
@@ -975,7 +686,7 @@ function updateChildren(t, camX) {
         /* face the middle of your own group, roughly — this is what "meet" looks like */
         yaw = Math.atan2(ax - cx, az - cz) + (h2(g, 110 + c) - 0.5) * 0.9;
       }
-      cz = Math.max(4.2, Math.min(34, cz));       // never into the water
+      cz = Math.max(1.15, Math.min(34, cz));      // never into the water
 
       var scale = 0.80 + h2(g, 130 + c) * 0.44;   // a range of ages, four years old to ten
       poseChild(state, t * spd + ph, (h2(g, 150 + c) - 0.5) * 0.12);
@@ -994,62 +705,9 @@ function updateChildren(t, camX) {
       _m.setPosition(cx, rig.position.y + 0.012, cz);
       iShadow.setMatrixAt(n, _m);
       n++;
-
-      if (Math.abs(cx - camX) > PROP_RANGE) continue;
-
-      /* empty shells and pebbles lie where the children are, not evenly over
-       * the sand — they were carried here and dropped */
-      for (var q = 0; q < 3 && nSh < SHELL_POOL; q++) {
-        var sa = h2(g, 170 + c * 3 + q) * TAU2, sr = 0.5 + h2(g, 200 + c * 3 + q) * 2.6;
-        var sx = cx + Math.cos(sa) * sr, sz = Math.max(3.4, cz + Math.sin(sa) * sr);
-        putProp(iShell, nSh++, sx, groundY(sx, sz) + 0.008, sz,
-                h2(g, 230 + c * 3 + q) * TAU2, 0.7 + h2(g, 260 + c * 3 + q) * 0.7);
-      }
-      if (nPb < PEBBLE_POOL) {
-        var pa = h2(g, 290 + c) * TAU2, pr = 0.4 + h2(g, 310 + c) * 2.2;
-        var px = cx + Math.cos(pa) * pr, pz = Math.max(3.4, cz + Math.sin(pa) * pr);
-        putProp(iPebble, nPb++, px, groundY(px, pz) + 0.006, pz, h2(g, 330 + c) * TAU2,
-                0.8 + h2(g, 350 + c) * 0.8);
-      }
-
-      /* what the builders are building, right where they are reaching */
-      if (state === BUILD && nTu + 3 <= TURRET_POOL) {
-        var fx = cx - Math.sin(yaw) * 0.62, fz = cz - Math.cos(yaw) * 0.62;
-        for (var u = 0; u < 3; u++) {
-          var ta = h2(g, 370 + c * 3 + u) * TAU2, tr = h2(g, 400 + c * 3 + u) * 0.42;
-          var tx = fx + Math.cos(ta) * tr, tz = fz + Math.sin(ta) * tr;
-          putProp(iTurret, nTu++, tx, groundY(tx, tz) - 0.01, tz, ta,
-                  (0.95 + h2(g, 430 + c * 3 + u) * 0.80) * scale);
-        }
-        if (nWa < WALL_POOL) putProp(iWall, nWa++, fx, groundY(fx, fz) - 0.02, fz, yaw + 2.6, 0.95 * scale);
-      }
-
-      /* pebbles gathered and scattered again: the stones actually leave the
-       * hand, fly, land — and then it starts over, for no reason at all */
-      if (state === SCATTER) {
-        var sph = ((t * spd + ph) * 0.55) % 1;
-        if (sph >= 0.42) {
-          var tau = (sph - 0.42) / 0.58 * 0.95;
-          var hx = cx - Math.sin(yaw) * 0.22, hz = cz - Math.cos(yaw) * 0.22;
-          var hy = groundY(cx, cz) + 0.64 * scale;
-          for (var b = 0; b < 5 && nPb < PEBBLE_POOL; b++) {
-            var spread = (h2(g, 460 + c * 5 + b) - 0.5) * 1.5;
-            var vf = 2.0 + h2(g, 490 + c * 5 + b) * 1.6;
-            var vy = 2.1 + h2(g, 520 + c * 5 + b) * 1.5;
-            var dx2 = -Math.sin(yaw + spread), dz2 = -Math.cos(yaw + spread);
-            var bx2 = hx + dx2 * vf * tau, bz2 = hz + dz2 * vf * tau;
-            var by2 = hy + vy * tau - 4.9 * tau * tau;
-            putProp(iPebble, nPb++, bx2, Math.max(groundY(bx2, bz2) + 0.006, by2), bz2,
-                    tau * 9.0, 0.8 + h2(g, 550 + c * 5 + b) * 0.7);
-          }
-        }
-      }
     }
   }
 
-  iTurret.count = nTu; iWall.count = nWa; iShell.count = nSh; iPebble.count = nPb;
-  iTurret.instanceMatrix.needsUpdate = true; iWall.instanceMatrix.needsUpdate = true;
-  iShell.instanceMatrix.needsUpdate = true; iPebble.instanceMatrix.needsUpdate = true;
   iTorso.count = n; iHead.count = n; iShadow.count = n;
   iArm.count = n * 2; iLeg.count = n * 2;
   iTorso.instanceMatrix.needsUpdate = true;
@@ -1228,14 +886,7 @@ function frame() {
   }
   seaUniforms.uTime.value = simT;
   sandUniforms.uTime.value = simT;
-  sky.material.uniforms.uTime.value = simT;
-  /* it roams: never here, never gone */
-  var stormAz = Math.PI + 0.62 * Math.sin(simT * 0.0125) + 0.22 * Math.sin(simT * 0.041);
-  sky.material.uniforms.uStormAz.value = stormAz;
-  seaUniforms.uStormAz.value = stormAz;
   updateChildren(simT, camera.position.x);
-  updateWrecks(simT, camera.position.x);
-  updateBoats(simT, camera.position.x);
   sky.position.copy(camera.position);
   sea.position.x = Math.round(camera.position.x / 200) * 200;
   sand.position.x = Math.round(camera.position.x / 400) * 400; // the shore never ends
@@ -1285,7 +936,6 @@ requestAnimationFrame(function () {
 window.__G60 = {
   scene: scene, camera: camera, player: player, CAMS: CAMS,
   children: { torso: iTorso, head: iHead, shadow: iShadow },
-  boats: iBoat, seaHeightJS: seaHeightJS,
   groupsNear: function (x) {
     var out = [], gMin = Math.floor((x - CHILD_RANGE) / GROUP_SPAN), gMax = Math.ceil((x + CHILD_RANGE) / GROUP_SPAN);
     for (var g = gMin; g <= gMax; g++) {
