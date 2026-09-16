@@ -150,6 +150,10 @@
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen clock, no UI
 var FROZEN_T = 21.0;
+/* Software GL would otherwise faithfully render every frame of Chrome's virtual-time
+ * budget, which takes minutes per image. In shot mode we draw a few frames and stop. */
+var SHOT_FRAMES = 3;
+var shotFrames = 0;
 
 /* ---------------------------------------------------------------- POEM -- */
 /* Eight stations. Each is a place in the world, not a page of text. */
@@ -627,6 +631,7 @@ function frame(now) {
   drawGrove();
   if (!SHOT) updateSubs();
 
+  if (SHOT && ++shotFrames >= SHOT_FRAMES) return;   // the frame is settled; let Chrome grab it
   requestAnimationFrame(frame);
 }
 
