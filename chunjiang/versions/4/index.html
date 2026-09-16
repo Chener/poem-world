@@ -196,7 +196,7 @@ var CAMS = [
   { name: 'moon-path',   x:  -7, z:   5, yaw: 2.86,     pitch: -0.020 },
   { name: 'flower-grove',x:   9, z:   1, yaw: 3.62,     pitch: -0.020 },
   { name: 'sandbar',     x:   2, z:  -3, yaw: 1.62,     pitch: -0.055 },
-  { name: 'boat',        x: -10, z:  -8, yaw: 3.126,    pitch: -0.010 },
+  { name: 'boat',        x: -10, z:  -8, yaw: 2.30,     pitch: -0.020 },
   { name: 'river-trees', x:   5, z:  10, yaw: 0.35,     pitch:  0.000 }
 ];
 
@@ -239,7 +239,7 @@ function edgeR(th) {
   /* a small bar, not an island: the river has to own the frame */
   return 17 + 3.0 * Math.sin(th * 2 + 0.7) + 1.5 * Math.sin(th * 5 - 1.1) + 0.8 * Math.sin(th * 9 + 2.3);
 }
-var BAR = 3.6;                       // a low dune: high enough to see the river from
+var BAR = 5.2;                       // a low dune: high enough to see the river from
 function gh(x, z) {
   var r = Math.hypot(x, z);
   var R = edgeR(Math.atan2(z, x));
@@ -253,13 +253,13 @@ for (var i = 0; i < 360; i++) {
 }
 
 /* the moon: low over the water, the centre of gravity of the whole night */
-var MOON = { th: Math.PI * 1.5, dist: 620, y: 96, r: 56 };
+var MOON = { th: Math.PI * 1.5, dist: 620, y: 128, r: 46 };
 MOON.x = Math.cos(MOON.th) * MOON.dist;
 MOON.z = Math.sin(MOON.th) * MOON.dist;
 
 /* white sand grains, so the bar reads as sand and not as a floor */
 var grains = [];
-for (var i2 = 0; i2 < 3400; i2++) {
+for (var i2 = 0; i2 < 1500; i2++) {
   var a2 = rnd() * Math.PI * 2, r2 = Math.sqrt(rnd()) * 1;
   var th2 = a2, rr2 = r2 * edgeR(th2) * 0.985;
   grains.push({ x: Math.cos(th2) * rr2, z: Math.sin(th2) * rr2, m: rnd() });
@@ -267,10 +267,8 @@ for (var i2 = 0; i2 < 3400; i2++) {
 
 /* 花林: a grove whose blossom reads as sleet under the moon */
 var grove = [];
-for (var i3 = 0; i3 < 22; i3++) {
-  /* 江流宛转绕芳甸 — the fragrant meadow sits just across the channel, not on the horizon */
-  var a3 = (i3 < 13 ? -0.42 + i3 * 0.070 : -0.62 + (i3 - 13) * 0.10);
-  var r3 = (i3 < 13 ? 25 + (i3 % 5) * 3.4 : 62 + (i3 % 4) * 5.5);
+for (var i3 = 0; i3 < 16; i3++) {
+  var a3 = -0.62 + i3 * 0.088, r3 = 62 + (i3 % 4) * 5.5;
   grove.push({ x: Math.cos(a3) * r3, z: Math.sin(a3) * r3, h: 4.6 + rnd() * 3.0, seed: rnd() * 6.28 });
 }
 
@@ -290,10 +288,10 @@ for (var c4 = 0; c4 < 11; c4++) {            // clumps, with gaps of open water 
 /* 扁舟: one small boat, drifting, never arriving */
 /* Placed so that the station whose subtitle names them can see them: the boat
  * crosses the view from the 'boat' camera, the tower stands beyond it. */
-var boat = { th: -2.09, r: 43, drift: 0.0065 };
+var boat = { th: -1.72, r: 54, drift: 0.0065 };
 
 /* 明月楼: a tower on the far bank with exactly one window lit */
-var TOWER = { x: 22, z: -95 };
+var TOWER = { x: 48, z: -78 };
 
 /* --------------------------------------------------------------- DRAW  -- */
 function seg(a, b, col, w) {
@@ -327,42 +325,21 @@ function drawSky() {
 function drawMoon() {
   var p = project({ x: MOON.x, y: MOON.y, z: MOON.z });
   if (!p) return null;
-  var breath = 1 + 0.012 * Math.sin(T * 0.23);
-  var rad = MOON.r * p.s * 0.55 * breath;
-
-  /* 皎皎空中孤月轮 — most of moonlight is halo, and a halo has layers */
-  var rings = [
-    [14, 0.050], [7.5, 0.085], [3.6, 0.130], [1.9, 0.200]
-  ];
-  for (var hi = 0; hi < rings.length; hi++) {
-    var k = rings[hi][0], a0 = rings[hi][1] * (0.88 + 0.12 * Math.sin(T * 0.31 + hi));
-    var hg = ctx.createRadialGradient(p.x, p.y, rad * 0.7, p.x, p.y, rad * k);
-    hg.addColorStop(0, 'rgba(226,238,252,' + a0.toFixed(3) + ')');
-    hg.addColorStop(0.35, 'rgba(198,218,242,' + (a0 * 0.34).toFixed(3) + ')');
-    hg.addColorStop(1, 'rgba(170,196,228,0)');
-    ctx.fillStyle = hg;
-    ctx.fillRect(p.x - rad * k, p.y - rad * k, rad * k * 2, rad * k * 2);
-  }
-
-  /* the disc: bright, but not a cut-out — the limb has to give way to the halo */
-  var disc = ctx.createRadialGradient(p.x - rad * 0.22, p.y - rad * 0.26, rad * 0.05, p.x, p.y, rad);
-  disc.addColorStop(0, '#ffffff');
-  disc.addColorStop(0.55, '#f4f8fd');
-  disc.addColorStop(0.88, '#e2eaf5');
-  disc.addColorStop(1, 'rgba(214,226,242,.72)');
+  var rad = MOON.r * p.s * 0.55;
+  /* the halo first: moonlight is mostly halo */
+  var halo = ctx.createRadialGradient(p.x, p.y, rad * 0.8, p.x, p.y, rad * 11);
+  halo.addColorStop(0, 'rgba(226,236,248,.30)');
+  halo.addColorStop(0.25, 'rgba(188,208,232,.10)');
+  halo.addColorStop(1, 'rgba(160,186,220,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(p.x - rad * 11, p.y - rad * 11, rad * 22, rad * 22);
+  /* 皎皎空中孤月轮 */
+  var disc = ctx.createRadialGradient(p.x - rad * 0.25, p.y - rad * 0.3, rad * 0.1, p.x, p.y, rad);
+  disc.addColorStop(0, '#fbfdff');
+  disc.addColorStop(0.72, '#eef4fb');
+  disc.addColorStop(1, '#d7e3f0');
   ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
   ctx.fillStyle = disc; ctx.fill();
-
-  /* the faintest mottling, so the disc has a surface rather than being a hole in the sky */
-  for (var mi = 0; mi < 9; mi++) {
-    var ma = mi * 2.39996, mr = rad * (0.16 + 0.62 * ((mi * 37 % 11) / 11));
-    var mx = p.x + Math.cos(ma) * mr * 0.72, my = p.y + Math.sin(ma) * mr * 0.72;
-    var ms = rad * (0.10 + 0.16 * ((mi * 53 % 7) / 7));
-    var mg = ctx.createRadialGradient(mx, my, 0, mx, my, ms);
-    mg.addColorStop(0, 'rgba(206,218,236,.18)');
-    mg.addColorStop(1, 'rgba(206,218,236,0)');
-    ctx.fillStyle = mg; ctx.fillRect(mx - ms, my - ms, ms * 2, ms * 2);
-  }
   return p;
 }
 
@@ -381,71 +358,47 @@ function drawFarBank() {
     ctx.lineWidth = Math.max(0.9, b.w * p.s * 4);
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
   }
-  /* 明月楼 — 何处相思明月楼: eaves that lift at the corners, a railing, one lit window,
-   * and the whole of it lying broken on the water. */
-  var TW = 6.4;
-  function tface(y0, y1, half, fill) {
+  /* 明月楼 — 何处相思明月楼: one window, lit, and the water carries it back */
+  var TW = 6.2, roof = 'rgba(20,27,40,.96)', wall = 'rgba(32,42,58,.94)';
+  function storey(y0, y1, half) {
     poly([{ x: TOWER.x - half, y: y0, z: TOWER.z }, { x: TOWER.x + half, y: y0, z: TOWER.z },
-          { x: TOWER.x + half, y: y1, z: TOWER.z }, { x: TOWER.x - half, y: y1, z: TOWER.z }],
-         fill, null);
+          { x: TOWER.x + half, y: y1, z: TOWER.z }, { x: TOWER.x - half, y: y1, z: TOWER.z }], wall, null);
   }
-  function teaves(y, half, lift) {
-    /* the curve is the point: a Tang eave turns up at its ends */
-    var l0 = project({ x: TOWER.x - half, y: y, z: TOWER.z });
-    var r0 = project({ x: TOWER.x + half, y: y, z: TOWER.z });
-    var lt = project({ x: TOWER.x - half * 0.95, y: y + lift * 0.55, z: TOWER.z });
-    var rt = project({ x: TOWER.x + half * 0.95, y: y + lift * 0.55, z: TOWER.z });
-    var mid = project({ x: TOWER.x, y: y + lift, z: TOWER.z });
-    var inl = project({ x: TOWER.x - half * 0.42, y: y + lift * 0.92, z: TOWER.z });
-    var inr = project({ x: TOWER.x + half * 0.42, y: y + lift * 0.92, z: TOWER.z });
-    if (!l0 || !r0 || !lt || !rt || !mid || !inl || !inr) return;
-    ctx.beginPath();
-    ctx.moveTo(l0.x, l0.y);
-    ctx.quadraticCurveTo(lt.x, lt.y - 2, inl.x, inl.y);
-    ctx.lineTo(inr.x, inr.y);
-    ctx.quadraticCurveTo(rt.x, rt.y - 2, r0.x, r0.y);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(19,26,40,.97)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(196,214,240,.34)'; ctx.lineWidth = 1; ctx.stroke();
+  function eaves(y, half, lift) {
+    poly([{ x: TOWER.x - half, y: y, z: TOWER.z }, { x: TOWER.x + half, y: y, z: TOWER.z },
+          { x: TOWER.x + half * 0.52, y: y + lift, z: TOWER.z },
+          { x: TOWER.x - half * 0.52, y: y + lift, z: TOWER.z }], roof, null);
   }
-  function trail(y, half) {                 // the railing of the upper storey
-    var n = 9;
-    for (var ri = 0; ri <= n; ri++) {
-      var xx = TOWER.x - half + (2 * half) * (ri / n);
-      var a2 = project({ x: xx, y: y, z: TOWER.z });
-      var b2 = project({ x: xx, y: y + 0.85, z: TOWER.z });
-      if (!a2 || !b2) continue;
-      ctx.strokeStyle = 'rgba(186,206,236,.30)'; ctx.lineWidth = 0.9;
-      ctx.beginPath(); ctx.moveTo(a2.x, a2.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
-    }
-    var ha = project({ x: TOWER.x - half, y: y + 0.85, z: TOWER.z });
-    var hb = project({ x: TOWER.x + half, y: y + 0.85, z: TOWER.z });
-    if (ha && hb) {
-      ctx.strokeStyle = 'rgba(196,214,240,.40)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(ha.x, ha.y); ctx.lineTo(hb.x, hb.y); ctx.stroke();
-    }
-  }
-
-  reflect(TOWER.x, TOWER.z, 20, TW * 0.7, 'rgba(178,198,228,$A)', 0.16);
-
-  tface(0, 9.2, TW * 0.70, 'rgba(26,35,52,.95)');
-  teaves(9.2, TW * 1.02, 2.2);
-  trail(11.0, TW * 0.62);
-  tface(11.9, 18.0, TW * 0.56, 'rgba(30,40,58,.95)');
-  teaves(18.0, TW * 0.90, 2.4);
-
-  var wp = project({ x: TOWER.x + 1.5, y: 13.9, z: TOWER.z - 0.25 });
+  storey(0, 9.5, TW * 0.72);
+  eaves(9.5, TW * 1.05, 2.1);
+  storey(11.6, 18.4, TW * 0.58);
+  eaves(18.4, TW * 0.92, 2.4);
+  var wp = project({ x: TOWER.x + 1.7, y: 14.2, z: TOWER.z - 0.25 });
   if (wp) {
-    var ws = Math.max(2.2, 2.0 * wp.s);
-    var gl = ctx.createRadialGradient(wp.x, wp.y, 0, wp.x, wp.y, ws * 6);
+    var ws = Math.max(2.4, 2.2 * wp.s);
+    var gl = ctx.createRadialGradient(wp.x, wp.y, 0, wp.x, wp.y, ws * 7);
     gl.addColorStop(0, 'rgba(255,206,138,.40)');
-    gl.addColorStop(0.35, 'rgba(255,196,124,.12)');
+    gl.addColorStop(0.35, 'rgba(255,196,124,.13)');
     gl.addColorStop(1, 'rgba(255,196,124,0)');
-    ctx.fillStyle = gl; ctx.fillRect(wp.x - ws * 6, wp.y - ws * 6, ws * 12, ws * 12);
-    ctx.fillStyle = 'rgba(255,222,168,.92)';
-    ctx.fillRect(wp.x - ws * 0.5, wp.y - ws * 0.8, ws, ws * 1.6);
+    ctx.fillStyle = gl; ctx.fillRect(wp.x - ws * 7, wp.y - ws * 7, ws * 14, ws * 14);
+    ctx.fillStyle = 'rgba(255,222,168,.90)';
+    ctx.fillRect(wp.x - ws * 0.55, wp.y - ws * 0.85, ws * 1.1, ws * 1.7);
     /* 玉户帘中卷不去 — the lamp lies down on the river and will not be rolled away */
-    reflect(TOWER.x + 1.5, TOWER.z, 15, 0.7, 'rgba(255,206,140,$A)', 0.24);
+    var base = project({ x: TOWER.x + 1.7, y: 0, z: TOWER.z - 0.25 });
+    if (base) {
+      for (var ri = 0; ri < 16; ri++) {
+        var t = ri / 16;
+        var yy = base.y + t * Math.max(8, 26 * base.s * 3);
+        var wob = Math.sin(T * 1.1 + ri * 0.8) * (1 + t * 4);
+        var len = ws * (1.0 + t * 3.2);
+        ctx.strokeStyle = 'rgba(255,206,140,' + (0.20 * (1 - t)).toFixed(3) + ')';
+        ctx.lineWidth = Math.max(0.8, ws * 0.35 * (1 - t * 0.6));
+        ctx.beginPath();
+        ctx.moveTo(base.x - len / 2 + wob, yy);
+        ctx.lineTo(base.x + len / 2 + wob, yy);
+        ctx.stroke();
+      }
+    }
   }
 }
 
@@ -500,44 +453,15 @@ function drawWater(moonP) {
       var flick = 0.42 + 0.58 * Math.sin(T * 1.7 + ph * 2.3);
       var alpha = (0.085 + 0.46 * near * near * flick) * flick * Math.max(0.2, 1 - along / 300);
       if (alpha < 0.014) continue;
-      /* seen at a grazing angle, a wavelet is a flat sliver: wide, and almost no height */
-      var len = Math.max(1.6, (0.35 + 1.5 * h1) * p.s * 2.2);
-      ctx.strokeStyle = 'rgba(214,232,252,' + (alpha * 0.55).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(0.6, p.s * 0.30);
+      /* a wavelet is a short bowed stroke, not a dash: 宛转, not ruled */
+      var len = Math.max(2.4, (0.5 + 1.1 * h1) * p.s * 2.6);
+      var bow = (h2 - 0.5) * len * 0.45;
+      ctx.strokeStyle = 'rgba(222,238,255,' + alpha.toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.8, p.s * 0.55);
       ctx.beginPath();
       ctx.moveTo(p.x - len / 2, p.y);
-      ctx.lineTo(p.x + len / 2, p.y);
+      ctx.quadraticCurveTo(p.x, p.y + bow, p.x + len / 2, p.y);
       ctx.stroke();
-    }
-
-    /* the road itself: sampled along the moon's azimuth so it never breaks, each rung
-     * flattened by perspective and dimming with distance — 滟滟随波千万里 */
-    for (var ri2 = 0; ri2 < 260; ri2++) {
-      var rd = 2.2 * Math.pow(1.028, ri2);
-      if (rd > 520) break;
-      if (rd < edgeR(Math.atan2(cam.z + uz * rd, cam.x + ux * rd)) * 0.2) continue;
-      var rhalf = 0.8 + rd * 0.062;
-      var rungs = 5;
-      for (var gj = 0; gj < rungs; gj++) {
-        var hh = Math.sin(ri2 * 7.13 + gj * 31.7) * 43758.5453; hh -= Math.floor(hh);
-        var lat = (hh * 2 - 1) * rhalf + Math.sin(T * 0.85 + ri2 * 0.28 + gj) * rhalf * 0.3;
-        var rx = cam.x + ux * rd + px * lat;
-        var rz = cam.z + uz * rd + pz * lat;
-        if (Math.hypot(rx, rz) < edgeR(Math.atan2(rz, rx))) continue;   // the bar interrupts it
-        var rp = project({ x: rx, y: 0, z: rz });
-        if (!rp) continue;
-        var axis = 1 - Math.min(1, Math.abs(lat) / rhalf);
-        var fl = 0.35 + 0.65 * Math.sin(T * 2.1 + ri2 * 0.7 + gj * 1.9);
-        var ra = (0.06 + 0.34 * fl) * axis * axis * Math.max(0.25, 1 - rd / 430) * Math.min(1, rd / 16);
-        if (ra < 0.02) continue;
-        var rlen = Math.min(30, Math.max(2.0, (0.6 + 1.4 * hh) * rp.s * 2.0));
-        ctx.strokeStyle = 'rgba(232,244,255,' + ra.toFixed(3) + ')';
-        ctx.lineWidth = Math.min(2.2, Math.max(0.7, rp.s * 0.30));
-        ctx.beginPath();
-        ctx.moveTo(rp.x - rlen / 2, rp.y);
-        ctx.lineTo(rp.x + rlen / 2, rp.y);
-        ctx.stroke();
-      }
     }
 
     /* 春江潮水连海平 — long crests crossing the road, walking in towards the bar */
@@ -571,85 +495,54 @@ function drawWater(moonP) {
   ctx.fillStyle = hg; ctx.fillRect(0, hy - 46, W, 76);
 }
 
-/* Anything standing on this river throws its light back, stretched and broken by
- * the swell: 江潭落月复西斜 — the water never gives an image back whole. */
-function reflect(x, z, height, halfWidth, colour, strength) {
-  var base = project({ x: x, y: 0, z: z });
-  if (!base) return;
-  var rows = 14;
-  var drop = Math.max(6, height * base.s * 0.85);
-  for (var i = 0; i < rows; i++) {
-    var t = i / rows;
-    var yy = base.y + t * drop;
-    var wob = Math.sin(T * 1.25 + i * 0.75 + x * 0.3) * (1.2 + t * 5.5);
-    var len = Math.max(3, halfWidth * 2 * base.s * (1 - t * 0.35));
-    var a = strength * (1 - t) * (0.55 + 0.45 * Math.sin(T * 1.9 + i * 1.3));
-    if (a < 0.012) continue;
-    ctx.strokeStyle = colour.replace('$A', a.toFixed(3));
-    ctx.lineWidth = Math.max(0.8, base.s * 0.5 * (1 - t * 0.4));
-    ctx.beginPath();
-    ctx.moveTo(base.x - len / 2 + wob, yy);
-    ctx.lineTo(base.x + len / 2 + wob, yy);
-    ctx.stroke();
-  }
-}
-
 function drawBoat() {
-  /* 谁家今夜扁舟子 — a skiff: the sheer sweeps up at both ends, and it never arrives */
+  /* 谁家今夜扁舟子 — it drifts across, it does not arrive */
   var a = boat.th + T * boat.drift;
   var bx = Math.cos(a) * boat.r, bz = Math.sin(a) * boat.r;
-  var bob = Math.sin(T * 0.7) * 0.10;
-  var tilt = Math.sin(T * 0.53) * 0.06;
-
-  reflect(bx, bz, 3.2, 3.4, 'rgba(206,224,248,$A)', 0.22);
-
-  function P(dx, dy) { return project({ x: bx + dx, y: dy + bob, z: bz }); }
-  var bowU = P(3.6, 0.92 - tilt), bowL = P(2.9, 0.16 - tilt);
-  var strU = P(-3.6, 0.92 + tilt), strL = P(-2.9, 0.16 + tilt);
-  var midL = P(0, -0.04), midU = P(0, 0.74);
-  if (!bowU || !bowL || !strU || !strL || !midL || !midU) return;
-
-  ctx.beginPath();
-  ctx.moveTo(strU.x, strU.y);
-  ctx.quadraticCurveTo(strL.x, strL.y, midL.x, midL.y);       // the hull's bottom curve
-  ctx.quadraticCurveTo(bowL.x, bowL.y, bowU.x, bowU.y);
-  ctx.quadraticCurveTo(midU.x, midU.y - 2, strU.x, strU.y);   // the sheer line on top
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(12,18,30,.97)'; ctx.fill();
-  ctx.strokeStyle = 'rgba(222,236,254,.66)'; ctx.lineWidth = 1.2; ctx.stroke();
-
-  /* the awning: a bowed roof on two posts, the shape that says boat and not plank */
-  var aL = P(-1.7, 0.80), aR = P(1.7, 0.80), aTop = P(0, 2.35);
-  var aLT = P(-1.35, 1.75), aRT = P(1.35, 1.75);
-  if (aL && aR && aTop && aLT && aRT) {
-    ctx.beginPath();
-    ctx.moveTo(aL.x, aL.y);
-    ctx.lineTo(aLT.x, aLT.y);
-    ctx.quadraticCurveTo(aTop.x, aTop.y - 3, aRT.x, aRT.y);
-    ctx.lineTo(aR.x, aR.y);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(18,26,40,.95)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(210,226,248,.44)'; ctx.lineWidth = 1; ctx.stroke();
-  }
-
-  /* one pole, trailing in the water behind */
-  var pA = P(-2.2, 1.0), pB = P(-5.2, -0.05);
-  if (pA && pB) {
-    ctx.strokeStyle = 'rgba(206,222,246,.34)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(pA.x, pA.y); ctx.lineTo(pB.x, pB.y); ctx.stroke();
-  }
-
-  /* one small lantern under the awning */
-  var lp = P(0.5, 1.45);
+  var bob = Math.sin(T * 0.7) * 0.09;
+  var tilt = Math.sin(T * 0.53) * 0.05;
+  /* the hull: a shallow crescent, wider than it is tall, the way a river skiff sits */
+  var hull = [
+    { x: bx - 5.4, y: 0.58 + bob + tilt, z: bz },
+    { x: bx - 3.0, y: 0.02 + bob, z: bz },
+    { x: bx + 3.0, y: 0.02 + bob, z: bz },
+    { x: bx + 5.4, y: 0.58 + bob - tilt, z: bz },
+    { x: bx + 4.5, y: 1.42 + bob - tilt, z: bz },
+    { x: bx - 4.5, y: 1.42 + bob + tilt, z: bz }
+  ];
+  poly(hull, 'rgba(12,18,29,.97)', 'rgba(216,232,252,.62)');
+  /* the awning: the one curved line that says "boat" and not "plank" */
+  var aw = [
+    { x: bx - 2.6, y: 1.42 + bob, z: bz }, { x: bx + 2.6, y: 1.42 + bob, z: bz },
+    { x: bx + 1.7, y: 3.25 + bob, z: bz }, { x: bx - 1.7, y: 3.25 + bob, z: bz }
+  ];
+  poly(aw, 'rgba(18,25,38,.95)', 'rgba(206,224,246,.40)');
+  /* one small lantern: the only warm thing out on the water */
+  var lp = project({ x: bx + 0.7, y: 2.30 + bob, z: bz });
   if (lp) {
-    var ls = Math.max(1.4, 1.1 * (project({ x: bx, y: 0, z: bz }) || { s: 1 }).s);
-    var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, ls * 3.4);
-    lg.addColorStop(0, 'rgba(255,198,126,.34)');
+    var ls = Math.max(1.4, 1.1 * lp.s);
+    var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, ls * 6);
+    lg.addColorStop(0, 'rgba(255,198,126,.55)');
     lg.addColorStop(1, 'rgba(255,198,126,0)');
-    ctx.fillStyle = lg; ctx.fillRect(lp.x - ls * 3.4, lp.y - ls * 3.4, ls * 6.8, ls * 6.8);
+    ctx.fillStyle = lg; ctx.fillRect(lp.x - ls * 6, lp.y - ls * 6, ls * 12, ls * 12);
     ctx.fillStyle = 'rgba(255,224,176,.92)';
-    ctx.fillRect(lp.x - ls * 0.32, lp.y - ls * 0.42, ls * 0.64, ls * 0.84);
-    reflect(bx + 0.5, bz, 2.0, 0.5, 'rgba(255,206,140,$A)', 0.26);
+    ctx.fillRect(lp.x - ls * 0.35, lp.y - ls * 0.45, ls * 0.7, ls * 0.9);
+  }
+  /* its reflection: the hull broken into a few rungs of light under it */
+  var bp = project({ x: bx, y: 0, z: bz });
+  if (bp) {
+    for (var k = 0; k < 9; k++) {
+      var t = k / 9;
+      var yy = bp.y + t * Math.max(5, 14 * bp.s * 2.2);
+      var wob = Math.sin(T * 1.3 + k) * (0.6 + t * 3);
+      var len = Math.max(4, (3.0 - t * 1.4) * bp.s * 2.2);
+      ctx.strokeStyle = 'rgba(200,220,244,' + (0.16 * (1 - t)).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.8, 1.6 * (1 - t * 0.5));
+      ctx.beginPath();
+      ctx.moveTo(bp.x - len / 2 + wob, yy);
+      ctx.lineTo(bp.x + len / 2 + wob, yy);
+      ctx.stroke();
+    }
   }
 }
 
@@ -693,127 +586,57 @@ function drawSandbar() {
     if (pts[0].x > pts[pts.length - 1].x) pts.reverse();   // always draw the lip left to right
     ctx.beginPath();
     ctx.moveTo(-4, H + 4);
-    ctx.lineTo(-4, pts[0].y);                 // carry the lip out to the frame edge first,
-    for (i9 = 0; i9 < pts.length; i9++) ctx.lineTo(pts[i9].x, pts[i9].y);
-    ctx.lineTo(W + 4, pts[pts.length - 1].y); // else the corners cut off as dark wedges
+    ctx.lineTo(pts[0].x, pts[0].y);
+    for (i9 = 1; i9 < pts.length; i9++) ctx.lineTo(pts[i9].x, pts[i9].y);
+    /* close across the whole bottom: the ground under your own feet is always there */
     ctx.lineTo(W + 4, H + 4);
     ctx.closePath();
-    /* 汀上白沙看不见 — not because it is dark, because it is white under this moon */
-    var g = ctx.createLinearGradient(0, H * 0.40, 0, H);
-    g.addColorStop(0, '#aab4c6');
-    g.addColorStop(0.45, '#c6cddb');
-    g.addColorStop(1, '#dde3ec');
+    var g = ctx.createLinearGradient(0, H * 0.42, 0, H);
+    g.addColorStop(0, '#3a4256');      // 汀上白沙: pale, but never pale enough to find its edge
+    g.addColorStop(0.5, '#454d61');
+    g.addColorStop(1, '#515a6f');
     ctx.fillStyle = g; ctx.fill();
-
-    /* its upper edge dissolves back into the river, so the bar is not a pasted mask */
-    var topY = 1e9, botY = -1e9;
-    for (i9 = 0; i9 < pts.length; i9++) {
-      if (pts[i9].y < topY) topY = pts[i9].y;
-      if (pts[i9].y > botY) botY = pts[i9].y;
-    }
-    ctx.save(); ctx.clip();
-    var fade = ctx.createLinearGradient(0, topY - 6, 0, topY + Math.max(40, (botY - topY) * 0.55));
-    fade.addColorStop(0, 'rgba(18,28,46,.72)');
-    fade.addColorStop(0.45, 'rgba(22,34,54,.28)');
-    fade.addColorStop(1, 'rgba(26,38,60,0)');
-    ctx.fillStyle = fade; ctx.fillRect(0, topY - 8, W, H - topY + 8);
-
-    /* 湿沙: the strip the tide just left, darker, holding a little of the moon */
-    for (var wsI = 0; wsI < 5; wsI++) {
-      ctx.beginPath(); var wst = false;
-      for (i9 = 0; i9 <= EDGE.length; i9 += 2) {
-        var we = EDGE[i9 % EDGE.length];
-        var k3 = 1 - wsI * 0.014;
-        var wq = project({ x: we.x * k3, y: gh(we.x * k3, we.z * k3), z: we.z * k3 });
-        if (!wq) { wst = false; continue; }
-        if (!wst) { ctx.moveTo(wq.x, wq.y); wst = true; } else ctx.lineTo(wq.x, wq.y);
-      }
-      ctx.strokeStyle = 'rgba(120,136,164,' + (0.16 - wsI * 0.025).toFixed(3) + ')';
-      ctx.lineWidth = 3.5; ctx.stroke();
-    }
-    ctx.restore();
   }
 
-  /* the waterline: a breath of haze rather than a stroke, so the eye cannot fix the edge */
-  ctx.save();
-  ctx.lineCap = 'round';
-  for (var lw = 3; lw >= 1; lw--) {
-    ctx.beginPath(); var st = false;
-    for (i9 = 0; i9 <= EDGE.length; i9++) {
-      var e2 = EDGE[i9 % EDGE.length];
-      var p3 = project({ x: e2.x, y: 0, z: e2.z });
-      if (!p3) { st = false; continue; }
-      if (!st) { ctx.moveTo(p3.x, p3.y); st = true; } else ctx.lineTo(p3.x, p3.y);
-    }
-    ctx.strokeStyle = 'rgba(214,226,244,' + (0.05 * lw).toFixed(3) + ')';
-    ctx.lineWidth = lw * 2.4; ctx.stroke();
+  /* the waterline itself, a thread of moonlight */
+  ctx.beginPath(); var st = false;
+  for (i6 = 0; i6 <= EDGE.length; i6++) {
+    var e2 = EDGE[i6 % EDGE.length];
+    var p3 = project({ x: e2.x, y: 0, z: e2.z });
+    if (!p3) { st = false; continue; }
+    if (!st) { ctx.moveTo(p3.x, p3.y); st = true; } else ctx.lineTo(p3.x, p3.y);
   }
-  ctx.restore();
+  ctx.strokeStyle = 'rgba(206,224,244,.34)'; ctx.lineWidth = 1.3; ctx.stroke();
 
-  /* grains of sand, and 空里流霜不觉飞 drifting just above them */
-  for (i9 = 0; i9 < grains.length; i9++) {
-    var gr = grains[i9];
+  /* grains of sand, and 空里流霜 drifting over them */
+  for (i6 = 0; i6 < grains.length; i6++) {
+    var gr = grains[i6];
     var gp = project({ x: gr.x, y: gh(gr.x, gr.z), z: gr.z });
     if (!gp || gp.z > 70) continue;
-    var near2 = 1 - Math.min(1, gp.z / 70);
-    ctx.fillStyle = gr.m > 0.5
-      ? 'rgba(244,248,255,' + (0.05 + 0.13 * near2).toFixed(3) + ')'
-      : 'rgba(126,140,166,' + (0.04 + 0.12 * near2).toFixed(3) + ')';
-    ctx.fillRect(gp.x, gp.y, 1.2, 1.2);
-    if (gr.m > 0.86) {                    // frost, a little above the sand, never felt falling
-      var fp = project({ x: gr.x + Math.sin(T * 0.3 + gr.m * 9) * 1.4,
-                         y: gh(gr.x, gr.z) + 0.6 + gr.m * 2.2, z: gr.z });
-      if (fp) {
-        ctx.fillStyle = 'rgba(246,250,255,' + (0.05 + 0.16 * near2).toFixed(3) + ')';
-        ctx.fillRect(fp.x, fp.y, 1.1, 1.1);
-      }
-    }
+    ctx.fillStyle = 'rgba(226,234,246,' + (0.05 + 0.20 * gr.m * (1 - gp.z / 70)).toFixed(3) + ')';
+    ctx.fillRect(gp.x, gp.y, 1.1, 1.1);
   }
 }
 
 function drawGrove() {
-  /* 月照花林皆似霰 — a canopy of white, with a tree's shape: a crown that holds light,
-   * a short trunk under it, and the blossom read as sleet caught in the crown. */
+  /* 月照花林皆似霰 — the grove is not green; under this moon it is sleet */
   for (var i7 = 0; i7 < grove.length; i7++) {
     var g = grove[i7];
     var y0 = gh(g.x, g.z);
     var sway = Math.sin(T * 0.5 + g.seed) * 0.10;
-    var crownY = y0 + g.h * 0.80;
-    var cp2 = project({ x: g.x + sway, y: crownY, z: g.z });
-    if (!cp2) continue;
-    var cr = Math.max(3, g.h * 0.62 * cp2.s);
-
-    /* the crown: white, soft-edged, wider than it is tall */
-    var cg = ctx.createRadialGradient(cp2.x, cp2.y, cr * 0.15, cp2.x, cp2.y, cr);
-    cg.addColorStop(0, 'rgba(238,244,254,.42)');
-    cg.addColorStop(0.55, 'rgba(226,236,250,.20)');
-    cg.addColorStop(1, 'rgba(220,232,248,0)');
-    ctx.save();
-    ctx.translate(cp2.x, cp2.y); ctx.scale(1, 0.66); ctx.translate(-cp2.x, -cp2.y);
-    ctx.fillStyle = cg;
-    ctx.beginPath(); ctx.arc(cp2.x, cp2.y, cr, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    /* the trunk: short, dark, only as much as holds the crown up */
-    var bp2 = project({ x: g.x, y: y0, z: g.z });
-    if (bp2) {
-      ctx.strokeStyle = 'rgba(58,68,86,.34)';
-      ctx.lineWidth = Math.max(0.9, 0.16 * cp2.s);
-      ctx.beginPath();
-      ctx.moveTo(bp2.x, bp2.y);
-      ctx.lineTo(cp2.x, cp2.y + cr * 0.30);
-      ctx.stroke();
-    }
-
-    /* blossom: sleet caught in the crown, never below it */
-    for (var k2 = 0; k2 < 34; k2++) {
+    seg({ x: g.x, y: y0, z: g.z }, { x: g.x + sway, y: y0 + g.h, z: g.z },
+        'rgba(168,182,204,.40)', 1.8);
+    for (var k2 = 0; k2 < 26; k2++) {
       var a = g.seed + k2 * 1.21;
-      var rr3 = 0.34 + (k2 % 6) * 0.13;
-      var px2 = cp2.x + Math.cos(a) * cr * rr3 * 1.15;
-      var py2 = cp2.y + Math.sin(a * 1.7) * cr * rr3 * 0.62;
-      var sz = Math.max(1, 0.05 * cp2.s);
-      ctx.fillStyle = 'rgba(248,251,255,' + (0.30 + 0.46 * Math.abs(Math.sin(a * 3 + T * 0.4))).toFixed(3) + ')';
-      ctx.fillRect(px2 - sz / 2, py2 - sz / 2, sz, sz);
+      var rad = 1.5 + (k2 % 5) * 0.34;
+      var px = g.x + Math.cos(a) * rad + sway * 2;
+      var py = y0 + g.h + Math.sin(a * 1.7) * 1.15 + 0.4;
+      var pz = g.z + Math.sin(a) * rad;
+      var p = project({ x: px, y: py, z: pz });
+      if (!p) continue;
+      var sz = Math.max(1, 0.10 * p.s);
+      ctx.fillStyle = 'rgba(236,242,252,' + (0.20 + 0.34 * Math.abs(Math.sin(a * 3 + T * 0.4))).toFixed(3) + ')';
+      ctx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
     }
   }
 }
