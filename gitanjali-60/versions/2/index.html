@@ -331,25 +331,17 @@ var seaUniforms = {
 };
 var WAVE_GLSL = [
   /* w = (dirx, dirz, amplitude, wavelength) ; steepness folded into amplitude */
-  'const vec4 W0 = vec4( 0.00, -1.00, 1.15,  47.0);',
-  'const vec4 W1 = vec4( 0.26, -0.97, 0.66,  24.0);',
-  'const vec4 W2 = vec4(-0.19, -0.98, 0.37,  12.5);',
-  'const vec4 W3 = vec4( 0.44, -0.90, 0.19,   6.2);',
+  'const vec4 W0 = vec4( 0.00, -1.00, 0.62,  44.0);',
+  'const vec4 W1 = vec4( 0.26, -0.97, 0.34,  23.0);',
+  'const vec4 W2 = vec4(-0.19, -0.98, 0.20,  12.5);',
+  'const vec4 W3 = vec4( 0.44, -0.90, 0.10,   6.2);',
   'float wavePhase(vec4 w, vec2 p, float t){',
   '  float k = 6.28318 / w.w;',
   '  float c = sqrt(9.8 / k);',
   '  return k * dot(normalize(w.xy), p) - c * k * t * 0.42;',
   '}',
-  /* Waves do not simply fade out at the sand. They feel the bottom, rear up,
-   * and fall over. shoal() is that: a swell that gains about 2.3x around
-   * twenty metres out, then dies in the last few metres of run-up. */
-  'float shoreFall(vec2 p){',
-  '  float d = -p.y;',
-  '  float runUp = smoothstep(-1.5, 13.0, d);',
-  '  float deep  = mix(0.62, 1.0, smoothstep(0.0, 90.0, d));',
-  '  float rear  = 1.0 + 1.30 * exp(-pow((d - 21.0) / 15.0, 2.0));',
-  '  return runUp * deep * rear;',
-  '}',
+  /* shoreFall: waves die as they run up onto the sand (z > 0 is beach) */
+  'float shoreFall(vec2 p){ return clamp((-p.y - 1.0) / 26.0, 0.0, 1.0); }',
   'float seaHeight(vec2 p, float t){',
   '  float f = shoreFall(p); float h = 0.0;',
   '  h += W0.z * sin(wavePhase(W0, p, t));',
@@ -377,13 +369,9 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  float hx = seaHeight(xz + vec2(e,0.0), uTime) - seaHeight(xz - vec2(e,0.0), uTime);',
     '  float hz = seaHeight(xz + vec2(0.0,e), uTime) - seaHeight(xz - vec2(0.0,e), uTime);',
     '  float slope = length(vec2(hx,hz)) / (2.0*e);',
-    '  float crest = smoothstep(0.95, 2.05, h) * smoothstep(0.13, 0.52, slope);',
-    '  float d = -xz.y;',
-    '  float breakBand = exp(-pow((d - 15.0) / 11.0, 2.0));',
-    '  float rollers = 0.5 + 0.5*sin(wavePhase(W0, xz, uTime) - 0.9);',
-    '  float surf = breakBand * pow(rollers, 2.6) * 0.95;',
-    '  float wash = smoothstep(2.5, -1.0, d) * 0.30;',
-    '  vFoam = clamp(crest + surf + wash, 0.0, 1.0);',
+    '  float crest = smoothstep(0.30, 0.95, h) * smoothstep(0.05, 0.42, slope);',
+    '  float surf  = smoothstep(9.0, 0.5, -xz.y) * (0.40 + 0.60*sin(uTime*0.55 + xz.x*0.055));',
+    '  vFoam = clamp(crest + max(surf,0.0)*0.70, 0.0, 1.0);',
     '  vH = h;',
     '  vec4 wp = vec4(wp0.x, wp0.y + h, wp0.z, 1.0); vW = wp.xyz;',
     '  gl_Position = projectionMatrix * viewMatrix * wp;',
@@ -413,7 +401,7 @@ var sea = new THREE.Mesh(seaGeo, new THREE.ShaderMaterial({
     '  vec3 hv = normalize(normalize(uSunDir) + v);',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 190.0) * 1.35;',
     '  col += uSunCol * pow(max(dot(n, hv), 0.0), 18.0) * 0.10;',
-    '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.78);',
+    '  float foam = clamp(vFoam, 0.0, 1.0) * (1.0 - lod * 0.55);',
     '  col = mix(col, vec3(0.94,0.94,0.92), foam * 0.85);',
     '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, dist));',
     '  gl_FragColor = vec4(col, 1.0);',
@@ -479,12 +467,10 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  vec3 n = normalize(vN);',
     '  float g = noise(vW.xz*2.6)*0.5 + noise(vW.xz*11.0)*0.26 + noise(vW.xz*46.0)*0.14;',
     /* the tide breathes: the wet line creeps up and back */
-    '  float edge = 3.3 + 2.2*sin(uTime*0.44 + vW.x*0.026) + 1.2*sin(uTime*0.31 - vW.x*0.0145);',
-    '  float wet = 1.0 - smoothstep(edge - 0.8, edge + 4.5, vW.z);',
-    '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.35, 0.0, 1.0);',
+    '  float tide = 9.5 + sin(uTime*0.11)*3.4;',
+    '  float wet = 1.0 - smoothstep(0.0, tide, vW.z);',
+    '  wet = clamp(wet + (1.0-smoothstep(0.0,2.2,vW.z))*0.4, 0.0, 1.0);',
     '  vec3 col = mix(uSand, uWet, wet*0.92);',
-    /* the thin lace at the top of each run-up, where the water gives out */
-    '  float lace = smoothstep(1.1, 0.0, abs(vW.z - edge)) * smoothstep(0.0, 1.0, vW.z);',
     '  col *= 0.80 + g*0.44;',
     /* "pale gleams the smile of the sea beach": the wet strip returns the sky */
     '  vec3 v = normalize(cameraPosition - vW);',
@@ -493,7 +479,6 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
     '  col *= 0.68 + lam*0.58;',
     /* a scatter of dry shell-white specks, so the sand is never flat */
-    '  col = mix(col, vec3(0.955,0.955,0.935), lace * 0.80);',
     '  float sp = step(0.9975, hash(floor(vW.xz*26.0)));',
     '  col = mix(col, vec3(0.95,0.93,0.88), sp*(1.0-wet)*0.45);',
     '  float d = length(cameraPosition - vW);',
@@ -506,133 +491,6 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
 }));
 sand.frustumCulled = false;
 scene.add(sand);
-
-/* ------------------------------------------------------------- WRECKS -- */
-/* "ships get wrecked in the trackless water, death is abroad and children play."
- * The children never look at these. That is the whole point of the poem, so the
- * wrecks sit far out where you have to choose to look for them. */
-
-/* A JS mirror of the first two waves in the sea shader, enough to float things
- * on. If W0/W1 change in the GLSL above, change them here too. */
-function seaHeightJS(x, z, t) {
-  var d = -z;
-  var runUp = Math.min(1, Math.max(0, (d + 1.5) / 14.5));
-  var deep = 0.62 + 0.38 * Math.min(1, Math.max(0, d / 90));
-  var rear = 1 + 1.30 * Math.exp(-Math.pow((d - 21) / 15, 2));
-  var f = runUp * runUp * (3 - 2 * runUp) * deep * rear;
-  var h = 0;
-  var W = [[0.00, -1.00, 1.15, 47.0], [0.26, -0.97, 0.66, 24.0]];
-  for (var i = 0; i < W.length; i++) {
-    var w = W[i], k = 6.28318 / w[3], c = Math.sqrt(9.8 / k);
-    var L = Math.hypot(w[0], w[1]);
-    h += w[2] * Math.sin(k * ((w[0] / L) * x + (w[1] / L) * z) - c * k * t * 0.42);
-  }
-  return h * f;
-}
-
-/* a hull as a parametric U-section that tapers to a prow and stops, torn off,
- * partway down its own length */
-function hullGeometry(len, beam, depth, uEnd) {
-  var NU = 26, NT = 14, pos = [], idx = [];
-  function half(u) { return (beam / 2) * Math.pow(Math.sin(Math.PI * Math.min(u, 0.999)), 0.62); }
-  function dep(u) { return depth * (0.34 + 0.66 * Math.pow(Math.sin(Math.PI * Math.min(u, 0.999)), 0.5)); }
-  for (var i = 0; i <= NU; i++) {
-    var u = (i / NU) * uEnd;
-    for (var j = 0; j <= NT; j++) {
-      var t = -1 + 2 * (j / NT);
-      pos.push(half(u) * t, -dep(u) * (1 - t * t), len * (u - 0.5));
-    }
-  }
-  for (i = 0; i < NU; i++) for (var j2 = 0; j2 < NT; j2++) {
-    var a = i * (NT + 1) + j2, b = a + NT + 1;
-    idx.push(a, b, a + 1, a + 1, b, b + 1);
-  }
-  var g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return { geo: g, half: half, dep: dep };
-}
-
-var WOOD = new THREE.MeshLambertMaterial({ color: 0x4a3f33, side: THREE.DoubleSide });
-var WOOD_DARK = new THREE.MeshLambertMaterial({ color: 0x332c24 });
-var CANVAS_MAT = new THREE.MeshLambertMaterial({ color: 0xb9b2a0, side: THREE.DoubleSide, transparent: true, opacity: 0.93 });
-
-function buildWreck(len, list) {
-  var w = new THREE.Object3D();
-  var h = hullGeometry(len, len * 0.20, len * 0.135, 0.64);
-  var hull = new THREE.Mesh(h.geo, WOOD);
-  w.add(hull);
-
-  /* the ribs the missing stern left behind */
-  for (var i = 0; i < 5; i++) {
-    var u = 0.645 + i * 0.048;
-    var hb = h.half(u), dp = h.dep(u), reach = 1 - i * 0.16;
-    var pts = [];
-    for (var k = 0; k <= 8; k++) {
-      var t = -reach + 2 * reach * (k / 8);
-      pts.push(new THREE.Vector3(hb * t, -dp * (1 - t * t), len * (u - 0.5)));
-    }
-    var rib = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, len * 0.009, 5, false), WOOD_DARK);
-    w.add(rib);
-  }
-
-  /* a mast snapped off short, and the spar still hanging from it */
-  var mast = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.007, len * 0.013, len * 0.52, 7), WOOD_DARK);
-  mast.position.set(0, len * 0.20, -len * 0.10);
-  mast.rotation.z = 0.62; mast.rotation.x = -0.17;
-  w.add(mast);
-  var spar = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.005, len * 0.006, len * 0.30, 6), WOOD_DARK);
-  spar.position.set(-len * 0.14, len * 0.30, -len * 0.10);
-  spar.rotation.z = Math.PI / 2 - 0.35; spar.rotation.y = 0.5;
-  w.add(spar);
-
-  /* torn canvas, still caught on the spar */
-  var sailGeo = new THREE.PlaneGeometry(len * 0.26, len * 0.30, 7, 7);
-  (function tear() {
-    var p = sailGeo.attributes.position;
-    for (var v = 0; v < p.count; v++) {
-      var sx = p.getX(v), sy = p.getY(v);
-      var slack = (1 - Math.abs(sx) / (len * 0.13)) * (0.5 - sy / (len * 0.30));
-      p.setZ(v, Math.sin(sx * 1.4) * len * 0.02 * slack);
-      /* the lower corner is gone */
-      if (sy < -len * 0.06 && sx > len * 0.03) p.setY(v, sy + (sx / (len * 0.13)) * len * 0.09);
-    }
-    sailGeo.computeVertexNormals();
-  })();
-  var sail = new THREE.Mesh(sailGeo, CANVAS_MAT);
-  sail.position.set(-len * 0.16, len * 0.17, -len * 0.105);
-  sail.rotation.set(0.2, 0.55, -0.3);
-  w.add(sail);
-
-  w.userData.len = len;
-  scene.add(w);
-  list.push(w);
-  return w;
-}
-
-/* Three of them, re-tiled along an endless shore with a long period so a wreck
- * never pops into being anywhere near you. */
-var WRECK_PERIOD = 3000;
-var wrecks = [];
-var WRECK_SPOTS = [
-  { x: -105, z: -385,  len: 44, list: 0.52, yaw: 0.9,  sink: 1.05 },
-  { x:  420, z: -880,  len: 46, list: -0.70, yaw: -2.1, sink: 0.55 },
-  { x: -760, z: -1650, len: 52, list: 0.34, yaw: 1.9,  sink: 0.20 }
-];
-WRECK_SPOTS.forEach(function (sp) { sp.obj = buildWreck(sp.len, wrecks); });
-
-function updateWrecks(t, camX) {
-  for (var i = 0; i < WRECK_SPOTS.length; i++) {
-    var sp = WRECK_SPOTS[i], o = sp.obj;
-    var x = sp.x + Math.round((camX - sp.x) / WRECK_PERIOD) * WRECK_PERIOD;
-    var bob = seaHeightJS(x, sp.z, t + i * 7.0);
-    o.position.set(x, sp.sink + bob * 0.55, sp.z);
-    /* it does not sail; it is worked on by the water */
-    o.rotation.set(Math.sin(t * 0.21 + i) * 0.035, sp.yaw, sp.list + Math.sin(t * 0.17 + i * 2.1) * 0.045);
-  }
-}
 
 /* ------------------------------------------------------------ CHILDREN -- */
 /* "On the seashore of endless worlds children meet." They are the subject of
@@ -803,7 +661,7 @@ function updateChildren(t, camX) {
 
   for (var g = gMin; g <= gMax && n < POOL; g++) {
     var ax = g * GROUP_SPAN + (h2(g, 1) - 0.5) * 26;
-    var az = 5.2 + h2(g, 2) * 10.5;              // just landward of where the water reaches
+    var az = 2.0 + h2(g, 2) * 9.5;                // the gathering sits at the water's edge
     var size = 4 + Math.floor(h2(g, 3) * 7);      // 4..10 children in a knot
 
     for (var c = 0; c < size && n < POOL; c++) {
@@ -828,7 +686,7 @@ function updateChildren(t, camX) {
         /* face the middle of your own group, roughly — this is what "meet" looks like */
         yaw = Math.atan2(ax - cx, az - cz) + (h2(g, 110 + c) - 0.5) * 0.9;
       }
-      cz = Math.max(4.2, Math.min(34, cz));       // never into the water
+      cz = Math.max(1.15, Math.min(34, cz));      // never into the water
 
       var scale = 0.80 + h2(g, 130 + c) * 0.44;   // a range of ages, four years old to ten
       poseChild(state, t * spd + ph, (h2(g, 150 + c) - 0.5) * 0.12);
@@ -1029,7 +887,6 @@ function frame() {
   seaUniforms.uTime.value = simT;
   sandUniforms.uTime.value = simT;
   updateChildren(simT, camera.position.x);
-  updateWrecks(simT, camera.position.x);
   sky.position.copy(camera.position);
   sea.position.x = Math.round(camera.position.x / 200) * 200;
   sand.position.x = Math.round(camera.position.x / 400) * 400; // the shore never ends
