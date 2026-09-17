@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>湘夫人 · 可漫游世界</title>
+<link rel="stylesheet" href="../shared/site.css">
+<link rel="stylesheet" href="../shared/timeline.css">
+<style>
+  /* 叠在画布上的字永远是暗底上的字，所以用固定值，不跟随浅色主题 */
+  :root{ --veil:#e8e2d6; --veil-dim:#a89f8e; --veil-faint:#6f6858; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Songti SC","Noto Serif CJK SC","Source Han Serif SC",Georgia,"Times New Roman",serif;
+    overflow:hidden;-webkit-text-size-adjust:100%}
+  #app{display:flex;height:100%;width:100%}
+  #stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+
+  /* ---- overlays on the world ---- */
+  #vignette{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 45%,rgba(0,0,0,0) 40%,rgba(0,0,0,.55) 100%)}
+  #subtitle{position:absolute;left:0;right:0;bottom:6.5vh;text-align:center;pointer-events:none;
+    padding:0 6vw;opacity:0;transition:opacity 1.1s ease}
+  #subtitle.on{opacity:1}
+  #subtitle .zh{font-size:clamp(17px,2.1vw,27px);letter-spacing:.22em;line-height:1.9;
+    text-shadow:0 2px 18px rgba(0,0,0,.95),0 0 40px rgba(0,0,0,.7)}
+  #subtitle .en{margin-top:.7em;font-size:clamp(11px,1.05vw,14px);color:var(--veil-dim);
+    letter-spacing:.06em;font-style:italic;text-shadow:0 2px 12px rgba(0,0,0,.9)}
+  #title{position:absolute;left:28px;top:22px;pointer-events:none;
+    text-shadow:0 2px 16px rgba(0,0,0,.9)}
+  #title h1{margin:0;font-size:20px;font-weight:400;letter-spacing:.5em}
+  #title p{margin:.5em 0 0;font-size:11px;color:var(--veil-dim);letter-spacing:.24em}
+  #hint{position:absolute;left:28px;bottom:20px;font-size:11px;color:var(--veil-faint);
+    letter-spacing:.14em;pointer-events:none;text-shadow:0 1px 10px #000}
+  #enter{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:18px;background:rgba(6,8,12,.78);cursor:pointer;
+    backdrop-filter:blur(3px);transition:opacity .8s ease}
+  #enter.gone{opacity:0;pointer-events:none}
+  #enter .k{font-size:15px;letter-spacing:.42em;color:var(--veil)}
+  #enter .s{font-size:11px;letter-spacing:.2em;color:var(--veil-faint)}
+  #compass{position:absolute;right:20px;top:20px;font-size:11px;letter-spacing:.2em;
+    color:var(--veil-faint);pointer-events:none;text-shadow:0 1px 8px #000}
+
+  /* ---- right: the polish timeline（全站共用的那一条） ---- */
+  #rail{flex:0 0 var(--rail,372px);width:var(--rail,372px);height:100%;
+    display:flex;flex-direction:column;background:var(--bg-raise);
+    border-left:1px solid var(--line);overflow:hidden;
+    transition:flex-basis .28s ease,width .28s ease}
+  body.rail-collapsed #rail{flex-basis:42px;width:42px}
+  body.rail-collapsed #rail>*:not(#railbar){display:none}
+  body.rail-collapsed #railbar .rb-txt{display:none}
+  #railbar{flex:none;display:flex;align-items:center;gap:9px;padding:11px 12px;
+    border-bottom:1px solid var(--line);background:var(--bg-raise)}
+  #railbar button{flex:none;width:20px;height:20px;border:1px solid var(--line);border-radius:4px;
+    background:transparent;color:var(--ink-dim);cursor:pointer;font-family:var(--mono);
+    font-size:11px;line-height:1;display:grid;place-items:center;padding:0}
+  #railbar button:hover{color:var(--ink);border-color:var(--ink-faint)}
+  .rb-txt{min-width:0}
+  .rb-txt .a{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint)}
+  .rb-txt .b{font-family:var(--serif);font-size:14px;color:var(--ink);margin-top:1px}
+  #tl{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain}
+  #tl::-webkit-scrollbar{width:9px}
+  #tl::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+  #railfoot{flex:none;border-top:1px solid var(--line);padding:12px 16px 14px;background:var(--bg-sink)}
+  #railfoot .rows{display:grid;gap:2px}
+  #railfoot .row{display:flex;gap:8px;font-family:var(--mono);font-size:10.5px;line-height:1.7}
+  #railfoot .row .k{flex:none;width:5.2em;color:var(--ink-faint)}
+  #railfoot .row .v{color:var(--ink);min-width:0}
+  #railfoot .row .v.sand{color:var(--sand)}
+  #railfoot .lnks{margin-top:10px;display:flex;gap:12px;flex-wrap:wrap;
+    font-family:var(--mono);font-size:10.5px}
+  #railfoot .lnks a{color:var(--ink-dim);text-decoration:none;border-bottom:1px solid var(--line)}
+  #railfoot .lnks a:hover{color:var(--sand);border-color:var(--sand)}
+
+  /* 取证模式：只留世界。字幕也收起来 —— critic 要在不看字幕的情况下认这首诗 */
+  body.shot #rail, body.shot #hint, body.shot #enter,
+  body.shot #subtitle, body.shot #title, body.shot #compass{display:none !important}
+
+  @media (max-width:860px){
+    #app{flex-direction:column}
+    #stage{flex:1 1 56%}
+    #rail{flex:0 0 44%;width:100%;border-left:0;border-top:1px solid var(--line)}
+    body.rail-collapsed #rail{flex-basis:42px;width:100%}
+    #title{left:16px;top:14px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="vignette"></div>
+    <div id="title"><h1>湘夫人</h1><p>屈原 · 九歌</p></div>
+    <div id="compass">北</div>
+    <div id="subtitle"><div class="zh"></div><div class="en"></div></div>
+    <div id="hint">WASD / 方向键 行走 · 鼠标拖动 转身 · Shift 疾行 · 触屏拖动即可</div>
+    <div id="enter"><div class="k">走 进 洞 庭</div><div class="s">click / tap to enter</div></div>
+  </div>
+  <aside id="rail">
+    <div id="railbar">
+      <button id="railtoggle" title="折叠 / 展开时间线" aria-label="折叠时间线">›</button>
+      <div class="rb-txt">
+        <div class="a">Polish timeline</div>
+        <div class="b">它是怎么被磨出来的</div>
+      </div>
+    </div>
+    <div id="tl"></div>
+    <div id="railfoot">
+      <div class="rows">
+        <div class="row"><span class="k">loop</span><span class="v">Ralph（PRD + progress，一轮一事）</span></div>
+        <div class="row"><span class="k">harness</span><span class="v">Claude Code</span></div>
+        <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
+        <div class="row"><span class="k">effort</span><span class="v sand">medium</span></div>
+        <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">—</span></div>
+        <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">PRD 清空 / 自检连两轮到位 / 周限</span></div>
+      </div>
+      <div class="lnks">
+        <a href="../">← 三个世界</a>
+        <a href="POEM.md">原文 / 译文</a>
+        <a href="POLISH.md">打磨 prompt</a>
+        <a href="PRD.md">PRD</a>
+        <a href="progress.txt">progress</a>
+        <a href="log.jsonl">log.jsonl</a>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="../shared/timeline.js"></script>
+<script src="log.js"></script>
+
+<script>
+/* =====================================================================
+   湘夫人 · a walkable Dongting — zero dependencies, raw WebGL
+   ===================================================================== */
+
+/* ---------- tiny mat4 ---------- */
+const M = {
+  create: () => new Float32Array(16),
+  perspective(o, fovy, a, n, f) {
+    const t = 1 / Math.tan(fovy / 2); o.fill(0);
+    o[0] = t / a; o[5] = t; o[11] = -1;
+    o[10] = (f + n) / (n - f); o[14] = 2 * f * n / (n - f); return o;
+  },
+  lookAt(o, e, c, u) {
+    let zx = e[0]-c[0], zy = e[1]-c[1], zz = e[2]-c[2];
+    let l = 1/Math.hypot(zx,zy,zz); zx*=l; zy*=l; zz*=l;
+    let xx = u[1]*zz - u[2]*zy, xy = u[2]*zx - u[0]*zz, xz = u[0]*zy - u[1]*zx;
+    l = Math.hypot(xx,xy,xz); l = l ? 1/l : 0; xx*=l; xy*=l; xz*=l;
+    const yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+    o[0]=xx; o[1]=yx; o[2]=zx; o[3]=0;
+    o[4]=xy; o[5]=yy; o[6]=zy; o[7]=0;
+    o[8]=xz; o[9]=yz; o[10]=zz; o[11]=0;
+    o[12]=-(xx*e[0]+xy*e[1]+xz*e[2]);
+    o[13]=-(yx*e[0]+yy*e[1]+yz*e[2]);
+    o[14]=-(zx*e[0]+zy*e[1]+zz*e[2]); o[15]=1; return o;
+  },
+  mul(o, a, b) {
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      let s = 0; for (let k = 0; k < 4; k++) s += a[k*4+r] * b[c*4+k];
+      o[c*4+r] = s;
+    } return o;
+  }
+};
+
+/* ---------- world constants ---------- */
+const WATER_Y = 0.0;
+const EYE = 1.62;
+const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-east shore
+/* ?shot=1 —— 取证模式：固定机位、固定时间、没有界面，画三帧就停。
+   密度只比交互时略低一点点 —— critic judged 的必须基本就是访客看到的那个世界。 */
+const SHOT = new URLSearchParams(location.search).has('shot');
+
+/* 定序随机。截图必须逐字节可复现：同一轮、同一机位，第 3 轮和第 9 轮拍出来的
+   必须是同一张图，否则并排比较就没有意义。所以这个世界里不用浏览器的随机数，
+   只有这一条从固定种子走出来的序列（mulberry32）。 */
+function mkRnd(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* deterministic hash noise, shared by JS + (mirrored) shaders */
+function h2(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
+function vnoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+  const ux = fx*fx*(3-2*fx), uz = fz*fz*(3-2*fz);
+  const a = h2(ix,iz), b = h2(ix+1,iz), c = h2(ix,iz+1), d = h2(ix+1,iz+1);
+  return a*(1-ux)*(1-uz) + b*ux*(1-uz) + c*(1-ux)*uz + d*ux*uz;
+}
+function fbm(x, z) {
+  let v = 0, amp = .5, fx = x, fz = z;
+  for (let i = 0; i < 4; i++) { v += amp * vnoise(fx, fz); fx *= 2.03; fz *= 2.03; amp *= .5; }
+  return v;
+}
+function gauss(x, z, cx, cz, rx, rz) {
+  const dx = (x - cx) / rx, dz = (z - cz) / rz;
+  return Math.exp(-(dx*dx + dz*dz));
+}
+/* -Z is north. 帝子降兮北渚 — the shoal lies to the north. */
+function terrainH(x, z) {
+  let h = -2.6;
+  h += 4.9 * gauss(x, z,   0, -62, 52, 30);    // 北渚 the northern shoal
+  h += 2.1 * gauss(x, z,  34, -30, 22, 17);    // a lower sandbar
+  h += 1.5 * gauss(x, z, -46, -24, 19, 22);
+  h += 1.1 * gauss(x, z, -12, -96, 26, 20);
+  h += 1.9 * (fbm(x * 0.035 + 11, z * 0.035 + 7) - .5) * gauss(x, z, 0, -55, 80, 55);
+  h += 0.22 * (fbm(x * 0.18, z * 0.18) - .5);
+  return h;
+}
+function groundY(x, z) { return Math.max(terrainH(x, z), WATER_Y); }
+
+/* ---------- gl boot ---------- */
+const canvas = document.getElementById('gl');
+const glOpts = { antialias: true, alpha: false, depth: true, preserveDrawingBuffer: SHOT };
+const gl = canvas.getContext('webgl', glOpts) || canvas.getContext('experimental-webgl', glOpts);
+if (!gl) {
+  document.getElementById('enter').innerHTML =
+    '<div class="k">此浏览器没有 WebGL</div><div class="s">试试桌面版 Chrome / Safari</div>';
+}
+
+function sh(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s), src);
+  return s;
+}
+function prog(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  p.u = new Proxy({}, { get: (c, k) => (k in c ? c[k] : (c[k] = gl.getUniformLocation(p, k))) });
+  p.a = new Proxy({}, { get: (c, k) => (k in c ? c[k] : (c[k] = gl.getAttribLocation(p, k))) });
+  return p;
+}
+function buf(data, usage) {
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, data, usage || gl.STATIC_DRAW);
+  return b;
+}
+
+/* ---------- shared GLSL: sky, so water & fog agree with it ---------- */
+const FBM_OCT = 4;
+const SKY_GLSL = `
+  #define FBM_OCT ${FBM_OCT}
+  const vec3 SUN_DIR = normalize(vec3(-0.34, 0.085, 0.52));   // low sun, sinking west-ish
+  vec3 skyColor(vec3 d){
+    float up = clamp(d.y, -1.0, 1.0);
+    vec3 zen  = vec3(0.075, 0.105, 0.175);
+    vec3 mid  = vec3(0.212, 0.230, 0.292);
+    vec3 horiz= vec3(0.530, 0.482, 0.418);   // 秋水的黄昏是灰的，金只剩靠着太阳那一条
+    float t = pow(clamp(up, 0.0, 1.0), 0.62);
+    vec3 c = mix(mix(horiz, mid, smoothstep(0.0, 0.26, up)), zen, smoothstep(0.18, 0.92, t));
+    float sun = max(dot(normalize(d), SUN_DIR), 0.0);
+    c += vec3(0.80, 0.53, 0.29) * pow(sun, 9.0) * 0.62;
+    c += vec3(0.40, 0.30, 0.22) * pow(sun, 3.2) * 0.075;
+    c = mix(c, vec3(0.30, 0.29, 0.30), smoothstep(0.02, -0.30, up) * 0.75); // below horizon haze
+    return c;
+  }
+  vec3 fogColor(vec3 d){
+    vec3 fd = normalize(vec3(d.x, max(d.y, 0.008), d.z));
+    return mix(skyColor(fd), vec3(0.486, 0.474, 0.446), 0.42);
+  }
+`;
+
+/* ---------- sky ---------- */
+const skyP = prog(`
+  attribute vec2 aP; varying vec2 vP;
+  void main(){ vP = aP; gl_Position = vec4(aP, 0.999, 1.0); }
+`, `
+  precision highp float; varying vec2 vP;
+  uniform mat4 uInv; uniform float uT;
+  ${SKY_GLSL}
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
+  float fb(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<FBM_OCT;i++){ v+=a*vn(p); p*=2.07; a*=0.5; } return v; }
+  void main(){
+    vec4 q = uInv * vec4(vP, 1.0, 1.0);
+    vec3 d = normalize(q.xyz / q.w);
+    vec3 c = skyColor(d);
+    // 秋云，被风拉长 — clouds stretched by the wind
+    if (d.y > 0.006) {
+      vec2 uv = d.xz / d.y;
+      float band = fb(uv * vec2(0.055, 0.14) + vec2(uT * 0.0052, uT * 0.0016));
+      float cl = smoothstep(0.50, 0.90, band) * smoothstep(0.012, 0.28, d.y) * (1.0 - smoothstep(0.55, 1.0, d.y));
+      vec3 cc = mix(vec3(0.34,0.32,0.33), vec3(0.83,0.72,0.58), pow(clamp(1.0-d.y,0.0,1.0), 3.0));
+      c = mix(c, cc, cl * 0.62);
+    }
+    c += (hash(gl_FragCoord.xy) - 0.5) * 0.010;   // dither
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+const skyBuf = buf(new Float32Array([-1,-1, 3,-1, -1,3]));
+
+/* ---------- water ---------- */
+const WSPAN = 760;
+const uintOK = !!gl.getExtension('OES_element_index_uint');
+function makeWaterGrid(G) {
+  const v = [], idx = [];
+  for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
+    // non-linear spacing: dense near the viewer, huge at the rim
+    const u = (i / G) * 2 - 1, w = (j / G) * 2 - 1;
+    v.push(Math.sign(u) * Math.pow(Math.abs(u), 2.35) * WSPAN,
+           Math.sign(w) * Math.pow(Math.abs(w), 2.35) * WSPAN);
+  }
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+    const a = j * (G + 1) + i, b = a + 1, c = a + G + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const vb = buf(new Float32Array(v));
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, uintOK ? new Uint32Array(idx) : new Uint16Array(idx),
+    gl.STATIC_DRAW);
+  return { vb, ib, n: idx.length };
+}
+const water = makeWaterGrid(SHOT ? 190 : (uintOK ? 220 : 180));
+
+const WAVE_GLSL = `
+  // 洞庭波 — crossing swells, all running with the wind
+  float waveH(vec2 p, float t){
+    float h = 0.0;
+    h += sin(dot(p, vec2( 0.130, 0.098)) + t * 0.92) * 0.240;
+    h += sin(dot(p, vec2(-0.089, 0.176)) + t * 1.21) * 0.155;
+    h += sin(dot(p, vec2( 0.305,-0.121)) + t * 1.74) * 0.072;
+    h += sin(dot(p, vec2( 0.470, 0.395)) + t * 2.55) * 0.036;
+    h += sin(dot(p, vec2(-0.760, 0.510)) + t * 3.40) * 0.017;
+    return h;
+  }
+`;
+const waterP = prog(`
+  precision highp float;
+  attribute vec2 aP; uniform mat4 uVP; uniform vec3 uCam; uniform float uT;
+  varying vec3 vW; varying float vD;
+  ${WAVE_GLSL}
+  void main(){
+    vec2 p = aP + uCam.xz;
+    float h = waveH(p, uT);
+    // flatten the far rim so the horizon line stays clean
+    float d = length(aP);
+    h *= 1.0 - smoothstep(120.0, 520.0, d);
+    vW = vec3(p.x, h, p.y);
+    vD = d;
+    gl_Position = uVP * vec4(vW, 1.0);
+  }
+`, `
+  precision highp float;
+  varying vec3 vW; varying float vD;
+  uniform vec3 uCam; uniform float uT;
+  ${SKY_GLSL}
+  ${WAVE_GLSL}
+  void main(){
+    vec2 p = vW.xz;
+    float e = 0.42;
+    vec3 n = normalize(vec3(waveH(p - vec2(e,0.0), uT) - waveH(p + vec2(e,0.0), uT),
+                            2.0 * e,
+                            waveH(p - vec2(0.0,e), uT) - waveH(p + vec2(0.0,e), uT)));
+    n = normalize(mix(n, vec3(0.0,1.0,0.0), smoothstep(60.0, 340.0, vD)));
+    vec3 v = normalize(uCam - vW);
+    float fres = pow(1.0 - max(dot(n, v), 0.0), 4.3);
+    fres = mix(0.045, 1.0, fres);
+    vec3 refl = skyColor(reflect(-v, n));
+    vec3 deep = vec3(0.052, 0.088, 0.098);
+    vec3 shallow = vec3(0.105, 0.150, 0.148);
+    vec3 body = mix(deep, shallow, smoothstep(-0.25, 0.25, vW.y));
+    vec3 c = mix(body, refl, fres);
+    // 夕阳在波上碎成一条路 — the sun broken into a road on the water
+    vec3 hv = normalize(v + SUN_DIR);
+    c += vec3(1.0, 0.76, 0.46) * pow(max(dot(n, hv), 0.0), 220.0) * 1.25;
+    c += vec3(0.92, 0.66, 0.38) * pow(max(dot(n, hv), 0.0), 26.0) * 0.16;
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(-v), fog);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- terrain (the shoal) ---------- */
+function makeTerrain() {
+  const G = SHOT ? 212 : 240, SPAN = 150, v = [], idx = [];
+  for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
+    const x = (i / G * 2 - 1) * SPAN, z = (j / G * 2 - 1) * SPAN - 40;
+    const y = terrainH(x, z);
+    const e = 0.7;
+    const nx = terrainH(x - e, z) - terrainH(x + e, z);
+    const nz = terrainH(x, z - e) - terrainH(x, z + e);
+    const l = Math.hypot(nx, 2 * e, nz);
+    v.push(x, y, z, nx / l, 2 * e / l, nz / l);
+  }
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+    const a = j * (G + 1) + i, b = a + 1, c = a + G + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const vb = buf(new Float32Array(v));
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, uintOK ? new Uint32Array(idx) : new Uint16Array(idx),
+    gl.STATIC_DRAW);
+  return { vb, ib, n: idx.length };
+}
+const terrain = makeTerrain();
+const terrP = prog(`
+  precision highp float;
+  attribute vec3 aP; attribute vec3 aN;
+  uniform mat4 uVP; uniform vec3 uCam;
+  varying vec3 vW; varying vec3 vN; varying float vD;
+  void main(){ vW = aP; vN = aN; vD = length(aP - uCam); gl_Position = uVP * vec4(aP, 1.0); }
+`, `
+  precision highp float;
+  varying vec3 vW; varying vec3 vN; varying float vD;
+  uniform vec3 uCam; uniform float uT;
+  ${SKY_GLSL}
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+  float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
+  float fb(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<FBM_OCT;i++){ v+=a*vn(p); p*=2.1; a*=0.5; } return v; }
+  void main(){
+    vec3 n = normalize(vN);
+    float wet = 1.0 - smoothstep(0.02, 0.85, vW.y);          // the tide line
+    float g = fb(vW.xz * 0.5);
+    vec3 mud   = mix(vec3(0.150,0.130,0.108), vec3(0.205,0.178,0.142), g);
+    vec3 sedge = mix(vec3(0.430,0.405,0.320), vec3(0.560,0.530,0.425), g);  // 白薠, bleached autumn grass
+    vec3 alb = mix(sedge, mud, wet);
+    alb = mix(alb, vec3(0.088,0.082,0.070), smoothstep(0.35, -0.6, vW.y));
+    float lam = max(dot(n, SUN_DIR), 0.0);
+    vec3 c = alb * (0.30 + 1.05 * lam);
+    c += alb * skyColor(vec3(0.0,1.0,0.0)) * 0.34 * (0.5 + 0.5 * n.y);
+    // foam where the swell meets the shoal
+    float foam = smoothstep(0.26, 0.0, abs(vW.y - 0.03 - 0.10*sin(vW.x*0.5 + uT*1.1) - 0.08*sin(vW.z*0.62 - uT*0.9)));
+    c = mix(c, vec3(0.70,0.69,0.66), foam * 0.42);
+    vec3 v = normalize(uCam - vW);
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(-v), fog);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- 九嶷 : nine peaks on the far southern rim ---------- */
+function makePeaks() {
+  const v = [];
+  const R = 900;
+  for (let k = 0; k < 9; k++) {
+    // 九嶷 lies south of the lake: +Z, spread across that rim
+    const a = (k - 4) * 0.118 + (h2(k, 3) - .5) * 0.04;
+    const cx = Math.sin(a) * R, cz = Math.cos(a) * R;
+    const hgt = 112 + h2(k, 9) * 96 + (k === 4 ? 58 : 0);
+    const wid = 105 + h2(k, 17) * 72;
+    const seg = 9;
+    for (let s = 0; s < seg; s++) {
+      const t0 = s / seg, t1 = (s + 1) / seg;
+      const ridge = t => {
+        const q = Math.abs(t - .5) * 2;
+        return hgt * (1 - Math.pow(q, 1.45)) * (0.82 + 0.36 * h2(k * 13 + s, t * 7 + 1));
+      };
+      const px = t => cx + (t - .5) * wid * 2 * Math.cos(a), pz = t => cz - (t - .5) * wid * 2 * Math.sin(a);
+      const x0 = px(t0), z0 = pz(t0), x1 = px(t1), z1 = pz(t1);
+      const y0 = ridge(t0), y1 = ridge(t1);
+      v.push(x0, -6, z0, x1, -6, z1, x1, y1, z1,
+             x0, -6, z0, x1, y1, z1, x0, y0, z0);
+    }
+  }
+  return { vb: buf(new Float32Array(v)), n: v.length / 3 };
+}
+const peaks = makePeaks();
+const peakP = prog(`
+  precision highp float; attribute vec3 aP; uniform mat4 uVP; varying vec3 vW;
+  void main(){ vW = aP; gl_Position = uVP * vec4(aP, 1.0); }
+`, `
+  precision highp float; varying vec3 vW; uniform vec3 uCam;
+  ${SKY_GLSL}
+  void main(){
+    vec3 v = normalize(uCam - vW);
+    float hh = clamp(vW.y / 190.0, 0.0, 1.0);
+    vec3 c = mix(vec3(0.335,0.318,0.318), vec3(0.235,0.232,0.268), hh);
+    float fog = 1.0 - exp(-pow(length(vW.xz - uCam.xz) * 0.00104, 2.0));
+    c = mix(c, fogColor(-v), clamp(fog, 0.0, 0.94));
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* 席铺在这里：白薠与席共用这个坐标，草得先踏平 */
+const SHOAL_MAT = [-2.05, -55.40];
+
+/* ---------- 白薠 : sedge blades on the shoal ---------- */
+function makeBlades() {
+  const v = [], N = SHOT ? 23000 : 26000;
+  let placed = 0, guard = 0;
+  while (placed < N && guard < N * 40) {
+    guard++;
+    const x = (h2(guard, 1.7) * 2 - 1) * 132;
+    const z = (h2(guard, 9.3) * 2 - 1) * 128 - 44;
+    const y = terrainH(x, z);
+    if (y < 0.34 || y > 5.2) continue;
+    let dens = Math.min(1, (y - 0.34) * 1.5) * (0.35 + 0.65 * fbm(x * 0.06, z * 0.06));
+    // 一条踩出来的路：从骋望的高处一直走到水边，来回走了很多趟。
+    // 草在这里被踏平了 —— 这是这个世界里唯一一处人待过的痕迹。
+    const pt = Math.max(0, Math.min(1, (z + 60) / 24));          // 0 在高处，1 在水边
+    const px = -pt * 1.2, pz = -60 + pt * 24;
+    const pd = Math.hypot(x - px, z - pz);
+    const worn = 1 - Math.min(1, Math.max(0, (pd - 0.9) / 2.0));  // 1 = 正踩在路当中
+    // 席铺开的那一块，草是压平的：席底下不长草，四周被坐塌一圈
+    const md = Math.hypot((x - SHOAL_MAT[0]) / 1.55, (z - SHOAL_MAT[1]) / 1.20);
+    const flat = 1 - Math.min(1, Math.max(0, (md - 0.82) / 0.55));
+    dens *= (1 - 0.74 * worn) * (1 - 0.97 * flat);
+    if (h2(guard, 33) > dens) continue;
+    placed++;
+    const hgt = (0.52 + h2(guard, 5) * 0.86) * (1 - 0.62 * worn) * (1 - 0.80 * flat);
+    const w = 0.028 + h2(guard, 7) * 0.030;
+    const ph = h2(guard, 11) * 6.28;
+    const tint = h2(guard, 13);
+    const ang = h2(guard, 19) * 3.14159;
+    const dx = Math.cos(ang) * w, dz = Math.sin(ang) * w;
+    // two triangles, tapering to a point
+    v.push(x - dx, y, z - dz, 0, ph, tint,
+           x + dx, y, z + dz, 0, ph, tint,
+           x + dx * .18, y + hgt, z + dz * .18, 1, ph, tint);
+  }
+  return { vb: buf(new Float32Array(v)), n: v.length / 6 };
+}
+const blades = makeBlades();
+const bladeP = prog(`
+  precision highp float;
+  attribute vec3 aP; attribute vec3 aQ;   // aQ = (tipFlag, phase, tint)
+  uniform mat4 uVP; uniform float uT; uniform vec3 uCam; uniform vec2 uWind;
+  varying float vT; varying float vTint; varying float vD;
+  void main(){
+    vec3 p = aP;
+    float s = aQ.x;
+    float sway = sin(uT * 1.9 + aQ.y + p.x * 0.22 + p.z * 0.17) * 0.5 + 0.5;
+    float gust = 0.55 + 0.45 * sin(uT * 0.47 + p.x * 0.012 + p.z * 0.009);
+    p.xz += uWind * (0.30 + 0.42 * sway) * gust * s * s;
+    p.y  -= 0.10 * s * s * gust;
+    vT = s; vTint = aQ.z; vD = length(p - uCam);
+    gl_Position = uVP * vec4(p, 1.0);
+  }
+`, `
+  precision highp float; varying float vT; varying float vTint; varying float vD;
+  uniform vec3 uCam;
+  ${SKY_GLSL}
+  void main(){
+    vec3 base = mix(vec3(0.245,0.225,0.168), vec3(0.330,0.305,0.225), vTint);
+    vec3 tip  = mix(vec3(0.660,0.625,0.495), vec3(0.790,0.752,0.612), vTint);
+    vec3 c = mix(base, tip, pow(vT, 0.72));
+    c *= 0.72 + 0.50 * max(dot(normalize(vec3(0.2,1.0,0.1)), SUN_DIR), 0.0);
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(normalize(vec3(0.0,0.05,1.0))), fog * 0.9);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- 木叶下 : the leaves, always coming down ---------- */
+const NLEAF = SHOT ? 880 : 1000;   // 叶子小了、还会翻到看不见，密度得补上：木叶要一直在落
+const leaves = [];
+const leafRnd = mkRnd(0x9E3779B9);        // 木叶这一条序列，从种子起走，永远一样
+for (let i = 0; i < NLEAF; i++) leaves.push({
+  x: (leafRnd() * 2 - 1) * 70, y: leafRnd() * 26 - 1, z: (leafRnd() * 2 - 1) * 70,
+  vy: -0.42 - leafRnd() * 0.55,
+  sp: leafRnd() * 6.28, sw: 0.5 + leafRnd() * 1.4,
+  rot: leafRnd() * 6.28, rv: (leafRnd() - .5) * 1.9,
+  sz: 0.062 + Math.pow(leafRnd(), 1.7) * 0.120, tint: leafRnd()
+});
+const leafData = new Float32Array(NLEAF * 6 * 8);   // 6 verts * (cx,cy,cz, ox,oy, rot, tint, size)
+const leafBuf = buf(leafData, gl.DYNAMIC_DRAW);
+const CORNERS = [[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];
+const leafP = prog(`
+  precision highp float;
+  attribute vec3 aC; attribute vec2 aO; attribute vec3 aQ;   // aQ = (rot, tint, size)
+  uniform mat4 uVP; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uCam;
+  varying vec2 vUV; varying float vTint; varying float vD;
+  void main(){
+    float s = sin(aQ.x), c = cos(aQ.x);
+    // 翻。一片下落的木叶会转到侧面去，窄成一条线，再翻回来 —— 少了这一下，
+    // 满天的叶子就是一把大小一样、永远正对镜头的药片。
+    float sq = mix(0.16, 1.0, abs(cos(aQ.x * 0.83 + aQ.y * 6.28)));
+    vec2 q = vec2(aO.x * sq, aO.y);
+    vec2 o = vec2(q.x * c - q.y * s, q.x * s + q.y * c) * aQ.z;
+    vec3 p = aC + uRight * o.x + uUp * o.y;
+    vUV = aO; vTint = aQ.y; vD = length(p - uCam);
+    gl_Position = uVP * vec4(p, 1.0);
+  }
+`, `
+  precision highp float; varying vec2 vUV; varying float vTint; varying float vD;
+  ${SKY_GLSL}
+  void main(){
+    float w = 0.44 * (1.0 - vUV.y * vUV.y) * (1.0 - 0.28 * vUV.y);   // a pointed leaf, one end wider
+    float d = abs(vUV.x) / max(w, 0.001);
+    if (d > 1.0) discard;
+    vec3 c = mix(vec3(0.520,0.318,0.150), vec3(0.735,0.545,0.245), vTint);
+    c = mix(c, vec3(0.330,0.215,0.135), smoothstep(0.55, 1.0, d));    // darker rim
+    c = mix(c, vec3(0.255,0.170,0.105), smoothstep(0.10, 0.0, abs(vUV.x)) * 0.55);  // midrib
+    float a = smoothstep(1.0, 0.86, d) * clamp(1.0 - vD / 95.0, 0.0, 1.0);
+    gl_FragColor = vec4(c, a * 0.96);
+  }
+`);
+
+/* ---------- 筑室兮水中，葺之兮荷盖 : the house she never comes to ---------- */
+const HOUSE = { x: 0, z: 40 };
+const LAMPS = [];                      // 点着的灯，位置在建屋时填进来，晕由下面那段画
+function Builder() {
+  const V = [];                       // x,y,z, nx,ny,nz, r,g,b, float-on-water
+  function tri(a, b, c, col, fl) {
+    const ux = b[0]-a[0], uy = b[1]-a[1], uz = b[2]-a[2];
+    const vx = c[0]-a[0], vy = c[1]-a[1], vz = c[2]-a[2];
+    let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
+    const l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
+    for (const p of [a, b, c])
+      V.push(p[0], p[1], p[2], nx, ny, nz, col[0], col[1], col[2], fl || 0);
+  }
+  const quad = (a, b, c, d, col, fl) => { tri(a,b,c,col,fl); tri(a,c,d,col,fl); };
+  function box(cx, cy, cz, sx, sy, sz, col, fl) {
+    const x0=cx-sx/2, x1=cx+sx/2, y0=cy-sy/2, y1=cy+sy/2, z0=cz-sz/2, z1=cz+sz/2;
+    const p = [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1],
+               [x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]];
+    const top = col.map(c => c * 1.10), side = col.map(c => c * 0.86);
+    quad(p[4],p[7],p[6],p[5], top, fl);              // +Y
+    quad(p[0],p[1],p[2],p[3], col.map(c=>c*0.45), fl); // -Y
+    quad(p[3],p[2],p[6],p[7], side, fl);             // +Z
+    quad(p[1],p[0],p[4],p[5], side, fl);             // -Z
+    quad(p[2],p[1],p[5],p[6], col, fl);              // +X
+    quad(p[0],p[3],p[7],p[4], col, fl);              // -X
+  }
+  function beam(p0, p1, w, h, col, fl) {             // a squared timber between two points
+    let dx=p1[0]-p0[0], dy=p1[1]-p0[1], dz=p1[2]-p0[2];
+    const l = Math.hypot(dx,dy,dz) || 1; dx/=l; dy/=l; dz/=l;
+    let rx = dy*0 - dz*1, ry = dz*0 - dx*0, rz = dx*1 - dy*0;   // cross(d, +Z)
+    let rl = Math.hypot(rx,ry,rz);
+    if (rl < 1e-4) { rx = 1; ry = 0; rz = 0; rl = 1; }
+    rx/=rl; ry/=rl; rz/=rl;
+    const ux = ry*dz - rz*dy, uy = rz*dx - rx*dz, uz = rx*dy - ry*dx;
+    const c = [];
+    for (const e of [p0, p1]) for (const s of [-1, 1]) for (const u of [-1, 1])
+      c.push([e[0] + rx*s*w/2 + ux*u*h/2, e[1] + ry*s*w/2 + uy*u*h/2, e[2] + rz*s*w/2 + uz*u*h/2]);
+    // c: 0..3 at p0 (s,u = --,-+,+-,++), 4..7 at p1
+    quad(c[0],c[1],c[3],c[2], col.map(v=>v*0.55), fl);
+    quad(c[4],c[6],c[7],c[5], col.map(v=>v*1.05), fl);
+    quad(c[0],c[2],c[6],c[4], col, fl);
+    quad(c[1],c[5],c[7],c[3], col.map(v=>v*0.78), fl);
+    quad(c[2],c[3],c[7],c[6], col.map(v=>v*1.02), fl);
+    quad(c[0],c[4],c[5],c[1], col.map(v=>v*0.70), fl);
+  }
+  /* 一片荷叶：圆，微微上卷，边上一个缺口 */
+  function lotusPad(cx, cy, cz, r, tilt, col, fl, seg) {
+    seg = seg || 15;
+    const notch = 0.42;                                   // the split in a lotus leaf
+    const rot = (p) => {                                  // tilt about X
+      const s = Math.sin(tilt), c = Math.cos(tilt);
+      return [p[0] + cx, p[1]*c - p[2]*s + cy, p[1]*s + p[2]*c + cz];
+    };
+    const center = rot([0, 0.13 * r, 0]);
+    const dn = 0.028 * r;                       // 背面稍稍沉下去一点，免得和正面打架
+    const under = rot([0, 0.13 * r - dn, 0]);
+    for (let i = 0; i < seg; i++) {
+      const a0 = notch + (2*Math.PI - 2*notch) * (i / seg);
+      const a1 = notch + (2*Math.PI - 2*notch) * ((i + 1) / seg);
+      const rim = (a, d) => rot([Math.cos(a) * r, -0.035 * r * Math.cos(a * 3.0) - d, Math.sin(a) * r]);
+      tri(center, rim(a0, 0), rim(a1, 0), col, fl);
+      tri(under, rim(a1, dn), rim(a0, dn), col.map(v => v * 0.42), fl);   // the pale underside
+    }
+  }
+
+  /* 一个粗糙的八面体。远处的鸟、麋、蛟都只需要一个剪影 */
+  function blob(cx, cy, cz, rx, ry, rz, ang, col, fl) {
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    const P = (a, b, d) => [cx + (a * rx) * c - (d * rz) * sn, cy + b * ry, cz + (a * rx) * sn + (d * rz) * c];
+    const f = P(1,0,0), bk = P(-1,0,0), tp = P(0,1,0), bt = P(0,-1,0), l = P(0,0,1), r = P(0,0,-1);
+    tri(f,l,tp,col,fl); tri(l,bk,tp,col,fl); tri(bk,r,tp,col,fl); tri(r,f,tp,col,fl);
+    const dk = col.map(v => v * 0.62);
+    tri(l,f,bt,dk,fl); tri(bk,l,bt,dk,fl); tri(r,bk,bt,dk,fl); tri(f,r,bt,dk,fl);
+  }
+  return { V, tri, quad, box, beam, lotusPad, blob };
+}
+function makeHouse() {
+  const B = Builder();
+  const { V, tri, quad, box, beam, lotusPad } = B;
+  const HX = HOUSE.x, HZ = HOUSE.z;
+  const WOOD   = [0.150, 0.118, 0.092];   // the stilts, standing in water
+  const PURPLE = [0.268, 0.212, 0.288];   // 紫坛 the purple altar-floor
+  const SUN    = [0.352, 0.400, 0.268];   // 荪 sweet-flag, still green in autumn
+  const GUI    = [0.318, 0.228, 0.152];   // 桂栋 cassia ridgepole
+  const LAN    = [0.276, 0.256, 0.180];   // 兰橑 orchid rafters
+  const XINYI  = [0.640, 0.596, 0.520];   // 辛夷楣 magnolia lintel
+  const JADE   = [0.800, 0.816, 0.790];   // 白玉兮为镇
+  const HE     = [0.160, 0.242, 0.186];   // 荷盖 the lotus roof
+
+  // 桩：十六根木桩立在水里
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const x = HX - 6 + i * 4, z = HZ - 5 + j * 10 / 3;
+    box(x, -0.7, z, 0.30, 4.4, 0.30, WOOD, 0);
+  }
+  // 紫坛
+  box(HX, 1.26, HZ, 15.2, 0.52, 13.2, PURPLE, 0);
+  const FLOOR = 1.52;
+  // 荪壁：一根一根的菖蒲，北面留出门
+  const SLAT = 0.155, WH = 3.12;
+  for (let side = 0; side < 4; side++) {
+    const along = side < 2 ? 4.7 : 5.3;                   // half-length of this wall
+    for (let u = -along; u <= along; u += SLAT) {
+      let x, z;
+      if (side === 0) { x = HX - 5.35; z = HZ + u; }
+      else if (side === 1) { x = HX + 5.35; z = HZ + u; }
+      else if (side === 2) { x = HX + u; z = HZ + 4.75; }
+      else { x = HX + u; z = HZ - 4.75; if (Math.abs(u) < 1.55) continue; }  // 门
+      const k = h2(x * 3.1, z * 7.7);
+      const c = SUN.map((v, i) => v * (0.80 + 0.40 * k) + (i === 1 ? 0.02 * k : 0));
+      box(x, FLOOR + WH / 2 - 0.02, z, side < 2 ? 0.115 : SLAT * 0.72,
+          WH * (0.94 + 0.10 * k), side < 2 ? SLAT * 0.72 : 0.115, c, 0);
+    }
+  }
+  // 桂栋：一根梁，从东到西
+  box(HX, 6.14, HZ, 15.0, 0.34, 0.38, GUI, 0);
+  // 兰橑：椽子
+  for (let i = 0; i <= 12; i++) {
+    const x = HX - 7.2 + i * 1.2;
+    beam([x, 6.02, HZ], [x, 4.56, HZ + 5.5], 0.13, 0.19, LAN, 0);
+    beam([x, 6.02, HZ], [x, 4.56, HZ - 5.5], 0.13, 0.19, LAN, 0);
+  }
+  // 辛夷楣：门上那道白木
+  box(HX, 4.80, HZ - 4.78, 4.2, 0.36, 0.30, XINYI, 0);
+  // 白玉兮为镇：四块压席的白玉
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    box(HX + sx * 4.0, FLOOR + 0.22, HZ + sz * 3.4, 0.46, 0.44, 0.46, JADE, 0);
+  /* 与佳期兮夕张 —— 席铺好，白玉压着四角，案摆好，案上空无一物。
+     这是整个世界里唯一一处「已经准备好了」的地方。她没有来。
+     铺两处：一处在水中之室的门外廊下（诗里的「筑室兮水中」），
+     一处就在北渚上他站了一整天的地方（「登白薠兮骋望，与佳期兮夕张」是同一句的两半）。
+     远处那一处要走过去才看得见；近处这一处是三个机位里直接的证据。 */
+  const MAT  = [0.495, 0.468, 0.386];   // 莞席，新的，还没有人坐过
+  const HEM  = [0.432, 0.386, 0.310];   // 席边包的那道深色布
+  const AN   = [0.352, 0.286, 0.212];   // 案：一张矮几
+  function layMat(cx, cz, baseY, ang, k) {
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const at = (lx, lz) => [cx + lx * ca - lz * sa, cz + lx * sa + lz * ca];
+    const hx = 1.16 * k, hz = 0.82 * k, my = baseY + 0.045 * k;   // 一张席：够两个人坐，不是一块甲板
+    // 席面：一条一条的莞草编起来，所以它有纹路，不是一块板
+    for (let lz = -hz; lz < hz; lz += 0.105 * k) {
+      const g = h2(lz * 9.1 + cz, 3.3);
+      const [x, z] = at(0, lz + 0.0675 * k);
+      box(x, my, z, hx * 2 * Math.abs(ca) + 0.084 * k * Math.abs(sa), 0.042 * k,
+          hx * 2 * Math.abs(sa) + 0.084 * k * Math.abs(ca),
+          MAT.map(v => v * (0.90 + 0.18 * g)), 0);
+    }
+    const [bx, bz] = at(0, 0);
+    box(bx, my - 0.012 * k, bz,
+        (hx * 2 + 0.16 * k) * Math.abs(ca) + (hz * 2 + 0.16 * k) * Math.abs(sa), 0.048 * k,
+        (hx * 2 + 0.16 * k) * Math.abs(sa) + (hz * 2 + 0.16 * k) * Math.abs(ca), HEM, 0);
+    // 白玉兮为镇：压住席的四个角，风再大席也不掀
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const [x, z] = at(sx * (hx - 0.16 * k), sz * (hz - 0.14 * k));
+      box(x, my + 0.07 * k, z, 0.185 * k, 0.14 * k, 0.185 * k, JADE.map(v => v * 0.80), 0);
+    }
+    // 案：摆在席正中，空的
+    const ay = my + 0.225 * k;
+    box(bx, ay, bz, 1.26 * k * Math.abs(ca) + 0.54 * k * Math.abs(sa), 0.075 * k,
+        1.26 * k * Math.abs(sa) + 0.54 * k * Math.abs(ca), AN.map(v => v * 1.25), 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const [x, z] = at(sx * 0.50 * k, sz * 0.19 * k);
+      box(x, ay - 0.115 * k, z, 0.085 * k, 0.185 * k, 0.085 * k, AN, 0);
+    }
+  }
+  /* 灯。夕张之后天要黑了，于是点一盏，搁在席边上。
+     它是整张图里唯一的暖色，而且它照不到人 —— 席上没有人。 */
+  function lamp(cx, baseY, cz, k) {
+    const POST = [0.196, 0.156, 0.120], BOWL = [0.300, 0.226, 0.150];
+    const FLAME = [2.60, 1.62, 0.66];        // 亮过 1，是为了在暮色里烧穿
+    box(cx, baseY + 0.28 * k, cz, 0.055 * k, 0.56 * k, 0.055 * k, POST, 0);   // 一根矮杆
+    box(cx, baseY + 0.63 * k, cz, 0.290 * k, 0.085 * k, 0.290 * k, BOWL, 0);  // 灯盘
+    box(cx, baseY + 0.70 * k, cz, 0.115 * k, 0.090 * k, 0.115 * k, FLAME, 0); // 火
+    LAMPS.push([cx, baseY + 0.71 * k, cz, k]);
+  }
+  lamp(HX + 1.62, FLOOR, HZ - 5.75, 1.0);
+
+  layMat(HX, HZ - 5.75, FLOOR, 0, 1.0);
+  // 北渚上的那一处：踩出来的那条路的尽头，他站了一整天的地方
+  layMat(SHOAL_MAT[0], SHOAL_MAT[1], terrainH(SHOAL_MAT[0], SHOAL_MAT[1]) + 0.02, 0.34, 1.0);
+  lamp(SHOAL_MAT[0] + 1.52, terrainH(SHOAL_MAT[0] + 1.52, SHOAL_MAT[1] - 0.52) + 0.02,
+       SHOAL_MAT[1] - 0.52, 0.92);
+
+  // 荷盖：一片压着一片的荷叶，铺满两面坡
+  const tilt = Math.atan2(1.55, 5.45);
+  for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
+    const t = 0.06 + i * 0.225;
+    const z = HZ + s * 5.45 * (1 - t), y = 4.50 + 1.62 * t;
+    for (let j = 0; j <= 11; j++) {
+      const x = HX - 7.15 + j * 1.3 + (i % 2) * 0.55;
+      const k = h2(x * 5.3 + i, z * 2.9 + j);
+      const col = HE.map((v, q) => v * (0.76 + 0.52 * k) + (q === 1 ? 0.018 * k : 0));
+      lotusPad(x, y, z, 1.22 + 0.22 * k, s * tilt + (k - .5) * 0.10, col, 0, 13);
+    }
+  }
+  // 屋外的水面上，荷叶一直铺到远处；有几枝还没开的花
+  for (let i = 0; i < 210; i++) {
+    const a = h2(i, 2.3) * Math.PI * 2;
+    const r = 8.0 + Math.pow(h2(i, 5.1), 0.55) * 27;
+    const x = HX + Math.cos(a) * r, z = HZ + Math.sin(a) * r * 0.80;
+    const k = h2(i, 8.8);
+    const col = [0.250 + 0.075 * k, 0.352 + 0.098 * k, 0.268 + 0.070 * k];
+    lotusPad(x, 0.07 + 0.05 * k, z, 0.40 + 0.52 * k, (h2(i, 11.2) - .5) * 0.30, col, 1, 11);
+    if (k > 0.94) {                                   // 一枝菡萏，始终不开
+      box(x, 0.60, z, 0.05, 1.02, 0.05, [0.250, 0.320, 0.220], 1);
+      const bud = [0.532, 0.436, 0.452];
+      for (let q = 0; q < 6; q++) {
+        const b0 = q / 6 * Math.PI * 2, b1 = (q + 1) / 6 * Math.PI * 2;
+        tri([x, 1.44, z],
+            [x + Math.cos(b0) * 0.075, 1.09, z + Math.sin(b0) * 0.075],
+            [x + Math.cos(b1) * 0.075, 1.09, z + Math.sin(b1) * 0.075], bud, 1);
+      }
+    }
+  }
+  return { vb: buf(new Float32Array(V)), n: V.length / 10 };
+}
+const house = makeHouse();
+const objP = prog(`
+  precision highp float;
+  attribute vec3 aP; attribute vec3 aN; attribute vec3 aC; attribute float aF;
+  uniform mat4 uVP; uniform vec3 uCam; uniform float uT;
+  varying vec3 vW; varying vec3 vN; varying vec3 vC; varying float vD; varying float vM;
+  ${WAVE_GLSL}
+  void main(){
+    vec3 p = aP;
+    // aF >= 0：这一片是不是随湖面起伏。aF < 0：它是布。
+    // 木头、网、荷叶都是湿的，掠角要反光；一块生绢不反光，它只是把光透过去。
+    vM = step(aF, -0.5);
+    p.y += waveH(p.xz, uT) * max(aF, 0.0);
+    vW = p; vN = aN; vC = aC; vD = length(p - uCam);
+    gl_Position = uVP * vec4(p, 1.0);
+  }
+`, `
+  precision highp float;
+  varying vec3 vW; varying vec3 vN; varying vec3 vC; varying float vD; varying float vM;
+  uniform vec3 uCam;
+  ${SKY_GLSL}
+  void main(){
+    vec3 n = normalize(vN);
+    float lam = max(dot(n, SUN_DIR), 0.0);
+    vec3 c = vC * (0.26 + 1.15 * lam);
+    // 生绢很薄：背着光的那一面也亮，光是从布里透过来的
+    c += vC * vM * max(dot(-n, SUN_DIR), 0.0) * 0.55 * vec3(1.02, 0.94, 0.82);
+    c += vC * skyColor(vec3(0.0,1.0,0.0)) * 0.42 * (0.55 + 0.45 * n.y);
+    c += vC * vec3(0.10,0.13,0.12) * max(-n.y, 0.0) * 0.8;   // bounce off the water
+    vec3 v = normalize(uCam - vW);
+    // 水气：向上的面照到整片天，掠角处泛出水光
+    c += vC * skyColor(vec3(0.0, 1.0, 0.0)) * 0.55 * max(n.y, 0.0);
+    c += skyColor(reflect(-v, n)) * 0.72 * pow(1.0 - max(dot(n, v), 0.0), 3.4)
+           * smoothstep(0.30, 0.85, n.y) * (1.0 - 0.92 * vM);   // 只有朝天的湿面才反光，布不反
+    float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
+    c = mix(c, fogColor(-v), fog);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`);
+
+/* ---------- 错位 : the things that are in the wrong place ----------
+   鸟何萃兮蘋中？罾何为兮木上？ 麋何食兮庭中？蛟何为兮水裔？
+   这一组不是风景，是四个反问。世界必须自己显出不对劲。            */
+function makeWrongness() {
+  const B = Builder();
+  const { V, tri, box, beam, lotusPad, blob } = B;
+
+  const BARK  = [0.122, 0.104, 0.090];
+  const ROPE  = [0.475, 0.432, 0.352];
+  const BIRD  = [0.088, 0.082, 0.086];
+  const ELK   = [0.175, 0.138, 0.104];
+  const JIAO  = [0.098, 0.135, 0.126];
+  const PING  = [0.238, 0.352, 0.198];   // 蘋，水上的浮草
+
+  /* 树：秋深，叶子都在下，枝子是空的 */
+  function branch(p, dir, len, rad, depth, seed) {
+    const q = [p[0] + dir[0] * len, p[1] + dir[1] * len, p[2] + dir[2] * len];
+    beam(p, q, rad * 2, rad * 2, BARK.map(v => v * (0.85 + 0.30 * h2(seed, depth))), 0);
+    if (depth <= 0 || len < 0.34) return;
+    const n = 2 + (h2(seed * 1.7, depth * 2.3) > 0.62 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const a = h2(seed + i * 3.1, depth * 5.7) * Math.PI * 2;
+      const tilt = 0.42 + h2(seed + i * 7.3, depth) * 0.70;
+      const d = [dir[0] + Math.cos(a) * tilt, dir[1] * (0.62 + 0.26 * h2(seed + i, depth * 3)),
+                 dir[2] + Math.sin(a) * tilt];
+      const l = Math.hypot(d[0], d[1], d[2]) || 1;
+      branch(q, [d[0]/l, d[1]/l, d[2]/l], len * (0.58 + 0.16 * h2(seed * 2 + i, depth)),
+             rad * 0.62, depth - 1, seed + i * 11 + depth);
+    }
+  }
+  function tree(x, z, h, seed) {
+    const y = Math.max(terrainH(x, z), WATER_Y - 0.55);   // 站在水里的枯树，也算「木」
+    branch([x, y - 0.5, z], [0.04 * (h2(seed, 1) - .5), 1, 0.04 * (h2(seed, 2) - .5)],
+           h * 0.44, 0.19 + 0.05 * h2(seed, 4), 4, seed);
+    return y;
+  }
+
+  /* 罾：一张鱼网。它不在水里，它挂在树上。 */
+  function net(cx, cy, cz, w, hgt, ang, seed) {
+    const NU = 8, NV = 6;
+    // 一张挂在枝上的网是软的：两头吊着，中间垂下去，下摆收拢，还带一点扭
+    const P = (u, v) => {
+      const hang = Math.sin(Math.PI * u) * 1.15;                      // 上缘的垂度
+      const gather = 0.62 + 0.38 * Math.sin(Math.PI * u);             // 下摆往中间收
+      const lx = (u - 0.5) * w * (1 - 0.34 * v * (1 - gather * 0.5));
+      const ly = -v * hgt * gather - hang * (1 - 0.25 * v)
+                 - 0.10 * Math.sin(u * 7.3 + seed);
+      const lz = 0.34 * Math.sin(u * 4.1 + v * 2.6 + seed) * (0.35 + 0.65 * v);
+      return [cx + lx * Math.cos(ang) - lz * Math.sin(ang), cy + ly,
+              cz + lx * Math.sin(ang) + lz * Math.cos(ang)];
+    };
+    const col = ROPE.map(v => v * (0.86 + 0.24 * h2(seed, 3)));
+    for (let u = 0; u <= NU; u++) for (let v = 0; v < NV; v++)
+      beam(P(u / NU, v / NV), P(u / NU, (v + 1) / NV), 0.032, 0.032, col, 0);
+    for (let v = 0; v <= NV; v++) for (let u = 0; u < NU; u++)
+      beam(P(u / NU, v / NV), P((u + 1) / NU, v / NV), 0.030, 0.030, col, 0);
+    // 网坠：几颗石子，在网脚上一动不动
+    for (let u = 0; u <= NU; u += 2) {
+      const q = P(u / NU, 1);
+      blob(q[0], q[1] - 0.10, q[2], 0.075, 0.10, 0.075, 0, [0.32, 0.30, 0.28], 0);
+    }
+  }
+
+  /* 鸟：它们不在树上。它们蹲在水草里。 */
+  function bird(x, y, z, ang, sc, fl) {
+    const c = Math.cos(ang), s = Math.sin(ang);
+    blob(x, y + 0.20 * sc, z, 0.34 * sc, 0.19 * sc, 0.20 * sc, ang, BIRD, fl);       // 身
+    blob(x + 0.26 * sc * c, y + 0.36 * sc, z + 0.26 * sc * s, 0.11 * sc, 0.11 * sc, 0.10 * sc,
+         ang, BIRD.map(v => v * 1.25), fl);                                           // 头
+    tri([x + 0.50 * sc * c, y + 0.35 * sc, z + 0.50 * sc * s],
+        [x + 0.33 * sc * c, y + 0.38 * sc, z + 0.33 * sc * s],
+        [x + 0.33 * sc * c, y + 0.32 * sc, z + 0.33 * sc * s], [0.28, 0.24, 0.18], fl);
+    for (const sd of [-1, 1])                                                          // 腿
+      box(x - 0.05 * sc * c - sd * 0.09 * sc * s, y + 0.06 * sc, z - 0.05 * sc * s + sd * 0.09 * sc * c,
+          0.035 * sc, 0.26 * sc, 0.035 * sc, [0.24, 0.20, 0.16], fl);
+    // 尾
+    tri([x - 0.30 * sc * c, y + 0.25 * sc, z - 0.30 * sc * s],
+        [x - 0.52 * sc * c, y + 0.31 * sc, z - 0.52 * sc * s],
+        [x - 0.30 * sc * c, y + 0.17 * sc, z - 0.30 * sc * s], BIRD, fl);
+  }
+
+  /* 蘋：一片浮草，鸟就落在这里 */
+  function pingPatch(cx, cz, r, seed, nBird) {
+    for (let i = 0; i < 150; i++) {
+      const a = h2(seed + i, 1.3) * Math.PI * 2;
+      const d = Math.sqrt(h2(seed + i, 4.1)) * r;
+      const k = h2(seed + i, 9.2);
+      lotusPad(cx + Math.cos(a) * d, 0.045, cz + Math.sin(a) * d, 0.10 + 0.17 * k,
+               (k - .5) * 0.5, PING.map(v => v * (0.70 + 0.55 * k)), 1, 7);
+    }
+    for (let i = 0; i < nBird; i++) {
+      const a = h2(seed * 3 + i, 2.2) * Math.PI * 2;
+      const d = Math.sqrt(h2(seed * 3 + i, 6.6)) * r * 0.74;
+      bird(cx + Math.cos(a) * d, 0.02, cz + Math.sin(a) * d,
+           h2(seed + i, 8.1) * Math.PI * 2, 0.62 + 0.26 * h2(seed + i, 3.4), 1);
+    }
+  }
+
+  /* 麋：它走进了为她盖的屋子，低头在吃庭中的草 */
+  function elk(x, y, z, ang) {
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const at = (f, u, r) => [x + f * c - r * s, y + u, z + f * s + r * c];
+    const HIDE = ELK, DARK = ELK.map(v => v * 0.80), HORN = [0.268, 0.242, 0.200];
+    beam(at(-0.92, 1.12, 0), at(0.86, 1.18, 0), 0.66, 0.84, HIDE, 0);        // 身
+    beam(at(0.70, 1.26, 0), at(1.32, 0.60, 0), 0.40, 0.46, HIDE, 0);         // 低下去的脖子
+    beam(at(1.26, 0.56, 0), at(1.70, 0.30, 0), 0.26, 0.30, HIDE.map(v => v * 1.12), 0);  // 头
+    for (const [f, r] of [[0.62, 0.30], [0.62, -0.30], [-0.66, 0.30], [-0.66, -0.30]])
+      beam(at(f, 0.80, r), at(f + 0.04, 0.0, r), 0.135, 0.135, DARK, 0);     // 腿
+    beam(at(-0.92, 1.24, 0), at(-1.16, 0.86, 0), 0.10, 0.14, DARK, 0);       // 尾
+    for (const r of [-0.15, 0.15]) {                                          // 角
+      const a0 = at(1.22, 0.74, r), a1 = at(0.74, 1.42, r * 2.8);
+      beam(a0, a1, 0.055, 0.055, HORN, 0);
+      beam(a1, at(0.30, 1.70, r * 3.9), 0.042, 0.042, HORN, 0);
+      beam(a1, at(0.88, 1.80, r * 1.9), 0.038, 0.038, HORN, 0);
+    }
+  }
+
+  /* 蛟：水裔上拱起的几节背脊。看不见头，也就更不安。 */
+  function jiao(cx, cz, ang, len) {
+    const c = Math.cos(ang), s = Math.sin(ang);
+    for (let i = 0; i <= 44; i++) {
+      const t = i / 44;
+      const f = (t - 0.5) * len;
+      const y = Math.sin(t * Math.PI * 3.05) * 0.60 - 0.20;
+      if (y < -0.12) continue;                       // 沉在水里的那几节，不画
+      const w = 0.52 * (1 - Math.pow(Math.abs(t - 0.42) * 1.9, 2.0));
+      if (w <= 0.04) continue;
+      const lat = Math.sin(t * Math.PI * 1.6) * len * 0.055;
+      const px = cx + f * c - lat * s, pz = cz + f * s + lat * c;
+      blob(px, y * 0.55, pz, w * 1.5, w * 0.78, w, ang, JIAO.map(v => v * (0.82 + 0.5 * h2(i, 2))), 1);
+      if (i % 6 === 0 && y > 0.16)                   // 背鳍
+        tri([px, y * 0.55 + w * 0.7, pz],
+            [px - 0.5 * c, y * 0.55 + 0.02, pz - 0.5 * s],
+            [px + 0.5 * c, y * 0.55 + 0.02, pz + 0.5 * s], JIAO.map(v => v * 1.4), 1);
+    }
+  }
+
+  // ——— 摆进世界 ———
+  // 江皋上几株空树；罾挂在其中两株上
+  const TREES = [[-8, -84, 6.6, 3], [14, -76, 7.8, 11], [-34, -56, 6.0, 23],
+                 [31, -58, 7.0, 31], [-53, -30, 5.6, 41], [45, -37, 6.4, 53],
+                 [-18, -100, 7.2, 61],
+                 // 这三株是为了那三个定机位站的：罾必须真的在画里，不能只在世界里
+                 [1.5, -75.5, 7.6, 71],     // 正对着北渚那个机位
+                 [-12.5, -45.5, 6.8, 83],   // 骋望那个机位的左前景
+                 [-47, 16, 7.2, 97]];       // 漂在水里的那株，正对着等待那个机位
+  for (const [x, z, h, sd] of TREES) tree(x, z, h, sd);
+  const treeTop = (x, z, h) => Math.max(terrainH(x, z), WATER_Y - 0.55) + h * 0.66;
+  net(14.6, terrainH(14, -76) + 5.1, -75.0, 3.6, 2.9, 0.42, 7);
+  net(-33.4, terrainH(-34, -56) + 4.2, -55.4, 3.0, 2.4, 2.35, 19);
+  net(45.6, terrainH(45, -37) + 4.5, -36.4, 2.6, 2.1, 1.05, 29);
+  // 挂在近处那三株上的罾，大一些，低一些，好让人一眼看见它不该在这儿
+  net(1.9, treeTop(1.5, -75.5, 7.6), -74.7, 4.6, 3.6, 0.10, 73);
+  net(-12.1, treeTop(-12.5, -45.5, 6.8), -44.8, 4.0, 3.2, 1.62, 85);
+  net(-46.6, treeTop(-47, 16, 7.2), 16.7, 4.4, 3.5, 2.02, 99);
+
+  // 鸟落在蘋中，不落在树上
+  pingPatch(19, -7, 7.2, 5, 7);
+  pingPatch(-25, 9, 6.4, 17, 5);
+  pingPatch(21, 96, 8.0, 29, 9);
+  pingPatch(-16, 58, 5.6, 37, 4);
+  pingPatch(-44, -6, 6.0, 47, 6);
+  pingPatch(-53, 27, 7.0, 59, 8);
+  pingPatch(-7, -29, 7.6, 67, 9);
+
+  /* 沅有芷兮澧有兰 —— 两条水，各自的香草。
+     两丛必须一眼分得开：芷是直的，顶上一把白伞；兰是弯的，一丛窄叶从根上散开。
+     西边的沙洲是沅，长芷；东边的是澧，长兰。 */
+  const ZHI_STEM = [0.268, 0.300, 0.204], ZHI_UMBEL = [0.812, 0.822, 0.762];
+  const LAN_LEAF = [0.212, 0.286, 0.196], LAN_FLOWER = [0.556, 0.500, 0.612];
+  function zhi(x, z, seed) {                        // 白芷：一根直杆，顶上一把伞
+    const y = terrainH(x, z);
+    if (y < 0.20) return;
+    const h = 0.95 + h2(seed, 2.2) * 0.55;
+    box(x, y + h / 2, z, 0.035, h, 0.035, ZHI_STEM, 0);
+    const uy = y + h, ur = 0.20 + h2(seed, 5.1) * 0.10;
+    for (let i = 0; i < 9; i++) {
+      const a0 = i / 9 * Math.PI * 2, a1 = (i + 1) / 9 * Math.PI * 2;
+      const k = 0.86 + 0.28 * h2(seed + i, 7.7);
+      tri([x, uy + 0.03, z],
+          [x + Math.cos(a0) * ur * k, uy, z + Math.sin(a0) * ur * k],
+          [x + Math.cos(a1) * ur * k, uy, z + Math.sin(a1) * ur * k],
+          ZHI_UMBEL.map(v => v * (0.84 + 0.26 * h2(seed + i, 3.3))), 0);
+    }
+  }
+  function lan(x, z, seed) {                        // 兰：一丛窄叶，从根上弯出去
+    const y = terrainH(x, z);
+    if (y < 0.20) return;
+    const n = 6 + Math.floor(h2(seed, 1.3) * 5);
+    for (let i = 0; i < n; i++) {
+      const a = h2(seed + i, 2.9) * Math.PI * 2;
+      const len = 0.55 + h2(seed + i, 4.4) * 0.60, bend = 0.42 + h2(seed + i, 6.1) * 0.55;
+      const tipx = x + Math.cos(a) * len * bend, tipz = z + Math.sin(a) * len * bend;
+      const w = 0.030 + h2(seed + i, 8.8) * 0.020;
+      const c = LAN_LEAF.map(v => v * (0.82 + 0.34 * h2(seed + i, 9.9)));
+      tri([x - Math.sin(a) * w, y, z + Math.cos(a) * w],
+          [x + Math.sin(a) * w, y, z - Math.cos(a) * w],
+          [tipx, y + len * 0.92, tipz], c, 0);
+      tri([x + Math.sin(a) * w, y, z - Math.cos(a) * w],
+          [x - Math.sin(a) * w, y, z + Math.cos(a) * w],
+          [tipx, y + len * 0.92, tipz], c.map(v => v * 0.70), 0);
+    }
+    if (h2(seed, 12.1) > 0.55) {                    // 一枝花，很小
+      const fh = y + 0.62 + h2(seed, 13.3) * 0.30;
+      box(x + 0.04, (y + fh) / 2, z, 0.020, fh - y, 0.020, LAN_LEAF, 0);
+      box(x + 0.04, fh, z, 0.085, 0.075, 0.085, LAN_FLOWER, 0);
+    }
+  }
+  // 沅（西）有芷
+  for (let i = 0; i < 90; i++) {
+    const a = h2(i, 21.1) * Math.PI * 2, r = 3.2 + Math.pow(h2(i, 22.3), 0.6) * 13.0;
+    zhi(-46 + Math.cos(a) * r, -24 + Math.sin(a) * r * 1.15, i * 3.7 + 1);
+  }
+  // 澧（东）有兰
+  for (let i = 0; i < 90; i++) {
+    const a = h2(i, 31.7) * Math.PI * 2, r = 3.0 + Math.pow(h2(i, 32.9), 0.6) * 12.0;
+    lan(34 + Math.cos(a) * r, -30 + Math.sin(a) * r * 1.10, i * 5.3 + 2);
+  }
+
+  // 两条水在北渚两侧入湖，香草一直长到水边上来：走在渚上，左手是芷，右手是兰
+  for (let i = 0; i < 150; i++) {
+    const u = h2(i, 41.3);
+    const x = -(7.5 + h2(i, 42.7) * 15.0), z = -56 + u * 26;
+    const y = terrainH(x, z);
+    if (y > 0.26 && y < 1.45) zhi(x, z, i * 2.9 + 101);
+  }
+  for (let i = 0; i < 150; i++) {
+    const u = h2(i, 43.9);
+    const x = 7.5 + h2(i, 44.1) * 15.0, z = -56 + u * 26;
+    const y = terrainH(x, z);
+    if (y > 0.26 && y < 1.45) lan(x, z, i * 3.1 + 202);
+  }
+
+  // 麋食兮庭中 —— 就在为她盖的那座屋子的廊下
+  elk(HOUSE.x - 0.6, 1.52, HOUSE.z - 5.95, -0.28);
+
+  // 蛟何为兮水裔
+  jiao(30, -4, 0.55, 15);
+  jiao(-30, 66, 2.30, 13);
+
+  return { vb: buf(new Float32Array(V)), n: V.length / 10 };
+}
+const wrong = makeWrongness();
+
+/* ---------- 捐余袂兮江中，遗余褋兮澧浦 ----------
+   她没有来。于是把袖子解下来，扔进水里，让它自己漂走。
+   这几片素绢是这个世界里唯一还在移动、而且再也不回来的东西。   */
+function waveJS(x, z, t) {
+  return 0.240 * Math.sin(0.130*x + 0.098*z + t * 0.92)
+       + 0.155 * Math.sin(-0.089*x + 0.176*z + t * 1.21)
+       + 0.072 * Math.sin(0.305*x - 0.121*z + t * 1.74)
+       + 0.036 * Math.sin(0.470*x + 0.395*z + t * 2.55)
+       + 0.017 * Math.sin(-0.760*x + 0.510*z + t * 3.40);
+}
+const CLOTHS = [
+  // 袂：解下来的袖子。它们被放在那几个定机位一定看得见的地方 —— 这是全世界唯一
+  // 还在走、而且再也不回来的东西。
+  { x:  2.6, z: -26.0, ang: 0.42, vx: 0.060, vz: 0.098, w: 3.9, h: 1.50, tone: 0.99 },
+  { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.3, h: 1.25, tone: 0.96 },
+  { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.2, h: 1.22, tone: 0.97 },
+  { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 3.6, h: 1.40, tone: 0.97 },
+  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子
+  { x:-64.2, z:  37.0, ang: 0.74, vx: 0.050, vz: 0.082, w: 3.8, h: 1.55, tone: 0.96 },
+  { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 3.8, h: 1.45, tone: 0.94 },
+  // 正从「登白薠兮骋望」眼前漂过去的那一件
+  { x: -2.0, z: -25.0, ang: 1.22, vx: 0.058, vz: 0.094, w: 4.2, h: 1.85, tone: 0.99 },
+  // 挂在枯枝上的两件：水把它们带到这儿，枝子替水留住了它们。
+  // 三个机位里唯一的人迹，就是这个人脱下来、扔掉、再也没回来拿的衣裳。
+  { x: -0.85, z: -74.9, y: 5.35, ang: 0.26, w: 1.45, h: 2.70, tone: 0.92, hang: true },
+  { x:-12.05, z: -45.9, y: 4.35, ang: 1.62, w: 1.32, h: 2.45, tone: 0.84, hang: true },
+  // 就丢在「登白薠兮骋望」的脚边：她没有来，你在这儿站到把褋都脱下来了
+  { x:  1.6, z: -56.4, ang: 1.34, w: 2.5, h: 1.32, tone: 1.16, snag: true, lift: 0.96 },
+  // 褋：落在澧浦的浅滩上，盖在白薠上，再也漂不动了
+  { x:  4.2, z: -70.6, ang: 1.92, w: 3.0, h: 1.55, tone: 1.12, snag: true },
+];
+const CU = 20, CV = 9;
+const clothData = new Float32Array(CLOTHS.length * CU * CV * 6 * 10);
+const clothBuf = buf(clothData, gl.DYNAMIC_DRAW);
+const CLOTH_N = CLOTHS.length * CU * CV * 6;
+function updateCloths(t) {
+  let o = 0;
+  const P = [0, 0, 0];
+  for (const C of CLOTHS) {
+    const cx = C.x + (C.vx || 0) * t, cz = C.z + (C.vz || 0) * t;
+    const ca = Math.cos(C.ang + (C.snag ? 0 : t * 0.010)), sa = Math.sin(C.ang + (C.snag ? 0 : t * 0.010));
+    const base = C.snag ? Math.max(terrainH(cx, cz), WATER_Y) + (C.lift || 0.62) : WATER_Y;
+    if (C.hang) {                                    // 挂在枯枝上的那一件
+      const ca2 = Math.cos(C.ang), sa2 = Math.sin(C.ang);
+      const hangAt = (u, v, out) => {
+        const hem = 1 - 0.22 * Math.abs(Math.sin(u * 5.7 + C.ang));   // 破了的下摆
+        const lx = (u - 0.5) * C.w * (1 - 0.34 * v);
+        const ly = -v * C.h * hem - 0.30 * Math.sin(Math.PI * u);
+        const lz = 0.20 * Math.sin(t * 1.35 + u * 3.3 + v * 2.4) * (0.25 + 0.75 * v)
+                 + 0.10 * Math.sin(t * 2.4 - u * 5.1)
+                 // 挂着的衣裳是竖着皱的：一条一条的褶从肩上挂下来
+                 + (0.085 * Math.sin(u * 15.5 + C.ang * 3.1)
+                  + 0.048 * Math.sin(u * 31.0 - v * 2.2)) * (0.30 + 0.70 * v);
+        out[0] = C.x + lx * ca2 - lz * sa2;
+        out[1] = C.y + ly;
+        out[2] = C.z + lx * sa2 + lz * ca2;
+        return out;
+      };
+      const a = [0,0,0], b = [0,0,0], c = [0,0,0], d = [0,0,0];
+      for (let i = 0; i < CU; i++) for (let j = 0; j < CV; j++) {
+        hangAt(i / CU, j / CV, a); hangAt((i+1) / CU, j / CV, b);
+        hangAt((i+1) / CU, (j+1) / CV, c); hangAt(i / CU, (j+1) / CV, d);
+        for (const tri of [[a,b,c], [a,c,d]]) {
+          const ux = tri[1][0]-tri[0][0], uy = tri[1][1]-tri[0][1], uz = tri[1][2]-tri[0][2];
+          const vx = tri[2][0]-tri[0][0], vy = tri[2][1]-tri[0][1], vz = tri[2][2]-tri[0][2];
+          let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
+          let l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
+          // 垂着的绢两面都该亮：法线往天上偏一点，让它吃到整片暮色的天光，
+          // 否则背光那一面会黑成树影的一部分。
+          ny += 0.85; l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
+          const g = C.tone * (0.84 + 0.20 * (1 - j / CV));
+          for (const q of tri) {
+            clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
+            clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
+            clothData[o++] = 0.985 * g; clothData[o++] = 0.938 * g; clothData[o++] = 0.848 * g;
+            clothData[o++] = -1;
+          }
+        }
+      }
+      continue;
+    }
+    const at = (u, v, out) => {
+      // 袖子：一头宽、一头收口。轮廓上不能有直边——一块泡了水的生绢，
+      // 边是烂的、卷的，所以下摆按 u 抖起来，两头再收一道。
+      const taper = 0.50 + 0.50 * Math.sin(Math.PI * (0.13 + 0.87 * u));
+      const hem   = 1 - 0.14 * Math.sin(u * 9.3 + C.ang * 4.1)
+                      - 0.07 * Math.sin(u * 20.7 - C.ang * 1.7);
+      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h * taper * hem;
+      const x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca;
+      // 褶。上一版这里几乎是平的，于是整块朝天，把天顶那点铁青一整片反上来，
+      // 看起来像一块塑料板。真正让它读成布的不是颜色是褶：法线一乱，
+      // 同一块绢上就同时有亮面和暗面。
+      const fold = (0.082 * Math.sin(u * 13.3 + C.ang * 2.2)
+                  + 0.046 * Math.sin(u * 26.1 - v * 4.4 + C.ang)
+                  + 0.030 * Math.sin(v * 8.7 + u * 3.1)) * (0.45 + 0.55 * Math.sin(Math.PI * v))
+                  * (C.snag ? 1.25 : 1.0) * Math.min(1, C.w / 3.2);
+      const flut = C.snag
+        ? 0.115 * Math.sin(lx * 2.05 + lz * 1.4) + 0.075 * Math.sin(lz * 3.3 - lx * 1.1)
+          + 0.045 * Math.sin(t * 1.9 + lx * 3.1) * (0.4 + 0.6 * Math.abs(lz))
+        : 0.075 * Math.sin(t * 1.55 + lx * 2.3 + lz * 1.7)
+          + 0.045 * Math.sin(t * 2.70 - lx * 3.7);
+      out[0] = x; out[1] = base + 0.045 + (C.snag ? 0 : waveJS(x, z, t)) + flut + fold; out[2] = z;
+      return out;
+    };
+    const a = [0,0,0], b = [0,0,0], c = [0,0,0], d = [0,0,0];
+    for (let i = 0; i < CU; i++) for (let j = 0; j < CV; j++) {
+      at(i / CU, j / CV, a); at((i+1) / CU, j / CV, b);
+      at((i+1) / CU, (j+1) / CV, c); at(i / CU, (j+1) / CV, d);
+      for (const tri of [[a,b,c], [a,c,d]]) {
+        const ux = tri[1][0]-tri[0][0], uy = tri[1][1]-tri[0][1], uz = tri[1][2]-tri[0][2];
+        const vx = tri[2][0]-tri[0][0], vy = tri[2][1]-tri[0][1], vz = tri[2][2]-tri[0][2];
+        let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx;
+        const l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
+        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        // 生绢：边上被水泡得发暗
+        // 生绢泡在水里：贴着水的那一头被泡透，暗下去；离水的一头还是素的
+        const edge = 0.74 + 0.30 * Math.min(1, Math.min(i, CU - 1 - i) / 4.2);
+        const wet  = 0.86 + 0.14 * Math.min(1, Math.min(j, CV - 1 - j) / 3.0);
+        const g = C.tone * edge * wet;
+        for (const q of tri) {
+          clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
+          clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
+          clothData[o++] = 0.680 * g; clothData[o++] = 0.650 * g; clothData[o++] = 0.592 * g;
+          clothData[o++] = -1;
+        }
+      }
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, clothData);
+}
+
+/* ---------- 木叶落在水上，水记了一笔 ----------
+   一片叶子落水，荡开一圈，圈慢慢大、慢慢淡。这个世界因此在计时：
+   观流水兮潺湲 —— 等待是有长度的。                                   */
+const NRIPPLE = 64;
+const ripples = [];                      // {x, z, t0}
+let rippleHead = 0;
+function dropRipple(x, z, t) {
+  ripples[rippleHead] = { x: x, z: z, t0: t };
+  rippleHead = (rippleHead + 1) % NRIPPLE;
+}
+const RIPPLE_SEG = 22;                   // 每圈是一条闭合的环，环由内外两条带拼起来
+const RIPPLE_VERTS = RIPPLE_SEG * 12;    // 内带 + 外带，各两个三角形
+const rippleData = new Float32Array(NRIPPLE * RIPPLE_VERTS * 10);
+const rippleBuf = buf(rippleData, gl.DYNAMIC_DRAW);
+const RIPPLE_N = NRIPPLE * RIPPLE_VERTS;
+const RIPPLE_LIFE = 5.2;
+function updateRipples(t) {
+  let o = 0;
+  for (let k = 0; k < NRIPPLE; k++) {
+    const R = ripples[k];
+    const age = R ? t - R.t0 : 1e9;
+    if (!R || age < 0 || age > RIPPLE_LIFE) {          // 空位：塞一个退化三角形
+      for (let q = 0; q < RIPPLE_VERTS * 10; q++) rippleData[o++] = 0;
+      continue;
+    }
+    const u = age / RIPPLE_LIFE;
+    const rad = 0.16 + u * 1.15;
+    // 圈越走越宽、越走越淡。上一版内外两条边一样亮，于是它是一道硬白线；
+    // 现在亮度在环心最高、往两边落到零，看起来才像水面自己鼓起来的一道缓坡。
+    const wid = 0.045 + u * 0.135;
+    const fade = (1 - u) * (1 - u) * 0.335;   // 去掉掠角那层反射之后，环心得补亮回来
+    const lift = 0.030 * Math.exp(-u * 3.4);
+    for (let i = 0; i < RIPPLE_SEG; i++) {
+      const a0 = i / RIPPLE_SEG * Math.PI * 2, a1 = (i + 1) / RIPPLE_SEG * Math.PI * 2;
+      const pt = (a, r, h) => {
+        const x = R.x + Math.cos(a) * r, z = R.z + Math.sin(a) * r;
+        return [x, WATER_Y + waveJS(x, z, t) + lift * h, z];
+      };
+      const push = (q, g) => {
+        rippleData[o++] = q[0]; rippleData[o++] = q[1]; rippleData[o++] = q[2];
+        rippleData[o++] = 0; rippleData[o++] = 1; rippleData[o++] = 0;
+        rippleData[o++] = 0.300 * g; rippleData[o++] = 0.292 * g; rippleData[o++] = 0.272 * g;
+        // aF < 0：和绢一样不吃那层掠角天光。加了它，这圈才真是由内向外淡掉的；
+        // 不加，掠角反射会在环上糊一条亮度恒定的边，梯度全白做。
+        rippleData[o++] = -1;
+      };
+      const iA = pt(a0, rad - wid, 0), iB = pt(a1, rad - wid, 0);
+      const mA = pt(a0, rad, 1),       mB = pt(a1, rad, 1);
+      const oA = pt(a0, rad + wid, 0), oB = pt(a1, rad + wid, 0);
+      // 内带：0 → fade
+      push(iA, 0); push(mA, fade); push(mB, fade);
+      push(iA, 0); push(mB, fade); push(iB, 0);
+      // 外带：fade → 0
+      push(mA, fade); push(oA, 0); push(oB, 0);
+      push(mA, fade); push(oB, 0); push(mB, fade);
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, rippleBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, rippleData);
+}
+
+/* ---------- 灯晕 ----------
+   一盏灯在暮色里不是一个点，是一团慢慢呼吸的光。这团光也是加色画的，
+   和涟漪同一遍：中心亮，边上落到零。                                  */
+const GLOW_SEG = 14;
+const GLOW_N = 64 * GLOW_SEG * 3;      // 上限；实际用到 LAMPS.length * GLOW_SEG * 3
+const glowData = new Float32Array(GLOW_N * 10);
+const glowBuf = buf(glowData, gl.DYNAMIC_DRAW);
+function updateGlow(t) {
+  let o = 0;
+  const rt = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+  for (let i = 0; i < LAMPS.length; i++) {
+    const [lx, ly, lz, k] = LAMPS[i];
+    const flick = 0.86 + 0.14 * Math.sin(t * 2.7 + i * 2.1) + 0.06 * Math.sin(t * 6.3 + i);
+    const r = (1.05 + 0.07 * Math.sin(t * 1.7 + i)) * k;
+    const g = 0.78 * flick;
+    for (let j = 0; j < GLOW_SEG; j++) {
+      const a0 = j / GLOW_SEG * Math.PI * 2, a1 = (j + 1) / GLOW_SEG * Math.PI * 2;
+      const rim = (a) => [lx + rt[0] * Math.cos(a) * r, ly + Math.sin(a) * r, lz + rt[2] * Math.cos(a) * r];
+      const push = (q, w) => {
+        glowData[o++] = q[0]; glowData[o++] = q[1]; glowData[o++] = q[2];
+        glowData[o++] = 0; glowData[o++] = 1; glowData[o++] = 0;
+        glowData[o++] = 1.00 * w; glowData[o++] = 0.62 * w; glowData[o++] = 0.26 * w;
+        glowData[o++] = -1;
+      };
+      push([lx, ly, lz], g); push(rim(a0), 0); push(rim(a1), 0);
+    }
+  }
+  for (let q = o; q < GLOW_N * 10; q++) glowData[q] = 0;
+  gl.bindBuffer(gl.ARRAY_BUFFER, glowBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, glowData);
+}
+
+/* ---------- camera + input ---------- */
+const cam = { x: 6, y: 0, z: 16, yaw: Math.PI, pitch: -0.055, vy: 0 };
+const keys = Object.create(null);
+/* 固定机位：?cam=x,z,yaw,pitch  — used for the six reproducible screenshots */
+(function () {
+  const qs = new URLSearchParams(location.search);
+  const q = qs.get('cam');
+  if (q) {
+    const n = q.split(',').map(Number);
+    if (n.length >= 4 && n.every(v => isFinite(v))) {
+      cam.x = n[0]; cam.z = n[1]; cam.yaw = n[2]; cam.pitch = n[3];
+    }
+  }
+  // ?shot=1 —— 取证模式由 body.shot 的样式接管（见上面的 CSS）
+})();
+let entered = false, pointerLocked = false, lastT = 0, T0 = 0;
+
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Escape' && pointerLocked) document.exitPointerLock();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+const enterEl = document.getElementById('enter');
+function enterWorld() {
+  if (!entered) { entered = true; enterEl.classList.add('gone'); }
+  if (canvas.requestPointerLock) canvas.requestPointerLock();
+}
+enterEl.addEventListener('click', enterWorld);
+canvas.addEventListener('click', () => { if (entered && !isTouch) enterWorld(); });
+document.addEventListener('pointerlockchange', () => { pointerLocked = document.pointerLockElement === canvas; });
+addEventListener('mousemove', e => {
+  if (!pointerLocked) return;
+  cam.yaw   -= e.movementX * 0.0022;
+  cam.pitch = Math.max(-1.35, Math.min(1.1, cam.pitch - e.movementY * 0.0020));
+});
+
+/* drag-to-look (no pointer lock) + touch stick */
+let isTouch = false, dragId = null, dragX = 0, dragY = 0;
+let stick = null;   // {id, ox, oy, dx, dy}
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') isTouch = true;
+  if (!entered) { enterWorld(); if (e.pointerType === 'touch') return; }
+  const leftHalf = e.clientX - canvas.getBoundingClientRect().left < canvas.clientWidth * 0.42;
+  if (e.pointerType === 'touch' && leftHalf && !stick) {
+    stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 };
+  } else if (dragId === null) {
+    dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (stick && e.pointerId === stick.id) {
+    stick.dx = Math.max(-1, Math.min(1, (e.clientX - stick.ox) / 62));
+    stick.dy = Math.max(-1, Math.min(1, (e.clientY - stick.oy) / 62));
+    return;
+  }
+  if (e.pointerId !== dragId || pointerLocked) return;
+  cam.yaw   -= (e.clientX - dragX) * 0.0040;
+  cam.pitch = Math.max(-1.35, Math.min(1.1, cam.pitch - (e.clientY - dragY) * 0.0034));
+  dragX = e.clientX; dragY = e.clientY;
+});
+function endPtr(e) {
+  if (stick && e.pointerId === stick.id) stick = null;
+  if (e.pointerId === dragId) dragId = null;
+}
+canvas.addEventListener('pointerup', endPtr);
+canvas.addEventListener('pointercancel', endPtr);
+
+/* ---------- 字幕 : lines of the poem, waiting in places ---------- */
+const LINES = [
+  { x:   0, z:  20, r: 34, zh: '帝子降兮北渚，目眇眇兮愁予。',
+    en: 'The child of heaven descends to the northern shoal; far, far her eyes go — and grief takes me.' },
+  { x:  -4, z: -18, r: 32, zh: '袅袅兮秋风，洞庭波兮木叶下。',
+    en: 'Softly, softly, the autumn wind; Dongting rises in waves, and the leaves of the trees come down.' },
+  { x:   2, z: -58, r: 34, zh: '登白薠兮骋望，与佳期兮夕张。',
+    en: 'I climb the white sedge and let my gaze run loose — I set the evening out for the hour we agreed on.' },
+  { x: -46, z: -30, r: 26, zh: '沅有芷兮澧有兰，思公子兮未敢言。',
+    en: 'The Yuan has its angelica, the Li its orchid; I think of my lady and dare not say so.' },
+  { x:  40, z: -26, r: 26, zh: '荒忽兮远望，观流水兮潺湲。',
+    en: 'Dim, blurred, I look into the distance — only the running water, going on, going on.' },
+  { x:  14, z: -76, r: 16, zh: '鸟何萃兮蘋中？罾何为兮木上？',
+    en: 'Why do the birds gather in the duckweed? Why is the fishing net hung in a tree?' },
+  { x: -24, z:  -4, r: 15, zh: '捐余袂兮江中，遗余褋兮澧浦。',
+    en: 'I throw my sleeve away into the river, I leave my under-robe on the Li\'s far shore.' },
+  { x:  30, z:  -4, r: 17, zh: '麋何食兮庭中？蛟何为兮水裔？',
+    en: 'Why is the elk feeding in my courtyard? Why is the water-dragon at the river\'s edge?' },
+  { x:   0, z:  40, r: 14, zh: '筑室兮水中，葺之兮荷盖。',
+    en: 'I will build a house in the middle of the water, and thatch it over with lotus.' },
+  { x:  14, z:  74, r: 40, zh: '九嶷缤兮并迎，灵之来兮如云。',
+    en: 'The nine peaks of Jiuyi come thronging to meet her; the spirits arrive like cloud.' },
+  { x: -70, z:  46, r: 38, zh: '时不可兮骤得，聊逍遥兮容与。',
+    en: 'The hour cannot be seized when we want it. For now — wander; for now, be at ease, and wait.' },
+];
+const subEl = document.getElementById('subtitle');
+const subZh = subEl.querySelector('.zh'), subEn = subEl.querySelector('.en');
+let curLine = -1;
+function updateSubtitle() {
+  let best = -1, bestD = 1e9;
+  for (let i = 0; i < LINES.length; i++) {
+    const L = LINES[i], d = Math.hypot(cam.x - L.x, cam.z - L.z);
+    if (d < L.r && d < bestD) { bestD = d; best = i; }
+  }
+  if (best !== curLine) {
+    curLine = best;
+    if (best < 0) subEl.classList.remove('on');
+    else {
+      subEl.classList.remove('on');
+      setTimeout(() => {
+        subZh.textContent = LINES[best].zh;
+        subEn.textContent = LINES[best].en;
+        subEl.classList.add('on');
+      }, 260);
+    }
+  }
+}
+const compass = document.getElementById('compass');
+
+/* ---------- loop ---------- */
+const vp = M.create(), view = M.create(), proj = M.create(), inv = M.create();
+function invert(o, m) {   // full 4x4 inverse (used only for the sky ray)
+  const a = m, b = o;
+  const a00=a[0],a01=a[1],a02=a[2],a03=a[3],a10=a[4],a11=a[5],a12=a[6],a13=a[7],
+        a20=a[8],a21=a[9],a22=a[10],a23=a[11],a30=a[12],a31=a[13],a32=a[14],a33=a[15];
+  const b00=a00*a11-a01*a10,b01=a00*a12-a02*a10,b02=a00*a13-a03*a10,b03=a01*a12-a02*a11,
+        b04=a01*a13-a03*a11,b05=a02*a13-a03*a12,b06=a20*a31-a21*a30,b07=a20*a32-a22*a30,
+        b08=a20*a33-a23*a30,b09=a21*a32-a22*a31,b10=a21*a33-a23*a31,b11=a22*a33-a23*a32;
+  let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if (!det) return b; det = 1/det;
+  b[0]=(a11*b11-a12*b10+a13*b09)*det; b[1]=(a02*b10-a01*b11-a03*b09)*det;
+  b[2]=(a31*b05-a32*b04+a33*b03)*det; b[3]=(a22*b04-a21*b05-a23*b03)*det;
+  b[4]=(a12*b08-a10*b11-a13*b07)*det; b[5]=(a00*b11-a02*b08+a03*b07)*det;
+  b[6]=(a32*b02-a30*b05-a33*b01)*det; b[7]=(a20*b05-a22*b02+a23*b01)*det;
+  b[8]=(a10*b10-a11*b08+a13*b06)*det; b[9]=(a01*b08-a00*b10-a03*b06)*det;
+  b[10]=(a30*b04-a31*b02+a33*b00)*det; b[11]=(a21*b02-a20*b04-a23*b00)*det;
+  b[12]=(a11*b07-a10*b09-a12*b06)*det; b[13]=(a00*b09-a01*b07+a02*b06)*det;
+  b[14]=(a31*b01-a30*b03-a32*b00)*det; b[15]=(a20*b03-a21*b01+a22*b00)*det;
+  return b;
+}
+
+function resize() {
+  const dpr = SHOT ? 1.6 : Math.min(devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+
+function step(dt, t) {
+  // ---- walk ----
+  const run = keys.ShiftLeft || keys.ShiftRight ? 2.35 : 1;
+  let fx = 0, sx = 0;
+  if (keys.KeyW || keys.ArrowUp) fx += 1;
+  if (keys.KeyS || keys.ArrowDown) fx -= 1;
+  if (keys.KeyD || keys.ArrowRight) sx += 1;
+  if (keys.KeyA || keys.ArrowLeft) sx -= 1;
+  if (stick) { fx -= stick.dy * 1.2; sx += stick.dx * 1.2; }
+  const m = Math.hypot(fx, sx);
+  if (m > 1) { fx /= m; sx /= m; }
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const fwd = [-sy, -cy], rgt = [cy, -sy];
+  const under = terrainH(cam.x, cam.z);
+  const wading = under < WATER_Y ? Math.min(1, (WATER_Y - under) / 1.4) : 0;
+  const speed = 4.5 * run * (1 - 0.45 * wading);
+  cam.x += (fwd[0] * fx + rgt[0] * sx) * speed * dt;
+  cam.z += (fwd[1] * fx + rgt[1] * sx) * speed * dt;
+  // keep the wanderer inside the bay
+  const R = Math.hypot(cam.x, cam.z + 30);
+  if (R > 210) { cam.x *= 210 / R; cam.z = (cam.z + 30) * (210 / R) - 30; }
+
+  // 水中之室：可以走到廊下，进不去
+  {
+    const dx = cam.x - HOUSE.x, dz = cam.z - HOUSE.z;
+    const ax = Math.abs(dx) / 8.1, az = Math.abs(dz) / 7.2;
+    if (ax < 1 && az < 1) {
+      if (ax > az) cam.x = HOUSE.x + Math.sign(dx || 1) * 8.1;
+      else         cam.z = HOUSE.z + Math.sign(dz || 1) * 7.2;
+    }
+  }
+
+  const target = groundY(cam.x, cam.z) + EYE - wading * 0.42;
+  cam.y += (target - cam.y) * Math.min(1, dt * 7.5);
+
+  // ---- leaves ----
+  let o = 0;
+  for (const L of leaves) {
+    L.y += L.vy * dt;
+    const s = Math.sin(t * L.sw + L.sp);
+    L.x += (WIND[0] * 1.15 + s * 0.85) * dt;
+    L.z += (WIND[1] * 1.15 + Math.cos(t * L.sw * 0.83 + L.sp) * 0.85) * dt;
+    L.rot += L.rv * dt;
+    const surf = groundY(L.x, L.z);
+    if (L.y < surf + 0.06 && L.y >= surf - 0.2 && terrainH(L.x, L.z) < WATER_Y - 0.15)
+      dropRipple(L.x, L.z, t);                      // 落在水上的那一片，水替它记一笔
+    // 贴着镜头的那一片会被近裁剪面切开，糊住半个画面：让它落到别处去
+    const near = Math.hypot(L.x - cam.x, L.y - cam.y, L.z - cam.z) < 5.0;
+    if (near || L.y < surf - 0.2 || Math.abs(L.x - cam.x) > 68 || Math.abs(L.z - cam.z) > 68) {
+      L.x = cam.x + (leafRnd() * 2 - 1) * 62;
+      L.z = cam.z + (leafRnd() * 2 - 1) * 62;
+      L.y = groundY(L.x, L.z) + 14 + leafRnd() * 16;
+    }
+    for (let k = 0; k < 6; k++) {
+      leafData[o++] = L.x; leafData[o++] = L.y; leafData[o++] = L.z;
+      leafData[o++] = CORNERS[k][0]; leafData[o++] = CORNERS[k][1];
+      leafData[o++] = L.rot; leafData[o++] = L.tint; leafData[o++] = L.sz;
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, leafBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, leafData);
+
+  updateCloths(t);
+  updateRipples(t);
+  updateGlow(t);
+
+  updateSubtitle();
+  const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
+  compass.textContent = ['北','东北','东','东南','南','西南','西','西北'][Math.round(deg / 45) % 8];
+}
+
+function draw(t) {
+  resize();
+  const W = canvas.width, H = canvas.height;
+  gl.viewport(0, 0, W, H);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0.09, 0.10, 0.12, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const cp = Math.cos(cam.pitch), f = [-Math.sin(cam.yaw) * cp, Math.sin(cam.pitch), -Math.cos(cam.yaw) * cp];
+  const eye = [cam.x, cam.y, cam.z];
+  M.perspective(proj, 1.02, W / H, 0.1, 2600);
+  M.lookAt(view, eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]);
+  M.mul(vp, proj, view);
+  invert(inv, vp);
+
+  // sky
+  gl.useProgram(skyP);
+  gl.uniformMatrix4fv(skyP.u.uInv, false, inv);
+  gl.uniform1f(skyP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf);
+  gl.enableVertexAttribArray(skyP.a.aP);
+  gl.vertexAttribPointer(skyP.a.aP, 2, gl.FLOAT, false, 0, 0);
+  gl.depthMask(false);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.depthMask(true);
+
+  // peaks
+  gl.useProgram(peakP);
+  gl.uniformMatrix4fv(peakP.u.uVP, false, vp);
+  gl.uniform3fv(peakP.u.uCam, eye);
+  gl.bindBuffer(gl.ARRAY_BUFFER, peaks.vb);
+  gl.enableVertexAttribArray(peakP.a.aP);
+  gl.vertexAttribPointer(peakP.a.aP, 3, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, peaks.n);
+
+  // water
+  gl.useProgram(waterP);
+  gl.uniformMatrix4fv(waterP.u.uVP, false, vp);
+  gl.uniform3fv(waterP.u.uCam, eye);
+  gl.uniform1f(waterP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, water.vb);
+  gl.enableVertexAttribArray(waterP.a.aP);
+  gl.vertexAttribPointer(waterP.a.aP, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, water.ib);
+  gl.drawElements(gl.TRIANGLES, water.n, uintOK ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+  // terrain
+  gl.useProgram(terrP);
+  gl.uniformMatrix4fv(terrP.u.uVP, false, vp);
+  gl.uniform3fv(terrP.u.uCam, eye);
+  gl.uniform1f(terrP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, terrain.vb);
+  gl.enableVertexAttribArray(terrP.a.aP);
+  gl.vertexAttribPointer(terrP.a.aP, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(terrP.a.aN);
+  gl.vertexAttribPointer(terrP.a.aN, 3, gl.FLOAT, false, 24, 12);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrain.ib);
+  gl.drawElements(gl.TRIANGLES, terrain.n, uintOK ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+  // 水中之室
+  gl.useProgram(objP);
+  gl.uniformMatrix4fv(objP.u.uVP, false, vp);
+  gl.uniform3fv(objP.u.uCam, eye);
+  gl.uniform1f(objP.u.uT, t);
+  gl.bindBuffer(gl.ARRAY_BUFFER, house.vb);
+  gl.enableVertexAttribArray(objP.a.aP);
+  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
+  gl.enableVertexAttribArray(objP.a.aN);
+  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
+  gl.enableVertexAttribArray(objP.a.aC);
+  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
+  gl.enableVertexAttribArray(objP.a.aF);
+  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
+  gl.disable(gl.CULL_FACE);
+  gl.drawArrays(gl.TRIANGLES, 0, house.n);
+
+  // 错位：罾在木上、鸟在蘋中、麋在庭中、蛟在水裔
+  gl.bindBuffer(gl.ARRAY_BUFFER, wrong.vb);
+  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
+  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
+  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
+  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
+  gl.drawArrays(gl.TRIANGLES, 0, wrong.n);
+
+  // 捐余袂兮江中
+  gl.bindBuffer(gl.ARRAY_BUFFER, clothBuf);
+  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
+  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
+  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
+  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
+  gl.drawArrays(gl.TRIANGLES, 0, CLOTH_N);
+
+  // 落叶在水上荡开的圈
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+  gl.depthMask(false);
+  gl.bindBuffer(gl.ARRAY_BUFFER, rippleBuf);
+  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
+  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
+  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
+  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
+  gl.drawArrays(gl.TRIANGLES, 0, RIPPLE_N);
+  // 灯晕：和涟漪同一遍加色
+  gl.bindBuffer(gl.ARRAY_BUFFER, glowBuf);
+  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
+  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
+  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
+  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
+  gl.drawArrays(gl.TRIANGLES, 0, LAMPS.length * GLOW_SEG * 3);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+
+  // sedge
+  gl.useProgram(bladeP);
+  gl.uniformMatrix4fv(bladeP.u.uVP, false, vp);
+  gl.uniform3fv(bladeP.u.uCam, eye);
+  gl.uniform1f(bladeP.u.uT, t);
+  gl.uniform2fv(bladeP.u.uWind, WIND);
+  gl.bindBuffer(gl.ARRAY_BUFFER, blades.vb);
+  gl.enableVertexAttribArray(bladeP.a.aP);
+  gl.vertexAttribPointer(bladeP.a.aP, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(bladeP.a.aQ);
+  gl.vertexAttribPointer(bladeP.a.aQ, 3, gl.FLOAT, false, 24, 12);
+  gl.drawArrays(gl.TRIANGLES, 0, blades.n);
+
+  // leaves
+  gl.useProgram(leafP);
+  gl.uniformMatrix4fv(leafP.u.uVP, false, vp);
+  gl.uniform3fv(leafP.u.uCam, eye);
+  const right = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+  const up = [f[1] * right[2] - f[2] * right[1], f[2] * right[0] - f[0] * right[2], f[0] * right[1] - f[1] * right[0]];
+  gl.uniform3fv(leafP.u.uRight, right);
+  gl.uniform3fv(leafP.u.uUp, [-up[0], -up[1], -up[2]]);
+  gl.bindBuffer(gl.ARRAY_BUFFER, leafBuf);
+  gl.enableVertexAttribArray(leafP.a.aC);
+  gl.vertexAttribPointer(leafP.a.aC, 3, gl.FLOAT, false, 32, 0);
+  gl.enableVertexAttribArray(leafP.a.aO);
+  gl.vertexAttribPointer(leafP.a.aO, 2, gl.FLOAT, false, 32, 12);
+  gl.enableVertexAttribArray(leafP.a.aQ);
+  gl.vertexAttribPointer(leafP.a.aQ, 3, gl.FLOAT, false, 32, 20);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.drawArrays(gl.TRIANGLES, 0, NLEAF * 6);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+}
+
+/* 取证模式下不能挂着 rAF 空转：按固定步长走满 SHOT_FRAMES 帧就停，
+   截图因此既便宜又可复现 —— 同一轮同一机位，永远是同一秒的洞庭。 */
+const SHOT_FRAMES = 3, SHOT_DT = 1 / 20, SHOT_T0 = 7.5;
+
+function frame(ms) {
+  const t = ms / 1000;
+  if (!T0) { T0 = t; lastT = t; }
+  const dt = Math.min(0.05, t - lastT); lastT = t;
+  step(dt, t - T0);
+  draw(t - T0);
+  requestAnimationFrame(frame);
+}
+if (gl) {
+  cam.y = groundY(cam.x, cam.z) + EYE;
+  if (SHOT) {
+    // 只画三帧，所以叶子得先撒到相机跟前，不能等它们自己飘过来
+    // 撒的位置也必须定序：同一机位每次得到同一片天
+    const shotRnd = mkRnd(0x5F356495);
+    for (const L of leaves) {
+      const a = shotRnd() * Math.PI * 2, d = 3.5 + shotRnd() * 30;
+      L.x = cam.x + Math.cos(a) * d;
+      L.z = cam.z + Math.sin(a) * d;
+      L.y = groundY(L.x, L.z) + shotRnd() * 17;
+    }
+    for (let i = 0; i < NRIPPLE; i++) {
+      const a = shotRnd() * Math.PI * 2, d = 9 + shotRnd() * 42;
+      const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
+      if (terrainH(x, z) > WATER_Y - 0.15) continue;
+      dropRipple(x, z, SHOT_T0 - shotRnd() * RIPPLE_LIFE);
+    }
+    for (let i = 0; i < SHOT_FRAMES; i++) {          // 同步画满，画完就不再要新帧
+      const t = SHOT_T0 + i * SHOT_DT;
+      step(SHOT_DT, t); draw(t);
+    }
+    document.documentElement.setAttribute('data-shot-ready', '1');
+  } else {
+    requestAnimationFrame(frame);
+  }
+}
+
+/* =====================================================================
+   右栏：打磨时间线 —— 三个世界共用 shared/timeline.js，读同一份 log.jsonl
+   ===================================================================== */
+if (window.PolishTimeline) {
+  PolishTimeline.mount({
+    el: '#tl', log: 'log.jsonl',
+    onReady: function (rounds) {
+      const n = rounds.length;
+      document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
+      const stopped = rounds.filter(r => r.stop).pop();
+      if (stopped) {
+        document.getElementById('ft-rounds').textContent = n + ' 轮';
+        document.getElementById('ft-stop').textContent = stopped.stop_reason || stopped.stop || '循环结束';
+      }
+    }
+  });
+}
+
+const railToggle = document.getElementById('railtoggle');
+railToggle.addEventListener('click', () => {
+  const col = document.body.classList.toggle('rail-collapsed');
+  railToggle.textContent = col ? '‹' : '›';
+  try { localStorage.setItem('xfr.rail', col ? '1' : '0'); } catch (e) {}
+});
+try { if (localStorage.getItem('xfr.rail') === '1') railToggle.click(); } catch (e) {}
+if (SHOT) document.body.classList.add('shot');
+</script>
+</body>
+</html>

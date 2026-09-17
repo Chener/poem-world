@@ -26,16 +26,14 @@ instanced colours come out squared and nearly black.
 `gitanjali-60` the GLSL is generated from one `WAVES` table that the JS mirror also reads;
 keep it that way. A JS mirror that drifts from the shader puts boats under the surface.
 
-**Screenshots are one-shot and must yield to the operator.** `shared/shoot.sh` launches
-one `chrome-headless-shell` per frame that exits when the file is written, under
-`taskpolicy -c background nice -n 20`, behind a shared `mkdir` lock at
-`/tmp/poem-world-shot.lock`, after checking `uptime` load and `memory_pressure`. It
-renders through SwiftShader by default; `POEM_WORLD_ANGLE=metal` switches to the GPU
-path, which costs a tenth of the CPU but takes the GPU the operator is drawing their
-screen with (measurements and the `--disable-gpu` trap are in the script's comments). Never
-leave a browser running and never open a visible window: several workers share this
-machine and somebody is using it. Shot mode stops the render loop after a few frames
-(`SHOT_FRAMES`).
+**Screenshots are one Chrome process per round, niced.** `shared/shoot.sh` launches
+Chrome for Testing with `--headless=new` and the Metal GPU flags, captures all three
+cameras over CDP (`shared/cdp_shot.py`), then exits. Cameras switch through
+`window.__poemShot` so the scene is not rebuilt. Shared `mkdir` lock at
+`/tmp/poem-world-shot.lock`; `taskpolicy -c background nice -n 20`. `?shot=1` is
+DPR=1 and one synchronous frame (`data-shot-ready`) — do not wait on rAF, offscreen
+and headless often never fire it. If Metal does not come up, the script falls back to
+headed-offscreen Metal, then SwiftShader. Numbers and the why live in README「截图与资源」.
 
 **Shots must stay reproducible.** Every world freezes its clock (`FROZEN_T`) and places
 its contents from hashes of stable indices, never from runtime randomness, so the same

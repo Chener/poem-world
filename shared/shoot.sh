@@ -1,49 +1,51 @@
 #!/bin/sh
-# Three fixed cameras, one round.   sh shared/shoot.sh <world> <round> [port]
+# Three fixed cameras, one round.
+#   sh shared/shoot.sh <world> <round> [port]
 #
-# The cameras and the frozen clock live in the world's CAMS/FROZEN_T constants and
-# never change, so shots/3/2-children.png and shots/7/2-children.png differ only by
-# what those rounds actually changed. Rounds 1-5 shot all six cameras; from round 6
-# only these three are taken, to keep this machine usable. The camera numbers and
-# names are unchanged, so a given file name still means the same eye.
-#
-# Capture is one-shot: a niced headless Chrome for Testing is launched per frame and
-# exits when the file is written. No long-lived browser, nothing that can surface a
-# window on the operator's screen. All poem-world workers share one mkdir lock, so at
-# most one Chrome exists on this machine at a time.
+# One niced Chrome for Testing process paints all three cameras over CDP and
+# exits. Cameras switch through window.__poemShot so the scene is not rebuilt.
+# Backends (POEM_SHOT_BACKEND): headless-gpu (default) | headed-metal | swiftshader.
+# QoS: taskpolicy -c background, nice -n 20. Shared mkdir lock so at most one
+# render process exists on this machine. No resident browser.
 set -e
 W="${1:?usage: shoot.sh <world-dir> <round> [port]}"
 R="${2:?round number}"
-PORT="${3:-8731}"
-CAMS="1-arrival 2-children 6-above"
-OUT="$W/shots/$R"
+PORT="${3:-}"
+HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "$HERE/.." && pwd)
+OUT="$ROOT/$W/shots/$R"
 LOCK=/tmp/poem-world-shot.lock
-# chrome-headless-shell, NOT the full Chrome for Testing binary. In Chrome 150 the
-# full binary's --screenshot flag is dead: it writes no file and never exits, even on
-# about:blank (verified). chrome-headless-shell is the same version's headless-only
-# artifact from the same puppeteer cache, it has no window to show, it still supports
-# --screenshot, and it exits the moment the file is written - about four seconds a
-# frame instead of hanging until the alarm.
-#
-# ANGLE backend. Measured on this machine, same scene, same frozen clock, one frame
-# of camera 1:
-#
-#     --disable-gpu --use-angle=swiftshader   real 10.6s   cpu 19.6s
-#     --use-angle=metal                       real  6.0s   cpu  2.0s
-#
-# Metal costs a tenth of the CPU, but it takes the GPU the operator is drawing their
-# screen with, so the default here is SwiftShader under background QoS: slow, but it
-# stays on the efficiency cores and out of the way. Set POEM_WORLD_ANGLE=metal to use
-# the GPU path on a machine nobody is sitting at. --disable-gpu must NOT be passed
-# with metal or the WebGL context never comes up and the page is captured still on
-# its loading veil, which is what a 30KB screenshot means.
-CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome-headless-shell/mac_arm-150.0.7871.24/chrome-headless-shell-mac-arm64/chrome-headless-shell}"
+BACKEND="${POEM_SHOT_BACKEND:-headless-gpu}"
+SHOT_ALARM="${SHOT_ALARM:-40}"
+CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing}"
 
-[ -x "$CTF" ] || { echo "no chrome-headless-shell at: $CTF" >&2; exit 1; }
+[ -x "$CTF" ] || { echo "no Chrome for Testing at: $CTF" >&2; exit 1; }
+[ -x "$HERE/cdp_shot.py" ] || { echo "missing $HERE/cdp_shot.py" >&2; exit 1; }
+
+# name:arg passed to window.__poemShot. Index worlds take a camera number;
+# xiangfuren takes x,z,yaw,pitch (the same cam= string as before).
+case "$W" in
+  gitanjali-60)
+    SHOTS="1-arrival:1 2-children:2 6-above:6"
+    DEFAULT_PORT=8731
+    ;;
+  chunjiang)
+    SHOTS="1-moonrise:1 4-sandbar:4 5-boat:5"
+    DEFAULT_PORT=8732
+    ;;
+  xiangfuren)
+    SHOTS="1-beizhu:2,-58,0,-0.05 5-chengwang:0,-62,3.1416,-0.06 6-dengdai:-70,46,-0.575,-0.02"
+    DEFAULT_PORT=8793
+    ;;
+  *)
+    echo "unknown world: $W" >&2
+    exit 1
+    ;;
+esac
+PORT="${3:-${PORT:-$DEFAULT_PORT}}"
+LOAD="http://127.0.0.1:$PORT/$W/index.html?shot=1"
 mkdir -p "$OUT"
 
-# Never open a browser on a machine that is already loaded: three workers running
-# at once have put this one into the high teens before.
 wait_for_machine() {
   i=0
   while [ "$i" -lt 30 ]; do
@@ -51,7 +53,7 @@ wait_for_machine() {
     free=$(memory_pressure 2>/dev/null | sed -n 's/.*memory free percentage: \([0-9]*\)%.*/\1/p')
     [ -z "$load" ] && load=0
     [ -z "$free" ] && free=100
-    if [ "$load" -lt 6 ] && [ "$free" -gt 40 ]; then return 0; fi
+    if [ "$load" -lt 8 ] && [ "$free" -gt 30 ]; then return 0; fi
     echo "  machine busy (load ${load}, free ${free}%), waiting 60s..."
     sleep 60
     i=$((i + 1))
@@ -67,55 +69,67 @@ until mkdir "$LOCK" 2>/dev/null; do
   [ "$waited" -gt 1800 ] && { echo "shot lock held >30min: $LOCK" >&2; exit 1; }
   sleep 5
 done
-trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+SRV=""
+cleanup() {
+  [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
+  rmdir "$LOCK" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
 
-# Chrome for Testing has wedged for twenty minutes twice on this machine, so every
-# capture gets a hard wall-clock ceiling. macOS has no timeout(1); perl's alarm does
-# the job. --virtual-time-budget only needs to be long enough for three.js to settle,
-# it is NOT a licence to hang until the frame is finished.
-SHOT_ALARM=90
+if ! curl -sf -o /dev/null "http://127.0.0.1:$PORT/$W/index.html"; then
+  ( cd "$ROOT" && nice -n 20 python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 ) &
+  SRV=$!
+  i=0
+  while [ "$i" -lt 40 ]; do
+    curl -sf -o /dev/null "http://127.0.0.1:$PORT/$W/index.html" && break
+    sleep 0.25
+    i=$((i + 1))
+  done
+fi
 
-# taskpolicy -c background puts the whole process tree in the macOS background QoS
-# class: efficiency cores, throttled I/O, and it yields to whatever the operator is
-# doing in the foreground. This is a machine somebody is using during the day.
-shoot_one() {
-  _angle="$1"; _n="$2"; _dst="$3"
-  _prof=$(mktemp -d /tmp/pw-shot-profile.XXXXXX)
-  taskpolicy -c background nice -n 20 perl -e 'alarm shift; exec @ARGV' "$SHOT_ALARM" \
-         "$CTF" $_angle \
-         --hide-scrollbars --mute-audio --no-first-run --no-default-browser-check \
-         --disable-extensions --disable-background-networking \
-         --user-data-dir="$_prof" \
-         --window-size=960,600 --virtual-time-budget=5000 \
-         --screenshot="$_dst" \
-         "http://127.0.0.1:$PORT/$W/index.html?shot=$_n" >/dev/null 2>&1 || true
-  rm -rf "$_prof"
+run_capture() {
+  backend=$1
+  set --
+  for s in $SHOTS; do
+    set -- "$@" --shot "$s"
+  done
+  # perl alarm does not survive exec on macOS, so system() keeps perl around.
+  if command -v taskpolicy >/dev/null 2>&1; then
+    taskpolicy -c background nice -n 20 perl -e \
+      'alarm shift @ARGV; $e = system @ARGV; exit($e == -1 ? 127 : ($e & 127 ? 1 : $e >> 8))' \
+      "$SHOT_ALARM" python3 "$HERE/cdp_shot.py" --backend "$backend" --load "$LOAD" \
+      --outdir "$OUT" --chrome "$CTF" --timeout "$SHOT_ALARM" "$@"
+  else
+    nice -n 20 perl -e \
+      'alarm shift @ARGV; $e = system @ARGV; exit($e == -1 ? 127 : ($e & 127 ? 1 : $e >> 8))' \
+      "$SHOT_ALARM" python3 "$HERE/cdp_shot.py" --backend "$backend" --load "$LOAD" \
+      --outdir "$OUT" --chrome "$CTF" --timeout "$SHOT_ALARM" "$@"
+  fi
 }
 
-SOFT="--disable-gpu --use-angle=swiftshader"
-case "${POEM_WORLD_ANGLE:-swiftshader}" in
-  metal) PRIMARY="--use-angle=metal" ;;
-  *)     PRIMARY="$SOFT" ;;
-esac
+ok=0
+if run_capture "$BACKEND"; then
+  ok=1
+elif [ "$BACKEND" = "headless-gpu" ]; then
+  echo "  headless-gpu failed; trying headed-metal" >&2
+  if run_capture headed-metal; then
+    ok=1
+  else
+    echo "  headed-metal failed; falling back to swiftshader" >&2
+    run_capture swiftshader && ok=1
+  fi
+elif [ "$BACKEND" != "swiftshader" ]; then
+  echo "  $BACKEND failed; falling back to swiftshader" >&2
+  run_capture swiftshader && ok=1
+fi
 
-for c in $CAMS; do
-  n="${c%%-*}"
-  rm -f "$OUT/$c.png"
-  shoot_one "$PRIMARY" "$n" "$PWD/$OUT/$c.png"
-  # a GPU context that never came up captures the loading veil: tens of KB, not
-  # hundreds. Fall back rather than log a blank round.
-  if [ "$PRIMARY" != "$SOFT" ] && { [ ! -s "$OUT/$c.png" ] || [ "$(wc -c < "$OUT/$c.png")" -lt 120000 ]; }; then
-    echo "  $PRIMARY gave nothing usable for $c, falling back to swiftshader" >&2
-    rm -f "$OUT/$c.png"
-    shoot_one "$SOFT" "$n" "$PWD/$OUT/$c.png"
-  fi
-  if [ ! -s "$OUT/$c.png" ]; then
-    # Skip the rest of the round rather than wait: a wedged Chrome will not get
-    # better on the next camera, and the loop is supposed to keep moving.
-    rm -f "$OUT/$c.png"
-    echo "  TIMED OUT or failed after ${SHOT_ALARM}s: $c — skipping this round's shots" >&2
-    exit 2
-  fi
-  echo "  $OUT/$c.png"
+missing=""
+for s in $SHOTS; do
+  name=${s%%:*}
+  [ -s "$OUT/$name.png" ] || missing="$missing $name"
 done
+if [ "$ok" -ne 1 ] || [ -n "$missing" ]; then
+  echo "  TIMED OUT or failed:$missing" >&2
+  exit 2
+fi
 echo "round $R: 3 shots in $OUT"

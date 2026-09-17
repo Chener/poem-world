@@ -109,17 +109,19 @@
     <div id="tl"></div>
     <div id="railfoot">
       <div class="rows">
-        <div class="row"><span class="k">loop</span><span class="v">Gauntlet 独立 critic + Ralph 一轮一事</span></div>
+        <div class="row"><span class="k">loop</span><span class="v">Ralph（PRD + progress，一轮一事）</span></div>
         <div class="row"><span class="k">harness</span><span class="v">Claude Code</span></div>
         <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
         <div class="row"><span class="k">effort</span><span class="v sand">medium</span></div>
         <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">—</span></div>
-        <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">跑满 10 轮</span></div>
+        <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">PRD 清空 / 自检连两轮到位 / 周限</span></div>
       </div>
       <div class="lnks">
         <a href="../">← 三个世界</a>
         <a href="POEM.md">原文 / 译文</a>
         <a href="POLISH.md">打磨 prompt</a>
+        <a href="PRD.md">PRD</a>
+        <a href="progress.txt">progress</a>
         <a href="log.jsonl">log.jsonl</a>
       </div>
     </div>
@@ -167,9 +169,22 @@ const M = {
 const WATER_Y = 0.0;
 const EYE = 1.62;
 const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-east shore
-/* ?shot=1 —— 取证模式：固定机位、固定时间、没有界面，画三帧就停。
-   密度只比交互时略低一点点 —— critic judged 的必须基本就是访客看到的那个世界。 */
+/* ?shot=1 —— 取证模式：固定机位、固定时间、没有界面，画一帧就停。
+   密度大约是交互时的一半 —— critic judged 的必须基本就是访客看到的那个世界。 */
 const SHOT = new URLSearchParams(location.search).has('shot');
+
+/* 定序随机。截图必须逐字节可复现：同一轮、同一机位，第 3 轮和第 9 轮拍出来的
+   必须是同一张图，否则并排比较就没有意义。所以这个世界里不用浏览器的随机数，
+   只有这一条从固定种子走出来的序列（mulberry32）。 */
+function mkRnd(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 /* deterministic hash noise, shared by JS + (mirrored) shaders */
 function h2(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
@@ -240,19 +255,19 @@ const SKY_GLSL = `
   vec3 skyColor(vec3 d){
     float up = clamp(d.y, -1.0, 1.0);
     vec3 zen  = vec3(0.075, 0.105, 0.175);
-    vec3 mid  = vec3(0.245, 0.255, 0.300);
-    vec3 horiz= vec3(0.640, 0.545, 0.430);
+    vec3 mid  = vec3(0.212, 0.230, 0.292);
+    vec3 horiz= vec3(0.530, 0.482, 0.418);   // 秋水的黄昏是灰的，金只剩靠着太阳那一条
     float t = pow(clamp(up, 0.0, 1.0), 0.62);
     vec3 c = mix(mix(horiz, mid, smoothstep(0.0, 0.26, up)), zen, smoothstep(0.18, 0.92, t));
     float sun = max(dot(normalize(d), SUN_DIR), 0.0);
-    c += vec3(0.78, 0.52, 0.28) * pow(sun, 7.0) * 0.55;
-    c += vec3(0.42, 0.30, 0.20) * pow(sun, 1.6) * 0.16;
+    c += vec3(0.80, 0.53, 0.29) * pow(sun, 9.0) * 0.62;
+    c += vec3(0.40, 0.30, 0.22) * pow(sun, 3.2) * 0.075;
     c = mix(c, vec3(0.30, 0.29, 0.30), smoothstep(0.02, -0.30, up) * 0.75); // below horizon haze
     return c;
   }
   vec3 fogColor(vec3 d){
     vec3 fd = normalize(vec3(d.x, max(d.y, 0.008), d.z));
-    return mix(skyColor(fd), vec3(0.545, 0.500, 0.432), 0.42);
+    return mix(skyColor(fd), vec3(0.486, 0.474, 0.446), 0.42);
   }
 `;
 
@@ -279,6 +294,20 @@ const skyP = prog(`
       float cl = smoothstep(0.50, 0.90, band) * smoothstep(0.012, 0.28, d.y) * (1.0 - smoothstep(0.55, 1.0, d.y));
       vec3 cc = mix(vec3(0.34,0.32,0.33), vec3(0.83,0.72,0.58), pow(clamp(1.0-d.y,0.0,1.0), 3.0));
       c = mix(c, cc, cl * 0.62);
+    }
+    // 灵之来兮如云 —— 九嶷之上，一队低云正贴着山脊往这边来。
+    // 用方位角/仰角作坐标，不用 d.xz/d.y：贴着地平线时后者会炸开，云会碎成噪点。
+    if (d.y > 0.002) {
+      float az = atan(d.x, d.z);
+      vec2 uv2 = vec2(az * 7.60, d.y * 6.2 - uT * 0.0125);
+      float p = fb(uv2 + vec2(uT * 0.0034, 0.0));
+      float host = smoothstep(0.42, 0.72, p)
+                 * smoothstep(0.004, 0.040, d.y)            // 从山脊那一线起
+                 * (1.0 - smoothstep(0.140, 0.420, d.y))    // 只有低低的一层
+                 * smoothstep(-0.10, 0.55, d.z);            // 南边，九嶷那一头
+      vec3 hc = mix(vec3(0.70, 0.69, 0.715), vec3(0.95, 0.88, 0.78),
+                    pow(clamp(1.0 - d.y * 3.2, 0.0, 1.0), 3.0));
+      c = mix(c, hc, host * 0.82);
     }
     c += (hash(gl_FragCoord.xy) - 0.5) * 0.010;   // dither
     gl_FragColor = vec4(c, 1.0);
@@ -319,6 +348,8 @@ const WAVE_GLSL = `
     h += sin(dot(p, vec2( 0.305,-0.121)) + t * 1.74) * 0.072;
     h += sin(dot(p, vec2( 0.470, 0.395)) + t * 2.55) * 0.036;
     h += sin(dot(p, vec2(-0.760, 0.510)) + t * 3.40) * 0.017;
+    h += sin(dot(p, vec2( 1.180,-0.905)) + t * 4.25) * 0.0135;
+    h += sin(dot(p, vec2(-1.640,-1.230)) + t * 5.10) * 0.0072;
     return h;
   }
 `;
@@ -332,7 +363,7 @@ const waterP = prog(`
     float h = waveH(p, uT);
     // flatten the far rim so the horizon line stays clean
     float d = length(aP);
-    h *= 1.0 - smoothstep(120.0, 520.0, d);
+    h *= 1.0 - smoothstep(280.0, 700.0, d);
     vW = vec3(p.x, h, p.y);
     vD = d;
     gl_Position = uVP * vec4(vW, 1.0);
@@ -345,11 +376,23 @@ const waterP = prog(`
   ${WAVE_GLSL}
   void main(){
     vec2 p = vW.xz;
-    float e = 0.42;
+    // 采样间距随距离张开：远处自动滤掉细浪、留下大浪，
+    // 比「到六十米就把法线拍平」好得多——后者把洞庭变成一块铁板。
+    float e = 0.42 + vD * 0.055;
     vec3 n = normalize(vec3(waveH(p - vec2(e,0.0), uT) - waveH(p + vec2(e,0.0), uT),
                             2.0 * e,
                             waveH(p - vec2(0.0,e), uT) - waveH(p + vec2(0.0,e), uT)));
-    n = normalize(mix(n, vec3(0.0,1.0,0.0), smoothstep(60.0, 340.0, vD)));
+    n = normalize(mix(n, vec3(0.0,1.0,0.0), smoothstep(300.0, 760.0, vD)));
+    // 贴着镜头那几米：掠角下只看得见一小段波长，水面于是显得是平的。
+    // 这里只扰动法线、不动 waveH —— 波高一改，JS 那份镜像就得跟着改，
+    // 漂在水上的东西会掉进水里。纹只是纹，不是浪。
+    float fine = 1.0 - smoothstep(3.0, 46.0, vD);
+    if (fine > 0.002) {
+      vec2 q = p * 2.15 + vec2(uT * 0.32, -uT * 0.21);
+      vec2 rip = vec2(sin(q.x * 1.7 + sin(q.y * 1.31) * 1.6) + 0.55 * sin(q.x * 4.3 - q.y * 2.1),
+                      sin(q.y * 1.9 + sin(q.x * 1.07) * 1.4) + 0.55 * sin(q.y * 3.7 + q.x * 2.6));
+      n = normalize(n + vec3(rip.x, 0.0, rip.y) * 0.055 * fine);
+    }
     vec3 v = normalize(uCam - vW);
     float fres = pow(1.0 - max(dot(n, v), 0.0), 4.3);
     fres = mix(0.045, 1.0, fres);
@@ -358,6 +401,14 @@ const waterP = prog(`
     vec3 shallow = vec3(0.105, 0.150, 0.148);
     vec3 body = mix(deep, shallow, smoothstep(-0.25, 0.25, vW.y));
     vec3 c = mix(body, refl, fres);
+    // 洞庭波。掠着水面看过去，波的形是靠明暗读出来的，不是靠法线：
+    // 浪脊亮、浪谷暗，这一条才让水不再是一块铁板。
+    float hh = waveH(p, uT);
+    float crest = smoothstep(0.10, 0.34, hh);
+    float trough = smoothstep(-0.08, -0.30, hh);
+    float near = 1.0 - smoothstep(320.0, 760.0, vD);
+    c += vec3(0.135, 0.131, 0.121) * crest * near;
+    c -= vec3(0.030, 0.034, 0.036) * trough * near;
     // 夕阳在波上碎成一条路 — the sun broken into a road on the water
     vec3 hv = normalize(v + SUN_DIR);
     c += vec3(1.0, 0.76, 0.46) * pow(max(dot(n, hv), 0.0), 220.0) * 1.25;
@@ -414,6 +465,13 @@ const terrP = prog(`
     vec3 mud   = mix(vec3(0.150,0.130,0.108), vec3(0.205,0.178,0.142), g);
     vec3 sedge = mix(vec3(0.430,0.405,0.320), vec3(0.560,0.530,0.425), g);  // 白薠, bleached autumn grass
     vec3 alb = mix(sedge, mud, wet);
+    // 踩出来的那条路：白薠在这里被踏平（见 makeBlades），可地皮一直还是草色的，
+    // 于是那条路只在草的高度上存在，看不见。踩过的土是露出来的土。
+    float pt = clamp((vW.z + 60.0) / 24.0, 0.0, 1.0);
+    vec2 pp = vec2(-pt * 1.2, -60.0 + pt * 24.0);
+    float pd = length(vW.xz - pp);
+    float worn = 1.0 - smoothstep(0.9, 2.9, pd);
+    alb = mix(alb, mix(vec3(0.196,0.170,0.136), vec3(0.246,0.214,0.170), g), worn * 0.80);
     alb = mix(alb, vec3(0.088,0.082,0.070), smoothstep(0.35, -0.6, vW.y));
     float lam = max(dot(n, SUN_DIR), 0.0);
     vec3 c = alb * (0.30 + 1.05 * lam);
@@ -471,9 +529,12 @@ const peakP = prog(`
   }
 `);
 
+/* 席铺在这里：白薠与席共用这个坐标，草得先踏平 */
+const SHOAL_MAT = [-2.05, -55.40];
+
 /* ---------- 白薠 : sedge blades on the shoal ---------- */
 function makeBlades() {
-  const v = [], N = SHOT ? 23000 : 26000;
+  const v = [], N = SHOT ? 13000 : 26000;
   let placed = 0, guard = 0;
   while (placed < N && guard < N * 40) {
     guard++;
@@ -488,10 +549,13 @@ function makeBlades() {
     const px = -pt * 1.2, pz = -60 + pt * 24;
     const pd = Math.hypot(x - px, z - pz);
     const worn = 1 - Math.min(1, Math.max(0, (pd - 0.9) / 2.0));  // 1 = 正踩在路当中
-    dens *= 1 - 0.74 * worn;
+    // 席铺开的那一块，草是压平的：席底下不长草，四周被坐塌一圈
+    const md = Math.hypot((x - SHOAL_MAT[0]) / 1.55, (z - SHOAL_MAT[1]) / 1.20);
+    const flat = 1 - Math.min(1, Math.max(0, (md - 0.82) / 0.55));
+    dens *= (1 - 0.74 * worn) * (1 - 0.97 * flat);
     if (h2(guard, 33) > dens) continue;
     placed++;
-    const hgt = (0.52 + h2(guard, 5) * 0.86) * (1 - 0.62 * worn);
+    const hgt = (0.52 + h2(guard, 5) * 0.86) * (1 - 0.62 * worn) * (1 - 0.80 * flat);
     const w = 0.028 + h2(guard, 7) * 0.030;
     const ph = h2(guard, 11) * 6.28;
     const tint = h2(guard, 13);
@@ -515,8 +579,13 @@ const bladeP = prog(`
     float s = aQ.x;
     float sway = sin(uT * 1.9 + aQ.y + p.x * 0.22 + p.z * 0.17) * 0.5 + 0.5;
     float gust = 0.55 + 0.45 * sin(uT * 0.47 + p.x * 0.012 + p.z * 0.009);
+    // 每根草自己的倒伏：秋深了，草是垂着的，各垂各的方向。
+    // 这一步只动尖子那一个顶点，所以草还是那么细、那么密——
+    // 真拿几何去弯它，一根草就要三个三角形，密度掉下来，草就成了纸带子。
+    float lean = aQ.y * 1.37;
+    p.xz += vec2(cos(lean), sin(lean)) * (0.14 + 0.16 * fract(aQ.y * 7.31)) * s * s;
     p.xz += uWind * (0.30 + 0.42 * sway) * gust * s * s;
-    p.y  -= 0.10 * s * s * gust;
+    p.y  -= (0.10 + 0.16 * fract(aQ.y * 7.31)) * s * s * gust;
     vT = s; vTint = aQ.z; vD = length(p - uCam);
     gl_Position = uVP * vec4(p, 1.0);
   }
@@ -536,14 +605,15 @@ const bladeP = prog(`
 `);
 
 /* ---------- 木叶下 : the leaves, always coming down ---------- */
-const NLEAF = SHOT ? 520 : 620;
+const NLEAF = SHOT ? 500 : 1000;
 const leaves = [];
+const leafRnd = mkRnd(0x9E3779B9);        // 木叶这一条序列，从种子起走，永远一样
 for (let i = 0; i < NLEAF; i++) leaves.push({
-  x: (Math.random() * 2 - 1) * 70, y: Math.random() * 26 - 1, z: (Math.random() * 2 - 1) * 70,
-  vy: -0.42 - Math.random() * 0.55,
-  sp: Math.random() * 6.28, sw: 0.5 + Math.random() * 1.4,
-  rot: Math.random() * 6.28, rv: (Math.random() - .5) * 1.9,
-  sz: 0.085 + Math.random() * 0.135, tint: Math.random()
+  x: (leafRnd() * 2 - 1) * 70, y: leafRnd() * 26 - 1, z: (leafRnd() * 2 - 1) * 70,
+  vy: -0.42 - leafRnd() * 0.55,
+  sp: leafRnd() * 6.28, sw: 0.5 + leafRnd() * 1.4,
+  rot: leafRnd() * 6.28, rv: (leafRnd() - .5) * 1.9,
+  sz: 0.062 + Math.pow(leafRnd(), 1.7) * 0.120, tint: leafRnd()
 });
 const leafData = new Float32Array(NLEAF * 6 * 8);   // 6 verts * (cx,cy,cz, ox,oy, rot, tint, size)
 const leafBuf = buf(leafData, gl.DYNAMIC_DRAW);
@@ -555,7 +625,11 @@ const leafP = prog(`
   varying vec2 vUV; varying float vTint; varying float vD;
   void main(){
     float s = sin(aQ.x), c = cos(aQ.x);
-    vec2 o = vec2(aO.x * c - aO.y * s, aO.x * s + aO.y * c) * aQ.z;
+    // 翻。一片下落的木叶会转到侧面去，窄成一条线，再翻回来 —— 少了这一下，
+    // 满天的叶子就是一把大小一样、永远正对镜头的药片。
+    float sq = mix(0.16, 1.0, abs(cos(aQ.x * 0.83 + aQ.y * 6.28)));
+    vec2 q = vec2(aO.x * sq, aO.y);
+    vec2 o = vec2(q.x * c - q.y * s, q.x * s + q.y * c) * aQ.z;
     vec3 p = aC + uRight * o.x + uUp * o.y;
     vUV = aO; vTint = aQ.y; vD = length(p - uCam);
     gl_Position = uVP * vec4(p, 1.0);
@@ -564,7 +638,7 @@ const leafP = prog(`
   precision highp float; varying vec2 vUV; varying float vTint; varying float vD;
   ${SKY_GLSL}
   void main(){
-    float w = 0.62 * (1.0 - vUV.y * vUV.y);          // a pointed leaf
+    float w = 0.44 * (1.0 - vUV.y * vUV.y) * (1.0 - 0.28 * vUV.y);   // a pointed leaf, one end wider
     float d = abs(vUV.x) / max(w, 0.001);
     if (d > 1.0) discard;
     vec3 c = mix(vec3(0.520,0.318,0.150), vec3(0.735,0.545,0.245), vTint);
@@ -577,6 +651,7 @@ const leafP = prog(`
 
 /* ---------- 筑室兮水中，葺之兮荷盖 : the house she never comes to ---------- */
 const HOUSE = { x: 0, z: 40 };
+const LAMPS = [];                      // 点着的灯，位置在建屋时填进来，晕由下面那段画
 function Builder() {
   const V = [];                       // x,y,z, nx,ny,nz, r,g,b, float-on-water
   function tri(a, b, c, col, fl) {
@@ -700,6 +775,91 @@ function makeHouse() {
   // 白玉兮为镇：四块压席的白玉
   for (const sx of [-1, 1]) for (const sz of [-1, 1])
     box(HX + sx * 4.0, FLOOR + 0.22, HZ + sz * 3.4, 0.46, 0.44, 0.46, JADE, 0);
+  /* 与佳期兮夕张 —— 席铺好，白玉压着四角，案摆好，案上空无一物。
+     这是整个世界里唯一一处「已经准备好了」的地方。她没有来。
+     铺两处：一处在水中之室的门外廊下（诗里的「筑室兮水中」），
+     一处就在北渚上他站了一整天的地方（「登白薠兮骋望，与佳期兮夕张」是同一句的两半）。
+     远处那一处要走过去才看得见；近处这一处是三个机位里直接的证据。 */
+  const MAT  = [0.452, 0.428, 0.352];   // 莞席，新的，还没有人坐过
+  const HEM  = [0.432, 0.386, 0.310];   // 席边包的那道深色布
+  const AN   = [0.352, 0.286, 0.212];   // 案：一张矮几
+  function layMat(cx, cz, baseY, ang, k) {
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const at = (lx, lz) => [cx + lx * ca - lz * sa, cz + lx * sa + lz * ca];
+    const hx = 1.16 * k, hz = 0.82 * k, my = baseY + 0.045 * k;   // 一张席：够两个人坐，不是一块甲板
+    // 席面：一条一条的莞草编起来，所以它有纹路，不是一块板
+    for (let lz = -hz; lz < hz; lz += 0.105 * k) {
+      const g = h2(lz * 9.1 + cz, 3.3);
+      const [x, z] = at(0, lz + 0.0675 * k);
+      box(x, my, z, hx * 2 * Math.abs(ca) + 0.084 * k * Math.abs(sa), 0.042 * k,
+          hx * 2 * Math.abs(sa) + 0.084 * k * Math.abs(ca),
+          MAT.map(v => v * (0.82 + 0.30 * g)), 0);
+    }
+    const [bx, bz] = at(0, 0);
+    box(bx, my - 0.012 * k, bz,
+        (hx * 2 + 0.16 * k) * Math.abs(ca) + (hz * 2 + 0.16 * k) * Math.abs(sa), 0.048 * k,
+        (hx * 2 + 0.16 * k) * Math.abs(sa) + (hz * 2 + 0.16 * k) * Math.abs(ca), HEM, 0);
+    // 白玉兮为镇：压住席的四个角，风再大席也不掀
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const [x, z] = at(sx * (hx - 0.16 * k), sz * (hz - 0.14 * k));
+      box(x, my + 0.050 * k, z, 0.165 * k, 0.085 * k, 0.165 * k, JADE.map(v => v * 0.68), 0);   // 镇：扁的，像块河里的白石
+    }
+    // 案：摆在席正中，空的
+    // 案：薄面、翘边、四条微微外撇的腿。一块平板加四根方柱读成一张长凳。
+    const ay = my + 0.225 * k;
+    const TOP = AN.map(v => v * 1.42);
+    const ax = 0.63 * k, az = 0.27 * k;
+    box(bx, ay, bz, ax * 2 * Math.abs(ca) + az * 2 * Math.abs(sa), 0.052 * k,
+        ax * 2 * Math.abs(sa) + az * 2 * Math.abs(ca), TOP, 0);
+    for (const sz of [-1, 1]) {                       // 两道翘起来的边
+      const [ex, ez] = at(0, sz * az);
+      box(ex, ay + 0.030 * k, ez, ax * 2 * Math.abs(ca) + 0.075 * k * Math.abs(sa), 0.042 * k,
+          ax * 2 * Math.abs(sa) + 0.075 * k * Math.abs(ca), TOP.map(v => v * 1.10), 0);
+    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const top = at(sx * (ax - 0.10 * k), sz * (az - 0.05 * k));
+      const foot = at(sx * (ax - 0.02 * k), sz * (az + 0.03 * k));
+      beam([top[0], ay - 0.022 * k, top[1]], [foot[0], my + 0.030 * k, foot[1]],
+           0.062 * k, 0.062 * k, AN, 0);               // 腿：往外撇一点
+    }
+  }
+  /* 灯。夕张之后天要黑了，于是点一盏，搁在席边上。
+     它是整张图里唯一的暖色，而且它照不到人 —— 席上没有人。 */
+  function lamp(cx, baseY, cz, k) {
+    // 一盏灯：一根细木柱、一只浅陶盘、一朵火。方盒子加方盒子在暮色里
+    // 读成一台停车计时器，不是灯。
+    const POST = [0.196, 0.156, 0.120], BOWL = [0.352, 0.268, 0.186];
+    const FLAME = [2.80, 1.70, 0.62], WICK = [0.42, 0.30, 0.20];
+    const py = baseY + 0.30 * k;
+    box(cx, py, cz, 0.048 * k, 0.60 * k, 0.048 * k, POST, 0);              // 柱
+    box(cx, baseY + 0.045 * k, cz, 0.20 * k, 0.05 * k, 0.20 * k, POST, 0); // 柱脚
+    const by = baseY + 0.615 * k, br = 0.175 * k;
+    for (let i = 0; i < 10; i++) {                                          // 陶盘：浅浅一只
+      const a0 = i / 10 * Math.PI * 2, a1 = (i + 1) / 10 * Math.PI * 2;
+      const rim = (a, r, h) => [cx + Math.cos(a) * r, by + h, cz + Math.sin(a) * r];
+      tri([cx, by - 0.018 * k, cz], rim(a0, br, 0.035 * k), rim(a1, br, 0.035 * k),
+          BOWL.map(v => v * (0.86 + 0.24 * h2(i, 3.1))), 0);
+      tri(rim(a0, br, 0.035 * k), rim(a0, br * 0.78, -0.012 * k), rim(a1, br * 0.78, -0.012 * k),
+          BOWL.map(v => v * 0.70), 0);
+    }
+    const fy = by + 0.030 * k;
+    box(cx, fy + 0.020 * k, cz, 0.030 * k, 0.055 * k, 0.030 * k, WICK, 0); // 灯芯
+    for (let i = 0; i < 5; i++) {                                           // 火：一朵尖的
+      const a0 = i / 5 * Math.PI * 2, a1 = (i + 1) / 5 * Math.PI * 2, r = 0.050 * k;
+      tri([cx, fy + 0.185 * k, cz],
+          [cx + Math.cos(a0) * r, fy + 0.035 * k, cz + Math.sin(a0) * r],
+          [cx + Math.cos(a1) * r, fy + 0.035 * k, cz + Math.sin(a1) * r], FLAME, 0);
+    }
+    LAMPS.push([cx, fy + 0.10 * k, cz, k]);
+  }
+  lamp(HX + 1.62, FLOOR, HZ - 5.75, 1.0);
+
+  layMat(HX, HZ - 5.75, FLOOR, 0, 1.0);
+  // 北渚上的那一处：踩出来的那条路的尽头，他站了一整天的地方
+  layMat(SHOAL_MAT[0], SHOAL_MAT[1], terrainH(SHOAL_MAT[0], SHOAL_MAT[1]) + 0.02, 0.34, 1.0);
+  lamp(SHOAL_MAT[0] + 1.52, terrainH(SHOAL_MAT[0] + 1.52, SHOAL_MAT[1] - 0.52) + 0.02,
+       SHOAL_MAT[1] - 0.52, 0.92);
+
   // 荷盖：一片压着一片的荷叶，铺满两面坡
   const tilt = Math.atan2(1.55, 5.45);
   for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
@@ -738,30 +898,35 @@ const objP = prog(`
   precision highp float;
   attribute vec3 aP; attribute vec3 aN; attribute vec3 aC; attribute float aF;
   uniform mat4 uVP; uniform vec3 uCam; uniform float uT;
-  varying vec3 vW; varying vec3 vN; varying vec3 vC; varying float vD;
+  varying vec3 vW; varying vec3 vN; varying vec3 vC; varying float vD; varying float vM;
   ${WAVE_GLSL}
   void main(){
     vec3 p = aP;
-    p.y += waveH(p.xz, uT) * aF;          // what floats on the lake, rides the lake
+    // aF >= 0：这一片是不是随湖面起伏。aF < 0：它是布。
+    // 木头、网、荷叶都是湿的，掠角要反光；一块生绢不反光，它只是把光透过去。
+    vM = step(aF, -0.5);
+    p.y += waveH(p.xz, uT) * max(aF, 0.0);
     vW = p; vN = aN; vC = aC; vD = length(p - uCam);
     gl_Position = uVP * vec4(p, 1.0);
   }
 `, `
   precision highp float;
-  varying vec3 vW; varying vec3 vN; varying vec3 vC; varying float vD;
+  varying vec3 vW; varying vec3 vN; varying vec3 vC; varying float vD; varying float vM;
   uniform vec3 uCam;
   ${SKY_GLSL}
   void main(){
     vec3 n = normalize(vN);
     float lam = max(dot(n, SUN_DIR), 0.0);
     vec3 c = vC * (0.26 + 1.15 * lam);
+    // 生绢很薄：背着光的那一面也亮，光是从布里透过来的
+    c += vC * vM * max(dot(-n, SUN_DIR), 0.0) * 0.55 * vec3(1.02, 0.94, 0.82);
     c += vC * skyColor(vec3(0.0,1.0,0.0)) * 0.42 * (0.55 + 0.45 * n.y);
     c += vC * vec3(0.10,0.13,0.12) * max(-n.y, 0.0) * 0.8;   // bounce off the water
     vec3 v = normalize(uCam - vW);
     // 水气：向上的面照到整片天，掠角处泛出水光
     c += vC * skyColor(vec3(0.0, 1.0, 0.0)) * 0.55 * max(n.y, 0.0);
     c += skyColor(reflect(-v, n)) * 0.72 * pow(1.0 - max(dot(n, v), 0.0), 3.4)
-           * smoothstep(0.30, 0.85, n.y);   // 只有朝天的湿面才反光
+           * smoothstep(0.30, 0.85, n.y) * (1.0 - 0.92 * vM);   // 只有朝天的湿面才反光，布不反
     float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
     c = mix(c, fogColor(-v), fog);
     gl_FragColor = vec4(c, 1.0);
@@ -784,24 +949,40 @@ function makeWrongness() {
 
   /* 树：秋深，叶子都在下，枝子是空的 */
   function branch(p, dir, len, rad, depth, seed) {
-    const q = [p[0] + dir[0] * len, p[1] + dir[1] * len, p[2] + dir[2] * len];
-    beam(p, q, rad * 2, rad * 2, BARK.map(v => v * (0.85 + 0.30 * h2(seed, depth))), 0);
+    // 一根枝要收细，而且要弯。等粗的直棍接等粗的直棍，长出来的是一丛铁丝网，
+    // 不是一株深秋的树。所以每一节分三段画，边走边收、边走边偏。
+    const SEGS = 3;
+    let a0 = p.slice(), d0 = dir.slice();
+    for (let s = 0; s < SEGS; s++) {
+      const k0 = s / SEGS, k1 = (s + 1) / SEGS;
+      const bend = (h2(seed, s * 3.3 + 1) - 0.5) * 0.30 / SEGS;
+      d0 = [d0[0] + bend, d0[1] - Math.abs(bend) * 0.35, d0[2] + (h2(seed, s * 5.1) - 0.5) * 0.30 / SEGS];
+      const dl = Math.hypot(d0[0], d0[1], d0[2]) || 1;
+      d0 = [d0[0] / dl, d0[1] / dl, d0[2] / dl];
+      const a1 = [a0[0] + d0[0] * len / SEGS, a0[1] + d0[1] * len / SEGS, a0[2] + d0[2] * len / SEGS];
+      const w0 = rad * 2 * (1 - 0.42 * k0), w1 = rad * 2 * (1 - 0.42 * k1);
+      beam(a0, a1, (w0 + w1) * 0.5, (w0 + w1) * 0.5,
+           BARK.map(v => v * (0.85 + 0.30 * h2(seed, depth + s))), 0);
+      a0 = a1;
+    }
+    const q = a0;
+    dir = d0;
     if (depth <= 0 || len < 0.34) return;
     const n = 2 + (h2(seed * 1.7, depth * 2.3) > 0.62 ? 1 : 0);
     for (let i = 0; i < n; i++) {
       const a = h2(seed + i * 3.1, depth * 5.7) * Math.PI * 2;
-      const tilt = 0.42 + h2(seed + i * 7.3, depth) * 0.70;
+      const tilt = 0.34 + h2(seed + i * 7.3, depth) * 0.52;
       const d = [dir[0] + Math.cos(a) * tilt, dir[1] * (0.62 + 0.26 * h2(seed + i, depth * 3)),
                  dir[2] + Math.sin(a) * tilt];
       const l = Math.hypot(d[0], d[1], d[2]) || 1;
       branch(q, [d[0]/l, d[1]/l, d[2]/l], len * (0.58 + 0.16 * h2(seed * 2 + i, depth)),
-             rad * 0.62, depth - 1, seed + i * 11 + depth);
+             rad * 0.56, depth - 1, seed + i * 11 + depth);
     }
   }
   function tree(x, z, h, seed) {
     const y = Math.max(terrainH(x, z), WATER_Y - 0.55);   // 站在水里的枯树，也算「木」
     branch([x, y - 0.5, z], [0.04 * (h2(seed, 1) - .5), 1, 0.04 * (h2(seed, 2) - .5)],
-           h * 0.44, 0.19 + 0.05 * h2(seed, 4), 4, seed);
+           h * 0.44, 0.235 + 0.06 * h2(seed, 4), 4, seed);
     return y;
   }
 
@@ -833,24 +1014,27 @@ function makeWrongness() {
 
   /* 鸟：它们不在树上。它们蹲在水草里。 */
   function bird(x, y, z, ang, sc, fl) {
+    // 一只站在水草里的水鸟。远处只剩剪影，所以认得出它是鸟靠三样：
+    // 细长的腿、弯上去的颈、一张尖喙。圆乎乎的一团在水面上只会读成石头。
     const c = Math.cos(ang), s = Math.sin(ang);
-    blob(x, y + 0.20 * sc, z, 0.34 * sc, 0.19 * sc, 0.20 * sc, ang, BIRD, fl);       // 身
-    blob(x + 0.26 * sc * c, y + 0.36 * sc, z + 0.26 * sc * s, 0.11 * sc, 0.11 * sc, 0.10 * sc,
-         ang, BIRD.map(v => v * 1.25), fl);                                           // 头
-    tri([x + 0.50 * sc * c, y + 0.35 * sc, z + 0.50 * sc * s],
-        [x + 0.33 * sc * c, y + 0.38 * sc, z + 0.33 * sc * s],
-        [x + 0.33 * sc * c, y + 0.32 * sc, z + 0.33 * sc * s], [0.28, 0.24, 0.18], fl);
-    for (const sd of [-1, 1])                                                          // 腿
-      box(x - 0.05 * sc * c - sd * 0.09 * sc * s, y + 0.06 * sc, z - 0.05 * sc * s + sd * 0.09 * sc * c,
-          0.035 * sc, 0.26 * sc, 0.035 * sc, [0.24, 0.20, 0.16], fl);
-    // 尾
-    tri([x - 0.30 * sc * c, y + 0.25 * sc, z - 0.30 * sc * s],
-        [x - 0.52 * sc * c, y + 0.31 * sc, z - 0.52 * sc * s],
-        [x - 0.30 * sc * c, y + 0.17 * sc, z - 0.30 * sc * s], BIRD, fl);
+    const at = (f, u, r) => [x + f * sc * c - r * sc * s, y + u * sc, z + f * sc * s + r * sc * c];
+    const BODY = BIRD, LEG = [0.230, 0.196, 0.160], BILL = [0.300, 0.252, 0.176];
+    blob(x + 0.02 * sc * c, y + 0.62 * sc, z + 0.02 * sc * s,
+         0.34 * sc, 0.17 * sc, 0.18 * sc, ang, BODY, fl);                    // 身：一个横着的梭
+    beam(at(-0.26, 0.66, 0), at(-0.46, 0.50, 0), 0.10 * sc, 0.09 * sc, BODY, fl);   // 尾
+    beam(at(0.16, 0.70, 0), at(0.24, 1.06, 0), 0.075 * sc, 0.085 * sc, BODY, fl);   // 颈：立起来
+    beam(at(0.24, 1.06, 0), at(0.34, 1.24, 0), 0.070 * sc, 0.075 * sc, BODY, fl);
+    const hd = at(0.38, 1.28, 0);
+    blob(hd[0], hd[1], hd[2], 0.10 * sc, 0.075 * sc, 0.075 * sc, ang,
+         BODY.map(v => v * 1.22), fl);                                        // 头
+    tri(at(0.62, 1.27, 0), at(0.44, 1.30, 0.03), at(0.44, 1.25, -0.03), BILL, fl);  // 喙
+    for (const sd of [-1, 1])                                                       // 腿：细长
+      beam(at(-0.02, 0.52, sd * 0.10), at(-0.02, 0.0, sd * 0.11), 0.035 * sc, 0.035 * sc, LEG, fl);
   }
 
   /* 蘋：一片浮草，鸟就落在这里 */
-  function pingPatch(cx, cz, r, seed, nBird) {
+  function pingPatch(cx, cz, r, seed, nBird, bsc) {
+    bsc = bsc || 1;
     for (let i = 0; i < 150; i++) {
       const a = h2(seed + i, 1.3) * Math.PI * 2;
       const d = Math.sqrt(h2(seed + i, 4.1)) * r;
@@ -862,47 +1046,66 @@ function makeWrongness() {
       const a = h2(seed * 3 + i, 2.2) * Math.PI * 2;
       const d = Math.sqrt(h2(seed * 3 + i, 6.6)) * r * 0.74;
       bird(cx + Math.cos(a) * d, 0.02, cz + Math.sin(a) * d,
-           h2(seed + i, 8.1) * Math.PI * 2, 0.62 + 0.26 * h2(seed + i, 3.4), 1);
+           h2(seed + i, 8.1) * Math.PI * 2, (0.62 + 0.26 * h2(seed + i, 3.4)) * bsc, 1);
     }
   }
 
   /* 麋：它走进了为她盖的屋子，低头在吃庭中的草 */
   function elk(x, y, z, ang) {
+    // 麋。远看只剩一个剪影，所以比例比细节重要：腿要细、要露出来，
+    // 身子要窄，脖子要真的低下去，角要细到不和身子糊在一起。
     const c = Math.cos(ang), s = Math.sin(ang);
     const at = (f, u, r) => [x + f * c - r * s, y + u, z + f * s + r * c];
-    const HIDE = ELK, DARK = ELK.map(v => v * 0.80), HORN = [0.268, 0.242, 0.200];
-    beam(at(-0.92, 1.12, 0), at(0.86, 1.18, 0), 0.66, 0.84, HIDE, 0);        // 身
-    beam(at(0.70, 1.26, 0), at(1.32, 0.60, 0), 0.40, 0.46, HIDE, 0);         // 低下去的脖子
-    beam(at(1.26, 0.56, 0), at(1.70, 0.30, 0), 0.26, 0.30, HIDE.map(v => v * 1.12), 0);  // 头
-    for (const [f, r] of [[0.62, 0.30], [0.62, -0.30], [-0.66, 0.30], [-0.66, -0.30]])
-      beam(at(f, 0.80, r), at(f + 0.04, 0.0, r), 0.135, 0.135, DARK, 0);     // 腿
-    beam(at(-0.92, 1.24, 0), at(-1.16, 0.86, 0), 0.10, 0.14, DARK, 0);       // 尾
-    for (const r of [-0.15, 0.15]) {                                          // 角
-      const a0 = at(1.22, 0.74, r), a1 = at(0.74, 1.42, r * 2.8);
-      beam(a0, a1, 0.055, 0.055, HORN, 0);
-      beam(a1, at(0.30, 1.70, r * 3.9), 0.042, 0.042, HORN, 0);
-      beam(a1, at(0.88, 1.80, r * 1.9), 0.038, 0.038, HORN, 0);
+    const HIDE = ELK, DARK = ELK.map(v => v * 0.78), HORN = [0.268, 0.242, 0.200];
+    beam(at(-0.86, 1.30, 0), at(0.78, 1.36, 0), 0.50, 0.58, HIDE, 0);        // 身：窄一些
+    beam(at(-0.86, 1.34, 0), at(-0.62, 1.42, 0), 0.52, 0.42, HIDE, 0);       // 臀
+    beam(at(0.70, 1.40, 0), at(1.30, 0.82, 0), 0.26, 0.34, HIDE, 0);         // 低下去的脖子
+    beam(at(1.24, 0.80, 0), at(1.66, 0.56, 0), 0.19, 0.22, HIDE.map(v => v * 1.14), 0);  // 头
+    beam(at(1.60, 0.62, 0), at(1.78, 0.44, 0), 0.13, 0.13, DARK, 0);         // 吻
+    for (const [f, r, fw] of [[0.58, 0.235, 1], [0.58, -0.235, 1], [-0.64, 0.235, 0], [-0.64, -0.235, 0]]) {
+      const knee = at(f + (fw ? 0.02 : -0.06), 0.62, r);
+      beam(at(f, 1.08, r), knee, 0.105, 0.115, DARK, 0);                     // 上腿
+      beam(knee, at(f + (fw ? 0.06 : 0.02), 0.0, r), 0.075, 0.080, DARK, 0); // 下腿：细
+    }
+    beam(at(-0.90, 1.40, 0), at(-1.10, 1.06, 0), 0.075, 0.10, DARK, 0);      // 尾
+    for (const r of [-0.13, 0.13]) {                                          // 角：细
+      const a0 = at(1.30, 0.96, r), a1 = at(0.92, 1.56, r * 2.6);
+      beam(a0, a1, 0.040, 0.040, HORN, 0);
+      beam(a1, at(0.52, 1.86, r * 3.6), 0.031, 0.031, HORN, 0);
+      beam(a1, at(1.06, 1.92, r * 1.8), 0.027, 0.027, HORN, 0);
     }
   }
 
-  /* 蛟：水裔上拱起的几节背脊。看不见头，也就更不安。 */
-  function jiao(cx, cz, ang, len) {
+  /* 蛟：水裔上拱起的几节背脊，前头一个低低的吻和两只短角。 */
+  function jiao(cx, cz, ang, len, sc) {
+    sc = sc || 1;
     const c = Math.cos(ang), s = Math.sin(ang);
     for (let i = 0; i <= 44; i++) {
       const t = i / 44;
       const f = (t - 0.5) * len;
-      const y = Math.sin(t * Math.PI * 3.05) * 0.60 - 0.20;
-      if (y < -0.12) continue;                       // 沉在水里的那几节，不画
-      const w = 0.52 * (1 - Math.pow(Math.abs(t - 0.42) * 1.9, 2.0));
-      if (w <= 0.04) continue;
+      const y = (Math.sin(t * Math.PI * 3.05) * 0.60 - 0.20) * sc;
+      if (y < -0.12 * sc) continue;                       // 沉在水里的那几节，不画
+      const w = 0.52 * sc * (1 - Math.pow(Math.abs(t - 0.42) * 1.9, 2.0));
+      if (w <= 0.04 * sc) continue;
       const lat = Math.sin(t * Math.PI * 1.6) * len * 0.055;
       const px = cx + f * c - lat * s, pz = cz + f * s + lat * c;
       blob(px, y * 0.55, pz, w * 1.5, w * 0.78, w, ang, JIAO.map(v => v * (0.82 + 0.5 * h2(i, 2))), 1);
       if (i % 6 === 0 && y > 0.16)                   // 背鳍
         tri([px, y * 0.55 + w * 0.7, pz],
-            [px - 0.5 * c, y * 0.55 + 0.02, pz - 0.5 * s],
-            [px + 0.5 * c, y * 0.55 + 0.02, pz + 0.5 * s], JIAO.map(v => v * 1.4), 1);
+            [px - 0.5 * sc * c, y * 0.55 + 0.02, pz - 0.5 * sc * s],
+            [px + 0.5 * sc * c, y * 0.55 + 0.02, pz + 0.5 * sc * s], JIAO.map(v => v * 1.4), 1);
     }
+    // 头。没有头的时候，它只是水上几个驼峰，读不出是一条活物。
+    const hf = -0.5 * len + len * 0.035;
+    const hx = cx + hf * c, hz = cz + hf * s;
+    const HD = JIAO.map(v => v * 1.15);
+    blob(hx, 0.24 * sc, hz, 1.05 * sc, 0.40 * sc, 0.56 * sc, ang, HD, 1);            // 吻
+    blob(hx + 0.62 * sc * c, 0.30 * sc, hz + 0.62 * sc * s, 0.62 * sc, 0.46 * sc, 0.62 * sc, ang, HD, 1);
+    for (const sd of [-1, 1])                                          // 两只角，很短
+      tri([hx + (0.42 * c - sd * 0.26 * s) * sc, 0.34 * sc, hz + (0.42 * s + sd * 0.26 * c) * sc],
+          [hx + (0.10 * c - sd * 0.30 * s) * sc, 0.30 * sc, hz + (0.10 * s + sd * 0.30 * c) * sc],
+          [hx + (0.02 * c - sd * 0.46 * s) * sc, 0.86 * sc, hz + (0.02 * s + sd * 0.46 * c) * sc],
+          HD.map(v => v * 1.25), 1);
   }
 
   // ——— 摆进世界 ———
@@ -932,13 +1135,152 @@ function makeWrongness() {
   pingPatch(-44, -6, 6.0, 47, 6);
   pingPatch(-53, 27, 7.0, 59, 8);
   pingPatch(-7, -29, 7.6, 67, 9);
+  // 鸟何萃兮蘋中 —— 这一句在三个机位里一直看不见。把一片蘋挪到「时不可兮骤得」
+  // 那个机位的跟前：鸟就落在水草里，不落在树上，近得看得清它们没有在飞。
+  pingPatch(-60.5, 34.5, 5.4, 77, 4, 1.05);
+  pingPatch(-55.0, 27.0, 4.2, 83, 2, 0.95);
+
+  /* 沅有芷兮澧有兰 —— 两条水，各自的香草。
+     两丛必须一眼分得开：芷是直的，顶上一把白伞；兰是弯的，一丛窄叶从根上散开。
+     西边的沙洲是沅，长芷；东边的是澧，长兰。 */
+  const ZHI_STEM = [0.268, 0.300, 0.204], ZHI_UMBEL = [0.812, 0.822, 0.762];
+  const LAN_LEAF = [0.212, 0.286, 0.196], LAN_FLOWER = [0.556, 0.500, 0.612];
+  function zhi(x, z, seed) {                        // 白芷：一根直杆，顶上一把伞
+    const y = terrainH(x, z);
+    if (y < 0.20) return;
+    const h = 0.95 + h2(seed, 2.2) * 0.55;
+    box(x, y + h / 2, z, 0.035, h, 0.035, ZHI_STEM, 0);
+    const uy = y + h, ur = 0.20 + h2(seed, 5.1) * 0.10;
+    for (let i = 0; i < 9; i++) {
+      const a0 = i / 9 * Math.PI * 2, a1 = (i + 1) / 9 * Math.PI * 2;
+      const k = 0.86 + 0.28 * h2(seed + i, 7.7);
+      tri([x, uy + 0.03, z],
+          [x + Math.cos(a0) * ur * k, uy, z + Math.sin(a0) * ur * k],
+          [x + Math.cos(a1) * ur * k, uy, z + Math.sin(a1) * ur * k],
+          ZHI_UMBEL.map(v => v * (0.84 + 0.26 * h2(seed + i, 3.3))), 0);
+    }
+  }
+  function lan(x, z, seed) {                        // 兰：一丛窄叶，从根上弯出去
+    const y = terrainH(x, z);
+    if (y < 0.20) return;
+    const n = 6 + Math.floor(h2(seed, 1.3) * 5);
+    for (let i = 0; i < n; i++) {
+      const a = h2(seed + i, 2.9) * Math.PI * 2;
+      const len = 0.55 + h2(seed + i, 4.4) * 0.60, bend = 0.42 + h2(seed + i, 6.1) * 0.55;
+      const tipx = x + Math.cos(a) * len * bend, tipz = z + Math.sin(a) * len * bend;
+      const w = 0.030 + h2(seed + i, 8.8) * 0.020;
+      const c = LAN_LEAF.map(v => v * (0.82 + 0.34 * h2(seed + i, 9.9)));
+      tri([x - Math.sin(a) * w, y, z + Math.cos(a) * w],
+          [x + Math.sin(a) * w, y, z - Math.cos(a) * w],
+          [tipx, y + len * 0.92, tipz], c, 0);
+      tri([x + Math.sin(a) * w, y, z - Math.cos(a) * w],
+          [x - Math.sin(a) * w, y, z + Math.cos(a) * w],
+          [tipx, y + len * 0.92, tipz], c.map(v => v * 0.70), 0);
+    }
+    if (h2(seed, 12.1) > 0.55) {                    // 一枝花，很小
+      const fh = y + 0.62 + h2(seed, 13.3) * 0.30;
+      box(x + 0.04, (y + fh) / 2, z, 0.020, fh - y, 0.020, LAN_LEAF, 0);
+      box(x + 0.04, fh, z, 0.085, 0.075, 0.085, LAN_FLOWER, 0);
+    }
+  }
+  // 沅（西）有芷
+  for (let i = 0; i < 90; i++) {
+    const a = h2(i, 21.1) * Math.PI * 2, r = 3.2 + Math.pow(h2(i, 22.3), 0.6) * 13.0;
+    zhi(-46 + Math.cos(a) * r, -24 + Math.sin(a) * r * 1.15, i * 3.7 + 1);
+  }
+  // 澧（东）有兰
+  for (let i = 0; i < 90; i++) {
+    const a = h2(i, 31.7) * Math.PI * 2, r = 3.0 + Math.pow(h2(i, 32.9), 0.6) * 12.0;
+    lan(34 + Math.cos(a) * r, -30 + Math.sin(a) * r * 1.10, i * 5.3 + 2);
+  }
+
+  /* 搴汀洲兮杜若，将以遗兮远者 —— 汀洲上的杜若：宽叶、一小簇白花。
+     摘下来是要送给远方的那个人的。所以它长在水刚退下去的那一片平沙上，
+     伸手就够得着；而且它必须和芷、兰都不一样：芷是伞，兰是窄叶，杜若是宽叶。 */
+  const RUO_LEAF = [0.352, 0.386, 0.288], RUO_FLOWER = [0.905, 0.892, 0.832];
+  function duruo(x, z, seed) {
+    const y = terrainH(x, z);
+    if (y < 0.12 || y > 2.60) return;                 // 只长在水退下去的那片湿沙上
+    const n = 4 + Math.floor(h2(seed, 1.9) * 4);
+    for (let i = 0; i < n; i++) {
+      const a = h2(seed + i, 3.7) * Math.PI * 2;
+      const len = 0.34 + h2(seed + i, 5.5) * 0.26, w = 0.052 + h2(seed + i, 7.1) * 0.030;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      // 一片宽叶：从根上立起来，到一半的时候才往外弯出去。叶子是立着的，
+      // 摊在地上的三角形不是叶子，是碎玻璃。
+      const base = [x, y + 0.02, z];
+      const midL = [x + ca * len * 0.18 - sa * w, y + len * 0.62, z + sa * len * 0.18 + ca * w];
+      const midR = [x + ca * len * 0.18 + sa * w, y + len * 0.62, z + sa * len * 0.18 - ca * w];
+      const tip  = [x + ca * len * 0.86, y + len * 1.02, z + sa * len * 0.86];
+      const c = RUO_LEAF.map(v => v * (0.80 + 0.36 * h2(seed + i, 11.7)));
+      tri(base, midL, tip, c, 0); tri(base, tip, midR, c, 0);
+      tri(base, tip, midL, c.map(v => v * 0.74), 0); tri(base, midR, tip, c.map(v => v * 0.74), 0);
+    }
+    if (h2(seed, 13.9) > 0.40) {                      // 一小簇白花，摘的就是它
+      // 花是花瓣，不是白方块：正方体在这个距离上读成撒了一地的纸片。
+      const fh = y + 0.50 + h2(seed, 15.1) * 0.20;
+      box(x, (y + fh) / 2 + 0.02, z, 0.024, fh - y, 0.024, RUO_LEAF, 0);
+      for (let q = 0; q < 3; q++) {
+        const ca = h2(seed + q, 17.3) * Math.PI * 2;
+        const r = 0.030 + h2(seed + q, 19.1) * 0.026;
+        const bx = x + Math.cos(ca) * r, bz = z + Math.sin(ca) * r;
+        const by = fh + h2(seed + q, 21.7) * 0.05;
+        for (let k = 0; k < 3; k++) {                 // 三片小瓣，朝三个方向张开
+          const pa = ca + k * 2.094 + h2(seed + q, 23.5);
+          const pr = 0.082 + h2(seed + q + k, 25.1) * 0.040;
+          tri([bx, by - 0.010, bz],
+              [bx + Math.cos(pa) * pr, by + 0.030, bz + Math.sin(pa) * pr],
+              [bx + Math.cos(pa + 0.62) * pr, by + 0.030, bz + Math.sin(pa + 0.62) * pr],
+              RUO_FLOWER.map(v => v * (0.88 + 0.16 * h2(seed + k, 27.3))), 0);
+        }
+      }
+    }
+  }
+  // 汀洲：北渚北边那一片平沙，正对着人一整天站着的方向
+  for (let i = 0; i < 46; i++) {
+    const x = -14 + h2(i, 51.3) * 30, z = -78 + h2(i, 52.9) * 20;
+    duruo(x, z, i * 4.1 + 303);
+  }
+  // 就在他站的那块高处往北几步：手一伸就够得着的一丛，这是「搴」的那一把
+  for (let i = 0; i < 11; i++) {
+    const x = -3.5 + h2(i, 61.1) * 11.0, z = -67.5 + h2(i, 62.3) * 7.5;
+    duruo(x, z, i * 7.7 + 505);
+  }
+  // 还有几丛在澧浦的浅滩上 —— 褋就落在那儿
+  for (let i = 0; i < 20; i++) {
+    const x = -4 + h2(i, 53.7) * 18, z = -72 + h2(i, 54.9) * 10;
+    duruo(x, z, i * 6.3 + 404);
+  }
+
+  // 两条水在北渚两侧入湖，香草一直长到水边上来：走在渚上，左手是芷，右手是兰
+  for (let i = 0; i < 150; i++) {
+    const u = h2(i, 41.3);
+    const x = -(7.5 + h2(i, 42.7) * 15.0), z = -56 + u * 26;
+    const y = terrainH(x, z);
+    if (y > 0.26 && y < 1.45) zhi(x, z, i * 2.9 + 101);
+  }
+  for (let i = 0; i < 150; i++) {
+    const u = h2(i, 43.9);
+    const x = 7.5 + h2(i, 44.1) * 15.0, z = -56 + u * 26;
+    const y = terrainH(x, z);
+    if (y > 0.26 && y < 1.45) lan(x, z, i * 3.1 + 202);
+  }
 
   // 麋食兮庭中 —— 就在为她盖的那座屋子的廊下
   elk(HOUSE.x - 0.6, 1.52, HOUSE.z - 5.95, -0.28);
+  // 北渚上那处席案也是一个「庭」：席铺好了，人没来，麋来了，低头在席边吃草。
+  // 这一句的反问要成立，得让人看见它站在本该是她的位置上。
+  {
+    // 就站在那条踩出来的路上：草在那儿被踏平了，四条腿才看得见
+    const ex = 3.60, ez = -45.10;
+    elk(ex, terrainH(ex, ez), ez, 3.02);
+  }
 
   // 蛟何为兮水裔
   jiao(30, -4, 0.55, 15);
   jiao(-30, 66, 2.30, 13);
+  // 水裔：就在北渚的边上，从骋望那个机位看过去，它横在人和水中之室之间
+  jiao(15.0, -16.0, -0.40, 30, 2.7);
 
   return { vb: buf(new Float32Array(V)), n: V.length / 10 };
 }
@@ -952,30 +1294,35 @@ function waveJS(x, z, t) {
        + 0.155 * Math.sin(-0.089*x + 0.176*z + t * 1.21)
        + 0.072 * Math.sin(0.305*x - 0.121*z + t * 1.74)
        + 0.036 * Math.sin(0.470*x + 0.395*z + t * 2.55)
-       + 0.017 * Math.sin(-0.760*x + 0.510*z + t * 3.40);
+       + 0.017 * Math.sin(-0.760*x + 0.510*z + t * 3.40)
+       + 0.0135 * Math.sin(1.180*x - 0.905*z + t * 4.25)
+       + 0.0072 * Math.sin(-1.640*x - 1.230*z + t * 5.10);
 }
 const CLOTHS = [
   // 袂：解下来的袖子。它们被放在那几个定机位一定看得见的地方 —— 这是全世界唯一
   // 还在走、而且再也不回来的东西。
-  { x:  2.6, z: -26.0, ang: 0.42, vx: 0.060, vz: 0.098, w: 4.4, h: 1.70, tone: 1.06 },
-  { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.6, h: 1.35, tone: 1.00 },
-  { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.4, h: 1.30, tone: 1.03 },
-  { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 4.0, h: 1.55, tone: 1.02 },
-  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子
-  { x:-64.2, z:  37.0, ang: 0.74, vx: 0.050, vz: 0.082, w: 4.4, h: 1.80, tone: 1.10 },
-  { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 4.2, h: 1.60, tone: 0.98 },
+  { x:  2.6, z: -26.0, ang: 0.42, vx: 0.060, vz: 0.098, w: 3.9, h: 1.50, tone: 0.99 },
+  { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.3, h: 1.25, tone: 0.96 },
+  { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.2, h: 1.22, tone: 0.97 },
+  { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 3.6, h: 1.40, tone: 0.97 },
+  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子。
+  // 这一句是全诗的那一下——袖子解下来扔进水里，让它自己走。这个机位必须看得见它。
+  { x:-64.2, z:  37.0, ang: 0.74, vx: 0.050, vz: 0.082, w: 3.8, h: 1.55, tone: 0.96 },
+  { x:-64.0, z:  36.5, ang: 1.08, vx: 0.046, vz: 0.078, w: 3.2, h: 1.32, tone: 0.96 },
+  { x:-66.6, z:  39.4, ang: 0.35, vx: 0.052, vz: 0.086, w: 2.6, h: 1.10, tone: 0.92 },
+  { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 3.8, h: 1.45, tone: 0.94 },
   // 正从「登白薠兮骋望」眼前漂过去的那一件
-  { x: -2.0, z: -25.0, ang: 1.22, vx: 0.058, vz: 0.094, w: 6.0, h: 2.60, tone: 1.12 },
+  { x: -2.0, z: -25.0, ang: 1.22, vx: 0.058, vz: 0.094, w: 4.2, h: 1.85, tone: 0.99 },
   // 挂在枯枝上的两件：水把它们带到这儿，枝子替水留住了它们。
   // 三个机位里唯一的人迹，就是这个人脱下来、扔掉、再也没回来拿的衣裳。
-  { x: -0.85, z: -74.9, y: 5.35, ang: 0.26, w: 1.55, h: 2.80, tone: 0.86, hang: true },
-  { x:-12.05, z: -45.9, y: 4.35, ang: 1.62, w: 1.40, h: 2.55, tone: 0.72, hang: true },
+  { x: -0.85, z: -74.9, y: 5.35, ang: 0.26, w: 1.45, h: 2.70, tone: 0.92, hang: true },
+  { x:-12.05, z: -45.9, y: 4.35, ang: 1.62, w: 1.32, h: 2.45, tone: 0.84, hang: true },
   // 就丢在「登白薠兮骋望」的脚边：她没有来，你在这儿站到把褋都脱下来了
-  { x:  1.5, z: -55.6, ang: 1.34, w: 3.6, h: 1.95, tone: 0.72, snag: true, lift: 1.16 },
+  { x:  1.6, z: -56.4, ang: 1.34, w: 2.5, h: 1.32, tone: 1.16, snag: true, lift: 0.96 },
   // 褋：落在澧浦的浅滩上，盖在白薠上，再也漂不动了
-  { x:  4.2, z: -70.6, ang: 1.92, w: 3.4, h: 1.75, tone: 0.95, snag: true },
+  { x:  4.2, z: -70.6, ang: 1.92, w: 3.0, h: 1.55, tone: 1.12, snag: true },
 ];
-const CU = 12, CV = 5;
+const CU = 20, CV = 9;
 const clothData = new Float32Array(CLOTHS.length * CU * CV * 6 * 10);
 const clothBuf = buf(clothData, gl.DYNAMIC_DRAW);
 const CLOTH_N = CLOTHS.length * CU * CV * 6;
@@ -989,11 +1336,19 @@ function updateCloths(t) {
     if (C.hang) {                                    // 挂在枯枝上的那一件
       const ca2 = Math.cos(C.ang), sa2 = Math.sin(C.ang);
       const hangAt = (u, v, out) => {
-        const hem = 1 - 0.22 * Math.abs(Math.sin(u * 5.7 + C.ang));   // 破了的下摆
-        const lx = (u - 0.5) * C.w * (1 - 0.34 * v);
-        const ly = -v * C.h * hem - 0.30 * Math.sin(Math.PI * u);
+        // 一件搭在枯枝上的衣裳：肩上是搭过去的那道折，往下收一点，
+        // 下摆是烂的、参差的。直上直下的四边形只会读成一块挂着的板。
+        const hem = 1 - 0.30 * Math.abs(Math.sin(u * 5.7 + C.ang))
+                      - 0.16 * Math.abs(Math.sin(u * 13.1 + 1.7));    // 破了的下摆
+        const waist = 1 - 0.30 * v + 0.12 * Math.sin(Math.PI * v * 1.6);
+        const lx = (u - 0.5) * C.w * waist;
+        const ly = -v * C.h * hem - 0.30 * Math.sin(Math.PI * u)
+                 - 0.10 * Math.pow(1 - v, 3) * Math.cos(Math.PI * (u - 0.5));   // 肩上那道折
         const lz = 0.20 * Math.sin(t * 1.35 + u * 3.3 + v * 2.4) * (0.25 + 0.75 * v)
-                 + 0.10 * Math.sin(t * 2.4 - u * 5.1);
+                 + 0.10 * Math.sin(t * 2.4 - u * 5.1)
+                 // 挂着的衣裳是竖着皱的：一条一条的褶从肩上挂下来
+                 + (0.085 * Math.sin(u * 15.5 + C.ang * 3.1)
+                  + 0.048 * Math.sin(u * 31.0 - v * 2.2)) * (0.30 + 0.70 * v);
         out[0] = C.x + lx * ca2 - lz * sa2;
         out[1] = C.y + ly;
         out[2] = C.z + lx * sa2 + lz * ca2;
@@ -1016,26 +1371,33 @@ function updateCloths(t) {
             clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
             clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
             clothData[o++] = 0.985 * g; clothData[o++] = 0.938 * g; clothData[o++] = 0.848 * g;
-            clothData[o++] = 0;
+            clothData[o++] = -1;
           }
         }
       }
       continue;
     }
     const at = (u, v, out) => {
-      // 袖子：一头宽、一头收口，边缘是软的，中间还有一道顺着水走的褶
-      const taper = 0.56 + 0.44 * Math.sin(Math.PI * (0.18 + 0.82 * u));
-      const ripple = 1 + 0.16 * Math.sin(u * 7.1 + C.ang * 3.0);
-      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h * taper * ripple;
+      // 袖子：一头宽、一头收口。轮廓上不能有直边——一块泡了水的生绢，
+      // 边是烂的、卷的，所以下摆按 u 抖起来，两头再收一道。
+      const taper = 0.50 + 0.50 * Math.sin(Math.PI * (0.13 + 0.87 * u));
+      const hem   = 1 - 0.14 * Math.sin(u * 9.3 + C.ang * 4.1)
+                      - 0.07 * Math.sin(u * 20.7 - C.ang * 1.7);
+      const lx = (u - 0.5) * C.w, lz = (v - 0.5) * C.h * taper * hem;
       const x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca;
-      // 绢很软：它贴着浪起伏，自己还在抖
-      const crease = 0.055 * Math.cos(Math.PI * (v - 0.5) * 2.0) * (0.5 + 0.5 * Math.sin(lx * 1.9));
+      // 褶。上一版这里几乎是平的，于是整块朝天，把天顶那点铁青一整片反上来，
+      // 看起来像一块塑料板。真正让它读成布的不是颜色是褶：法线一乱，
+      // 同一块绢上就同时有亮面和暗面。
+      const fold = (0.082 * Math.sin(u * 13.3 + C.ang * 2.2)
+                  + 0.046 * Math.sin(u * 26.1 - v * 4.4 + C.ang)
+                  + 0.030 * Math.sin(v * 8.7 + u * 3.1)) * (0.45 + 0.55 * Math.sin(Math.PI * v))
+                  * (C.snag ? 1.25 : 1.0) * Math.min(1, C.w / 3.2);
       const flut = C.snag
         ? 0.115 * Math.sin(lx * 2.05 + lz * 1.4) + 0.075 * Math.sin(lz * 3.3 - lx * 1.1)
           + 0.045 * Math.sin(t * 1.9 + lx * 3.1) * (0.4 + 0.6 * Math.abs(lz))
         : 0.075 * Math.sin(t * 1.55 + lx * 2.3 + lz * 1.7)
-          + 0.045 * Math.sin(t * 2.70 - lx * 3.7) + crease;
-      out[0] = x; out[1] = base + 0.045 + (C.snag ? 0 : waveJS(x, z, t)) + flut; out[2] = z;
+          + 0.045 * Math.sin(t * 2.70 - lx * 3.7);
+      out[0] = x; out[1] = base + 0.045 + (C.snag ? 0 : waveJS(x, z, t)) + flut + fold; out[2] = z;
       return out;
     };
     const a = [0,0,0], b = [0,0,0], c = [0,0,0], d = [0,0,0];
@@ -1049,13 +1411,15 @@ function updateCloths(t) {
         const l = Math.hypot(nx, ny, nz) || 1; nx/=l; ny/=l; nz/=l;
         if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
         // 生绢：边上被水泡得发暗
-        const edge = 0.80 + 0.24 * Math.min(1, Math.min(i, CU - 1 - i) / 2.4);
-        const g = C.tone * edge;
+        // 生绢泡在水里：贴着水的那一头被泡透，暗下去；离水的一头还是素的
+        const edge = 0.74 + 0.30 * Math.min(1, Math.min(i, CU - 1 - i) / 4.2);
+        const wet  = 0.86 + 0.14 * Math.min(1, Math.min(j, CV - 1 - j) / 3.0);
+        const g = C.tone * edge * wet;
         for (const q of tri) {
           clothData[o++] = q[0]; clothData[o++] = q[1]; clothData[o++] = q[2];
           clothData[o++] = nx; clothData[o++] = ny; clothData[o++] = nz;
-          clothData[o++] = 0.475 * g; clothData[o++] = 0.462 * g; clothData[o++] = 0.432 * g;
-          clothData[o++] = 0;
+          clothData[o++] = 0.680 * g; clothData[o++] = 0.650 * g; clothData[o++] = 0.592 * g;
+          clothData[o++] = -1;
         }
       }
     }
@@ -1074,10 +1438,11 @@ function dropRipple(x, z, t) {
   ripples[rippleHead] = { x: x, z: z, t0: t };
   rippleHead = (rippleHead + 1) % NRIPPLE;
 }
-const RIPPLE_SEG = 28;                   // 每圈是一条闭合的细环
-const rippleData = new Float32Array(NRIPPLE * RIPPLE_SEG * 6 * 10);
+const RIPPLE_SEG = 22;                   // 每圈是一条闭合的环，环由内外两条带拼起来
+const RIPPLE_VERTS = RIPPLE_SEG * 12;    // 内带 + 外带，各两个三角形
+const rippleData = new Float32Array(NRIPPLE * RIPPLE_VERTS * 10);
 const rippleBuf = buf(rippleData, gl.DYNAMIC_DRAW);
-const RIPPLE_N = NRIPPLE * RIPPLE_SEG * 6;
+const RIPPLE_N = NRIPPLE * RIPPLE_VERTS;
 const RIPPLE_LIFE = 5.2;
 function updateRipples(t) {
   let o = 0;
@@ -1085,34 +1450,75 @@ function updateRipples(t) {
     const R = ripples[k];
     const age = R ? t - R.t0 : 1e9;
     if (!R || age < 0 || age > RIPPLE_LIFE) {          // 空位：塞一个退化三角形
-      for (let q = 0; q < RIPPLE_SEG * 6 * 10; q++) rippleData[o++] = 0;
+      for (let q = 0; q < RIPPLE_VERTS * 10; q++) rippleData[o++] = 0;
       continue;
     }
     const u = age / RIPPLE_LIFE;
     const rad = 0.16 + u * 1.15;
-    const wid = 0.035 + u * 0.065;
-    const fade = (1 - u) * (1 - u) * 0.30;
+    // 圈越走越宽、越走越淡。上一版内外两条边一样亮，于是它是一道硬白线；
+    // 现在亮度在环心最高、往两边落到零，看起来才像水面自己鼓起来的一道缓坡。
+    const wid = 0.045 + u * 0.135;
+    const fade = (1 - u) * (1 - u) * 0.335;   // 去掉掠角那层反射之后，环心得补亮回来
     const lift = 0.030 * Math.exp(-u * 3.4);
     for (let i = 0; i < RIPPLE_SEG; i++) {
       const a0 = i / RIPPLE_SEG * Math.PI * 2, a1 = (i + 1) / RIPPLE_SEG * Math.PI * 2;
-      const pt = (a, r) => {
+      const pt = (a, r, h) => {
         const x = R.x + Math.cos(a) * r, z = R.z + Math.sin(a) * r;
-        return [x, WATER_Y + waveJS(x, z, t) + lift, z];
+        return [x, WATER_Y + waveJS(x, z, t) + lift * h, z];
       };
-      const p0 = pt(a0, rad - wid), p1 = pt(a0, rad + wid);
-      const p2 = pt(a1, rad + wid), p3 = pt(a1, rad - wid);
-      for (const tri of [[p0, p1, p2], [p0, p2, p3]]) {
-        for (const q of tri) {
-          rippleData[o++] = q[0]; rippleData[o++] = q[1]; rippleData[o++] = q[2];
-          rippleData[o++] = 0; rippleData[o++] = 1; rippleData[o++] = 0;
-          rippleData[o++] = 0.30 * fade; rippleData[o++] = 0.29 * fade; rippleData[o++] = 0.265 * fade;
-          rippleData[o++] = 0;
-        }
-      }
+      const push = (q, g) => {
+        rippleData[o++] = q[0]; rippleData[o++] = q[1]; rippleData[o++] = q[2];
+        rippleData[o++] = 0; rippleData[o++] = 1; rippleData[o++] = 0;
+        rippleData[o++] = 0.300 * g; rippleData[o++] = 0.292 * g; rippleData[o++] = 0.272 * g;
+        // aF < 0：和绢一样不吃那层掠角天光。加了它，这圈才真是由内向外淡掉的；
+        // 不加，掠角反射会在环上糊一条亮度恒定的边，梯度全白做。
+        rippleData[o++] = -1;
+      };
+      const iA = pt(a0, rad - wid, 0), iB = pt(a1, rad - wid, 0);
+      const mA = pt(a0, rad, 1),       mB = pt(a1, rad, 1);
+      const oA = pt(a0, rad + wid, 0), oB = pt(a1, rad + wid, 0);
+      // 内带：0 → fade
+      push(iA, 0); push(mA, fade); push(mB, fade);
+      push(iA, 0); push(mB, fade); push(iB, 0);
+      // 外带：fade → 0
+      push(mA, fade); push(oA, 0); push(oB, 0);
+      push(mA, fade); push(oB, 0); push(mB, fade);
     }
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, rippleBuf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, rippleData);
+}
+
+/* ---------- 灯晕 ----------
+   一盏灯在暮色里不是一个点，是一团慢慢呼吸的光。这团光也是加色画的，
+   和涟漪同一遍：中心亮，边上落到零。                                  */
+const GLOW_SEG = 14;
+const GLOW_N = 64 * GLOW_SEG * 3;      // 上限；实际用到 LAMPS.length * GLOW_SEG * 3
+const glowData = new Float32Array(GLOW_N * 10);
+const glowBuf = buf(glowData, gl.DYNAMIC_DRAW);
+function updateGlow(t) {
+  let o = 0;
+  const rt = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+  for (let i = 0; i < LAMPS.length; i++) {
+    const [lx, ly, lz, k] = LAMPS[i];
+    const flick = 0.86 + 0.14 * Math.sin(t * 2.7 + i * 2.1) + 0.06 * Math.sin(t * 6.3 + i);
+    const r = (1.05 + 0.07 * Math.sin(t * 1.7 + i)) * k;
+    const g = 0.78 * flick;
+    for (let j = 0; j < GLOW_SEG; j++) {
+      const a0 = j / GLOW_SEG * Math.PI * 2, a1 = (j + 1) / GLOW_SEG * Math.PI * 2;
+      const rim = (a) => [lx + rt[0] * Math.cos(a) * r, ly + Math.sin(a) * r, lz + rt[2] * Math.cos(a) * r];
+      const push = (q, w) => {
+        glowData[o++] = q[0]; glowData[o++] = q[1]; glowData[o++] = q[2];
+        glowData[o++] = 0; glowData[o++] = 1; glowData[o++] = 0;
+        glowData[o++] = 1.00 * w; glowData[o++] = 0.62 * w; glowData[o++] = 0.26 * w;
+        glowData[o++] = -1;
+      };
+      push([lx, ly, lz], g); push(rim(a0), 0); push(rim(a1), 0);
+    }
+  }
+  for (let q = o; q < GLOW_N * 10; q++) glowData[q] = 0;
+  gl.bindBuffer(gl.ARRAY_BUFFER, glowBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, glowData);
 }
 
 /* ---------- camera + input ---------- */
@@ -1208,6 +1614,9 @@ const LINES = [
     en: 'I will build a house in the middle of the water, and thatch it over with lotus.' },
   { x:  14, z:  74, r: 40, zh: '九嶷缤兮并迎，灵之来兮如云。',
     en: 'The nine peaks of Jiuyi come thronging to meet her; the spirits arrive like cloud.' },
+  // 汀洲上那一丛杜若是第 20 轮长出来的，这一句一直没跟上：站到花跟前，它才该出现
+  { x:  -1, z: -70, r: 18, zh: '搴汀洲兮杜若，将以遗兮远者。',
+    en: 'On the flat islet I pick the pollia, to send to the one who is far away.' },
   { x: -70, z:  46, r: 38, zh: '时不可兮骤得，聊逍遥兮容与。',
     en: 'The hour cannot be seized when we want it. For now — wander; for now, be at ease, and wait.' },
 ];
@@ -1258,9 +1667,11 @@ function invert(o, m) {   // full 4x4 inverse (used only for the sky ray)
 }
 
 function resize() {
-  const dpr = SHOT ? 1.6 : Math.min(devicePixelRatio || 1, 2);
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
-  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  const dpr = SHOT ? 1 : Math.min(devicePixelRatio || 1, 2);
+  const cssW = SHOT ? (window.innerWidth || 960) : canvas.clientWidth;
+  const cssH = SHOT ? (window.innerHeight || 600) : canvas.clientHeight;
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 }
 
@@ -1311,11 +1722,11 @@ function step(dt, t) {
     if (L.y < surf + 0.06 && L.y >= surf - 0.2 && terrainH(L.x, L.z) < WATER_Y - 0.15)
       dropRipple(L.x, L.z, t);                      // 落在水上的那一片，水替它记一笔
     // 贴着镜头的那一片会被近裁剪面切开，糊住半个画面：让它落到别处去
-    const near = Math.hypot(L.x - cam.x, L.y - cam.y, L.z - cam.z) < 2.2;
+    const near = Math.hypot(L.x - cam.x, L.y - cam.y, L.z - cam.z) < 5.0;
     if (near || L.y < surf - 0.2 || Math.abs(L.x - cam.x) > 68 || Math.abs(L.z - cam.z) > 68) {
-      L.x = cam.x + (Math.random() * 2 - 1) * 62;
-      L.z = cam.z + (Math.random() * 2 - 1) * 62;
-      L.y = groundY(L.x, L.z) + 14 + Math.random() * 16;
+      L.x = cam.x + (leafRnd() * 2 - 1) * 62;
+      L.z = cam.z + (leafRnd() * 2 - 1) * 62;
+      L.y = groundY(L.x, L.z) + 14 + leafRnd() * 16;
     }
     for (let k = 0; k < 6; k++) {
       leafData[o++] = L.x; leafData[o++] = L.y; leafData[o++] = L.z;
@@ -1328,6 +1739,7 @@ function step(dt, t) {
 
   updateCloths(t);
   updateRipples(t);
+  updateGlow(t);
 
   updateSubtitle();
   const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
@@ -1438,6 +1850,13 @@ function draw(t) {
   gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
   gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
   gl.drawArrays(gl.TRIANGLES, 0, RIPPLE_N);
+  // 灯晕：和涟漪同一遍加色
+  gl.bindBuffer(gl.ARRAY_BUFFER, glowBuf);
+  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
+  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
+  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
+  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
+  gl.drawArrays(gl.TRIANGLES, 0, LAMPS.length * GLOW_SEG * 3);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
 
@@ -1477,9 +1896,48 @@ function draw(t) {
   gl.disable(gl.BLEND);
 }
 
-/* 取证模式下不能挂着 rAF 空转：按固定步长走满 SHOT_FRAMES 帧就停，
-   截图因此既便宜又可复现 —— 同一轮同一机位，永远是同一秒的洞庭。 */
-const SHOT_FRAMES = 3, SHOT_DT = 1 / 20, SHOT_T0 = 7.5;
+/* 取证模式下不能挂着 rAF 空转：画 1 帧就停。机位切换走 window.__poemShot，不重建场景。 */
+const SHOT_FRAMES = 1, SHOT_DT = 1 / 20, SHOT_T0 = 7.5;
+
+function scatterShotAroundCam() {
+  const shotRnd = mkRnd(0x5F356495);
+  for (const L of leaves) {
+    const a = shotRnd() * Math.PI * 2, d = 3.5 + shotRnd() * 30;
+    L.x = cam.x + Math.cos(a) * d;
+    L.z = cam.z + Math.sin(a) * d;
+    L.y = groundY(L.x, L.z) + shotRnd() * 17;
+  }
+  ripples.length = 0;
+  rippleHead = 0;
+  for (let i = 0; i < NRIPPLE; i++) {
+    const a = shotRnd() * Math.PI * 2, d = 9 + shotRnd() * 42;
+    const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
+    if (terrainH(x, z) > WATER_Y - 0.15) continue;
+    dropRipple(x, z, SHOT_T0 - shotRnd() * RIPPLE_LIFE);
+  }
+}
+
+function renderShotFrame() {
+  resize();
+  const t = SHOT_T0;
+  step(SHOT_DT, t); draw(t);
+  document.documentElement.setAttribute('data-shot-ready', '1');
+  document.body.setAttribute('data-shot-ready', '1');
+}
+
+window.__poemShot = function (spec) {
+  const n = String(spec).split(',').map(Number);
+  if (n.length >= 4 && n.every(v => isFinite(v))) {
+    cam.x = n[0]; cam.z = n[1]; cam.yaw = n[2]; cam.pitch = n[3];
+  }
+  cam.y = groundY(cam.x, cam.z) + EYE;
+  document.body.classList.add('shot');
+  document.body.removeAttribute('data-shot-ready');
+  document.documentElement.removeAttribute('data-shot-ready');
+  scatterShotAroundCam();
+  renderShotFrame();
+  return true;
+};
 
 function frame(ms) {
   const t = ms / 1000;
@@ -1492,24 +1950,9 @@ function frame(ms) {
 if (gl) {
   cam.y = groundY(cam.x, cam.z) + EYE;
   if (SHOT) {
-    // 只画三帧，所以叶子得先撒到相机跟前，不能等它们自己飘过来
-    for (const L of leaves) {
-      const a = Math.random() * Math.PI * 2, d = 3.5 + Math.random() * 30;
-      L.x = cam.x + Math.cos(a) * d;
-      L.z = cam.z + Math.sin(a) * d;
-      L.y = groundY(L.x, L.z) + Math.random() * 17;
-    }
-    for (let i = 0; i < NRIPPLE; i++) {
-      const a = Math.random() * Math.PI * 2, d = 9 + Math.random() * 42;
-      const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
-      if (terrainH(x, z) > WATER_Y - 0.15) continue;
-      dropRipple(x, z, SHOT_T0 - Math.random() * RIPPLE_LIFE);
-    }
-    for (let i = 0; i < SHOT_FRAMES; i++) {          // 同步画满，画完就不再要新帧
-      const t = SHOT_T0 + i * SHOT_DT;
-      step(SHOT_DT, t); draw(t);
-    }
-    document.documentElement.setAttribute('data-shot-ready', '1');
+    document.body.classList.add('shot');
+    scatterShotAroundCam();
+    renderShotFrame();
   } else {
     requestAnimationFrame(frame);
   }
@@ -1518,16 +1961,18 @@ if (gl) {
 /* =====================================================================
    右栏：打磨时间线 —— 三个世界共用 shared/timeline.js，读同一份 log.jsonl
    ===================================================================== */
-if (window.PolishTimeline) {
+if (!SHOT && window.PolishTimeline) {
   PolishTimeline.mount({
     el: '#tl', log: 'log.jsonl',
     onReady: function (rounds) {
       const n = rounds.length;
       document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
-      const stopped = rounds.filter(r => r.stop).pop();
-      if (stopped) {
+      // 只认最后一轮上的 stop。第一段在第 10 轮停过一次，第二段又接着跑；
+      // 拿「有没有任何一轮 stop 过」判断，页脚会一直挂着上一段的停止原因。
+      const last = rounds[n - 1];
+      if (last && last.stop) {
         document.getElementById('ft-rounds').textContent = n + ' 轮';
-        document.getElementById('ft-stop').textContent = stopped.stop_reason || stopped.stop || '循环结束';
+        document.getElementById('ft-stop').textContent = last.stop_reason || last.stop || '循环结束';
       }
     }
   });
