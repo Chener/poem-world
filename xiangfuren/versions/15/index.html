@@ -173,19 +173,6 @@ const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-e
    密度只比交互时略低一点点 —— critic judged 的必须基本就是访客看到的那个世界。 */
 const SHOT = new URLSearchParams(location.search).has('shot');
 
-/* 定序随机。截图必须逐字节可复现：同一轮、同一机位，第 3 轮和第 9 轮拍出来的
-   必须是同一张图，否则并排比较就没有意义。所以这个世界里不用浏览器的随机数，
-   只有这一条从固定种子走出来的序列（mulberry32）。 */
-function mkRnd(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a = (a + 0x6D2B79F5) >>> 0;
-    let x = Math.imul(a ^ (a >>> 15), 1 | a);
-    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 /* deterministic hash noise, shared by JS + (mirrored) shaders */
 function h2(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
 function vnoise(x, z) {
@@ -559,13 +546,12 @@ const bladeP = prog(`
 /* ---------- 木叶下 : the leaves, always coming down ---------- */
 const NLEAF = SHOT ? 880 : 1000;   // 叶子小了、还会翻到看不见，密度得补上：木叶要一直在落
 const leaves = [];
-const leafRnd = mkRnd(0x9E3779B9);        // 木叶这一条序列，从种子起走，永远一样
 for (let i = 0; i < NLEAF; i++) leaves.push({
-  x: (leafRnd() * 2 - 1) * 70, y: leafRnd() * 26 - 1, z: (leafRnd() * 2 - 1) * 70,
-  vy: -0.42 - leafRnd() * 0.55,
-  sp: leafRnd() * 6.28, sw: 0.5 + leafRnd() * 1.4,
-  rot: leafRnd() * 6.28, rv: (leafRnd() - .5) * 1.9,
-  sz: 0.062 + Math.pow(leafRnd(), 1.7) * 0.120, tint: leafRnd()
+  x: (Math.random() * 2 - 1) * 70, y: Math.random() * 26 - 1, z: (Math.random() * 2 - 1) * 70,
+  vy: -0.42 - Math.random() * 0.55,
+  sp: Math.random() * 6.28, sw: 0.5 + Math.random() * 1.4,
+  rot: Math.random() * 6.28, rv: (Math.random() - .5) * 1.9,
+  sz: 0.062 + Math.pow(Math.random(), 1.7) * 0.120, tint: Math.random()
 });
 const leafData = new Float32Array(NLEAF * 6 * 8);   // 6 verts * (cx,cy,cz, ox,oy, rot, tint, size)
 const leafBuf = buf(leafData, gl.DYNAMIC_DRAW);
@@ -603,7 +589,6 @@ const leafP = prog(`
 
 /* ---------- 筑室兮水中，葺之兮荷盖 : the house she never comes to ---------- */
 const HOUSE = { x: 0, z: 40 };
-const LAMPS = [];                      // 点着的灯，位置在建屋时填进来，晕由下面那段画
 function Builder() {
   const V = [];                       // x,y,z, nx,ny,nz, r,g,b, float-on-water
   function tri(a, b, c, col, fl) {
@@ -765,23 +750,9 @@ function makeHouse() {
       box(x, ay - 0.115 * k, z, 0.085 * k, 0.185 * k, 0.085 * k, AN, 0);
     }
   }
-  /* 灯。夕张之后天要黑了，于是点一盏，搁在席边上。
-     它是整张图里唯一的暖色，而且它照不到人 —— 席上没有人。 */
-  function lamp(cx, baseY, cz, k) {
-    const POST = [0.196, 0.156, 0.120], BOWL = [0.300, 0.226, 0.150];
-    const FLAME = [2.60, 1.62, 0.66];        // 亮过 1，是为了在暮色里烧穿
-    box(cx, baseY + 0.28 * k, cz, 0.055 * k, 0.56 * k, 0.055 * k, POST, 0);   // 一根矮杆
-    box(cx, baseY + 0.63 * k, cz, 0.290 * k, 0.085 * k, 0.290 * k, BOWL, 0);  // 灯盘
-    box(cx, baseY + 0.70 * k, cz, 0.115 * k, 0.090 * k, 0.115 * k, FLAME, 0); // 火
-    LAMPS.push([cx, baseY + 0.71 * k, cz, k]);
-  }
-  lamp(HX + 1.62, FLOOR, HZ - 5.75, 1.0);
-
   layMat(HX, HZ - 5.75, FLOOR, 0, 1.0);
   // 北渚上的那一处：踩出来的那条路的尽头，他站了一整天的地方
   layMat(SHOAL_MAT[0], SHOAL_MAT[1], terrainH(SHOAL_MAT[0], SHOAL_MAT[1]) + 0.02, 0.34, 1.0);
-  lamp(SHOAL_MAT[0] + 1.52, terrainH(SHOAL_MAT[0] + 1.52, SHOAL_MAT[1] - 0.52) + 0.02,
-       SHOAL_MAT[1] - 0.52, 0.92);
 
   // 荷盖：一片压着一片的荷叶，铺满两面坡
   const tilt = Math.atan2(1.55, 5.45);
@@ -1021,74 +992,6 @@ function makeWrongness() {
   pingPatch(-53, 27, 7.0, 59, 8);
   pingPatch(-7, -29, 7.6, 67, 9);
 
-  /* 沅有芷兮澧有兰 —— 两条水，各自的香草。
-     两丛必须一眼分得开：芷是直的，顶上一把白伞；兰是弯的，一丛窄叶从根上散开。
-     西边的沙洲是沅，长芷；东边的是澧，长兰。 */
-  const ZHI_STEM = [0.268, 0.300, 0.204], ZHI_UMBEL = [0.812, 0.822, 0.762];
-  const LAN_LEAF = [0.212, 0.286, 0.196], LAN_FLOWER = [0.556, 0.500, 0.612];
-  function zhi(x, z, seed) {                        // 白芷：一根直杆，顶上一把伞
-    const y = terrainH(x, z);
-    if (y < 0.20) return;
-    const h = 0.95 + h2(seed, 2.2) * 0.55;
-    box(x, y + h / 2, z, 0.035, h, 0.035, ZHI_STEM, 0);
-    const uy = y + h, ur = 0.20 + h2(seed, 5.1) * 0.10;
-    for (let i = 0; i < 9; i++) {
-      const a0 = i / 9 * Math.PI * 2, a1 = (i + 1) / 9 * Math.PI * 2;
-      const k = 0.86 + 0.28 * h2(seed + i, 7.7);
-      tri([x, uy + 0.03, z],
-          [x + Math.cos(a0) * ur * k, uy, z + Math.sin(a0) * ur * k],
-          [x + Math.cos(a1) * ur * k, uy, z + Math.sin(a1) * ur * k],
-          ZHI_UMBEL.map(v => v * (0.84 + 0.26 * h2(seed + i, 3.3))), 0);
-    }
-  }
-  function lan(x, z, seed) {                        // 兰：一丛窄叶，从根上弯出去
-    const y = terrainH(x, z);
-    if (y < 0.20) return;
-    const n = 6 + Math.floor(h2(seed, 1.3) * 5);
-    for (let i = 0; i < n; i++) {
-      const a = h2(seed + i, 2.9) * Math.PI * 2;
-      const len = 0.55 + h2(seed + i, 4.4) * 0.60, bend = 0.42 + h2(seed + i, 6.1) * 0.55;
-      const tipx = x + Math.cos(a) * len * bend, tipz = z + Math.sin(a) * len * bend;
-      const w = 0.030 + h2(seed + i, 8.8) * 0.020;
-      const c = LAN_LEAF.map(v => v * (0.82 + 0.34 * h2(seed + i, 9.9)));
-      tri([x - Math.sin(a) * w, y, z + Math.cos(a) * w],
-          [x + Math.sin(a) * w, y, z - Math.cos(a) * w],
-          [tipx, y + len * 0.92, tipz], c, 0);
-      tri([x + Math.sin(a) * w, y, z - Math.cos(a) * w],
-          [x - Math.sin(a) * w, y, z + Math.cos(a) * w],
-          [tipx, y + len * 0.92, tipz], c.map(v => v * 0.70), 0);
-    }
-    if (h2(seed, 12.1) > 0.55) {                    // 一枝花，很小
-      const fh = y + 0.62 + h2(seed, 13.3) * 0.30;
-      box(x + 0.04, (y + fh) / 2, z, 0.020, fh - y, 0.020, LAN_LEAF, 0);
-      box(x + 0.04, fh, z, 0.085, 0.075, 0.085, LAN_FLOWER, 0);
-    }
-  }
-  // 沅（西）有芷
-  for (let i = 0; i < 90; i++) {
-    const a = h2(i, 21.1) * Math.PI * 2, r = 3.2 + Math.pow(h2(i, 22.3), 0.6) * 13.0;
-    zhi(-46 + Math.cos(a) * r, -24 + Math.sin(a) * r * 1.15, i * 3.7 + 1);
-  }
-  // 澧（东）有兰
-  for (let i = 0; i < 90; i++) {
-    const a = h2(i, 31.7) * Math.PI * 2, r = 3.0 + Math.pow(h2(i, 32.9), 0.6) * 12.0;
-    lan(34 + Math.cos(a) * r, -30 + Math.sin(a) * r * 1.10, i * 5.3 + 2);
-  }
-
-  // 两条水在北渚两侧入湖，香草一直长到水边上来：走在渚上，左手是芷，右手是兰
-  for (let i = 0; i < 150; i++) {
-    const u = h2(i, 41.3);
-    const x = -(7.5 + h2(i, 42.7) * 15.0), z = -56 + u * 26;
-    const y = terrainH(x, z);
-    if (y > 0.26 && y < 1.45) zhi(x, z, i * 2.9 + 101);
-  }
-  for (let i = 0; i < 150; i++) {
-    const u = h2(i, 43.9);
-    const x = 7.5 + h2(i, 44.1) * 15.0, z = -56 + u * 26;
-    const y = terrainH(x, z);
-    if (y > 0.26 && y < 1.45) lan(x, z, i * 3.1 + 202);
-  }
-
   // 麋食兮庭中 —— 就在为她盖的那座屋子的廊下
   elk(HOUSE.x - 0.6, 1.52, HOUSE.z - 5.95, -0.28);
 
@@ -1242,11 +1145,10 @@ function dropRipple(x, z, t) {
   ripples[rippleHead] = { x: x, z: z, t0: t };
   rippleHead = (rippleHead + 1) % NRIPPLE;
 }
-const RIPPLE_SEG = 22;                   // 每圈是一条闭合的环，环由内外两条带拼起来
-const RIPPLE_VERTS = RIPPLE_SEG * 12;    // 内带 + 外带，各两个三角形
-const rippleData = new Float32Array(NRIPPLE * RIPPLE_VERTS * 10);
+const RIPPLE_SEG = 28;                   // 每圈是一条闭合的细环
+const rippleData = new Float32Array(NRIPPLE * RIPPLE_SEG * 6 * 10);
 const rippleBuf = buf(rippleData, gl.DYNAMIC_DRAW);
-const RIPPLE_N = NRIPPLE * RIPPLE_VERTS;
+const RIPPLE_N = NRIPPLE * RIPPLE_SEG * 6;
 const RIPPLE_LIFE = 5.2;
 function updateRipples(t) {
   let o = 0;
@@ -1254,75 +1156,34 @@ function updateRipples(t) {
     const R = ripples[k];
     const age = R ? t - R.t0 : 1e9;
     if (!R || age < 0 || age > RIPPLE_LIFE) {          // 空位：塞一个退化三角形
-      for (let q = 0; q < RIPPLE_VERTS * 10; q++) rippleData[o++] = 0;
+      for (let q = 0; q < RIPPLE_SEG * 6 * 10; q++) rippleData[o++] = 0;
       continue;
     }
     const u = age / RIPPLE_LIFE;
     const rad = 0.16 + u * 1.15;
-    // 圈越走越宽、越走越淡。上一版内外两条边一样亮，于是它是一道硬白线；
-    // 现在亮度在环心最高、往两边落到零，看起来才像水面自己鼓起来的一道缓坡。
-    const wid = 0.045 + u * 0.135;
-    const fade = (1 - u) * (1 - u) * 0.335;   // 去掉掠角那层反射之后，环心得补亮回来
+    const wid = 0.035 + u * 0.065;
+    const fade = (1 - u) * (1 - u) * 0.30;
     const lift = 0.030 * Math.exp(-u * 3.4);
     for (let i = 0; i < RIPPLE_SEG; i++) {
       const a0 = i / RIPPLE_SEG * Math.PI * 2, a1 = (i + 1) / RIPPLE_SEG * Math.PI * 2;
-      const pt = (a, r, h) => {
+      const pt = (a, r) => {
         const x = R.x + Math.cos(a) * r, z = R.z + Math.sin(a) * r;
-        return [x, WATER_Y + waveJS(x, z, t) + lift * h, z];
+        return [x, WATER_Y + waveJS(x, z, t) + lift, z];
       };
-      const push = (q, g) => {
-        rippleData[o++] = q[0]; rippleData[o++] = q[1]; rippleData[o++] = q[2];
-        rippleData[o++] = 0; rippleData[o++] = 1; rippleData[o++] = 0;
-        rippleData[o++] = 0.300 * g; rippleData[o++] = 0.292 * g; rippleData[o++] = 0.272 * g;
-        // aF < 0：和绢一样不吃那层掠角天光。加了它，这圈才真是由内向外淡掉的；
-        // 不加，掠角反射会在环上糊一条亮度恒定的边，梯度全白做。
-        rippleData[o++] = -1;
-      };
-      const iA = pt(a0, rad - wid, 0), iB = pt(a1, rad - wid, 0);
-      const mA = pt(a0, rad, 1),       mB = pt(a1, rad, 1);
-      const oA = pt(a0, rad + wid, 0), oB = pt(a1, rad + wid, 0);
-      // 内带：0 → fade
-      push(iA, 0); push(mA, fade); push(mB, fade);
-      push(iA, 0); push(mB, fade); push(iB, 0);
-      // 外带：fade → 0
-      push(mA, fade); push(oA, 0); push(oB, 0);
-      push(mA, fade); push(oB, 0); push(mB, fade);
+      const p0 = pt(a0, rad - wid), p1 = pt(a0, rad + wid);
+      const p2 = pt(a1, rad + wid), p3 = pt(a1, rad - wid);
+      for (const tri of [[p0, p1, p2], [p0, p2, p3]]) {
+        for (const q of tri) {
+          rippleData[o++] = q[0]; rippleData[o++] = q[1]; rippleData[o++] = q[2];
+          rippleData[o++] = 0; rippleData[o++] = 1; rippleData[o++] = 0;
+          rippleData[o++] = 0.30 * fade; rippleData[o++] = 0.29 * fade; rippleData[o++] = 0.265 * fade;
+          rippleData[o++] = 0;
+        }
+      }
     }
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, rippleBuf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, rippleData);
-}
-
-/* ---------- 灯晕 ----------
-   一盏灯在暮色里不是一个点，是一团慢慢呼吸的光。这团光也是加色画的，
-   和涟漪同一遍：中心亮，边上落到零。                                  */
-const GLOW_SEG = 14;
-const GLOW_N = 64 * GLOW_SEG * 3;      // 上限；实际用到 LAMPS.length * GLOW_SEG * 3
-const glowData = new Float32Array(GLOW_N * 10);
-const glowBuf = buf(glowData, gl.DYNAMIC_DRAW);
-function updateGlow(t) {
-  let o = 0;
-  const rt = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
-  for (let i = 0; i < LAMPS.length; i++) {
-    const [lx, ly, lz, k] = LAMPS[i];
-    const flick = 0.86 + 0.14 * Math.sin(t * 2.7 + i * 2.1) + 0.06 * Math.sin(t * 6.3 + i);
-    const r = (1.05 + 0.07 * Math.sin(t * 1.7 + i)) * k;
-    const g = 0.78 * flick;
-    for (let j = 0; j < GLOW_SEG; j++) {
-      const a0 = j / GLOW_SEG * Math.PI * 2, a1 = (j + 1) / GLOW_SEG * Math.PI * 2;
-      const rim = (a) => [lx + rt[0] * Math.cos(a) * r, ly + Math.sin(a) * r, lz + rt[2] * Math.cos(a) * r];
-      const push = (q, w) => {
-        glowData[o++] = q[0]; glowData[o++] = q[1]; glowData[o++] = q[2];
-        glowData[o++] = 0; glowData[o++] = 1; glowData[o++] = 0;
-        glowData[o++] = 1.00 * w; glowData[o++] = 0.62 * w; glowData[o++] = 0.26 * w;
-        glowData[o++] = -1;
-      };
-      push([lx, ly, lz], g); push(rim(a0), 0); push(rim(a1), 0);
-    }
-  }
-  for (let q = o; q < GLOW_N * 10; q++) glowData[q] = 0;
-  gl.bindBuffer(gl.ARRAY_BUFFER, glowBuf);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, glowData);
 }
 
 /* ---------- camera + input ---------- */
@@ -1523,9 +1384,9 @@ function step(dt, t) {
     // 贴着镜头的那一片会被近裁剪面切开，糊住半个画面：让它落到别处去
     const near = Math.hypot(L.x - cam.x, L.y - cam.y, L.z - cam.z) < 5.0;
     if (near || L.y < surf - 0.2 || Math.abs(L.x - cam.x) > 68 || Math.abs(L.z - cam.z) > 68) {
-      L.x = cam.x + (leafRnd() * 2 - 1) * 62;
-      L.z = cam.z + (leafRnd() * 2 - 1) * 62;
-      L.y = groundY(L.x, L.z) + 14 + leafRnd() * 16;
+      L.x = cam.x + (Math.random() * 2 - 1) * 62;
+      L.z = cam.z + (Math.random() * 2 - 1) * 62;
+      L.y = groundY(L.x, L.z) + 14 + Math.random() * 16;
     }
     for (let k = 0; k < 6; k++) {
       leafData[o++] = L.x; leafData[o++] = L.y; leafData[o++] = L.z;
@@ -1538,7 +1399,6 @@ function step(dt, t) {
 
   updateCloths(t);
   updateRipples(t);
-  updateGlow(t);
 
   updateSubtitle();
   const deg = ((-cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
@@ -1649,13 +1509,6 @@ function draw(t) {
   gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
   gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
   gl.drawArrays(gl.TRIANGLES, 0, RIPPLE_N);
-  // 灯晕：和涟漪同一遍加色
-  gl.bindBuffer(gl.ARRAY_BUFFER, glowBuf);
-  gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
-  gl.vertexAttribPointer(objP.a.aN, 3, gl.FLOAT, false, 40, 12);
-  gl.vertexAttribPointer(objP.a.aC, 3, gl.FLOAT, false, 40, 24);
-  gl.vertexAttribPointer(objP.a.aF, 1, gl.FLOAT, false, 40, 36);
-  gl.drawArrays(gl.TRIANGLES, 0, LAMPS.length * GLOW_SEG * 3);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
 
@@ -1711,19 +1564,17 @@ if (gl) {
   cam.y = groundY(cam.x, cam.z) + EYE;
   if (SHOT) {
     // 只画三帧，所以叶子得先撒到相机跟前，不能等它们自己飘过来
-    // 撒的位置也必须定序：同一机位每次得到同一片天
-    const shotRnd = mkRnd(0x5F356495);
     for (const L of leaves) {
-      const a = shotRnd() * Math.PI * 2, d = 3.5 + shotRnd() * 30;
+      const a = Math.random() * Math.PI * 2, d = 3.5 + Math.random() * 30;
       L.x = cam.x + Math.cos(a) * d;
       L.z = cam.z + Math.sin(a) * d;
-      L.y = groundY(L.x, L.z) + shotRnd() * 17;
+      L.y = groundY(L.x, L.z) + Math.random() * 17;
     }
     for (let i = 0; i < NRIPPLE; i++) {
-      const a = shotRnd() * Math.PI * 2, d = 9 + shotRnd() * 42;
+      const a = Math.random() * Math.PI * 2, d = 9 + Math.random() * 42;
       const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
       if (terrainH(x, z) > WATER_Y - 0.15) continue;
-      dropRipple(x, z, SHOT_T0 - shotRnd() * RIPPLE_LIFE);
+      dropRipple(x, z, SHOT_T0 - Math.random() * RIPPLE_LIFE);
     }
     for (let i = 0; i < SHOT_FRAMES; i++) {          // 同步画满，画完就不再要新帧
       const t = SHOT_T0 + i * SHOT_DT;
