@@ -155,8 +155,6 @@
 
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen clock, no UI
-var LITE = Q.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-var LIVE_FPS = LITE ? 20 : 30;
 var FROZEN_T = 21.0;
 /* Software GL would otherwise faithfully render every frame of Chrome's virtual-time
  * budget, which takes minutes per image. In shot mode we draw a few frames and stop. */
@@ -214,7 +212,7 @@ var ctx = cv.getContext('2d');
 var W = 0, H = 0, DPR = 1;
 
 function resize() {
-  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, LITE ? 1 : 1.5);
+  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   W = Math.max(1, (SHOT ? (window.innerWidth || 960) : cv.clientWidth) | 0);
   H = Math.max(1, (SHOT ? (window.innerHeight || 600) : cv.clientHeight) | 0);
   cv.width = Math.max(1, Math.round(W * DPR));
@@ -251,16 +249,7 @@ function edgeR(th) {
    * was sand. It may not be pulled in much further, though — the six stations are frozen
    * and the furthest of them stands twelve metres out, so a bar smaller than that leaves
    * the camera standing in the river rather than on the sand it is meant to be on. */
-  /* The bar is pulled in hard on its upstream side. The six stations are frozen and the
-   * first of them stands twelve metres out along +z; with a bar that reached past it in
-   * every direction, that station — whose line is 春江潮水连海平, the tide running level
-   * with the sea — was looking across twenty-six metres of sand and spent the bottom
-   * forty-five per cent of its frame on it, which every critic in turn said. The bar now
-   * reaches back BEHIND that station and gives way in front of it, so it stands near the
-   * water with the river opening out ahead, which is what the line asks for. Every
-   * station is still on the sand. */
-  return 14.5 + 3.4 * Math.sin(th) + 2.6 * Math.sin(th * 2 + 0.7)
-       + 1.3 * Math.sin(th * 5 - 1.1) + 0.7 * Math.sin(th * 9 + 2.3);
+  return 14.5 + 2.6 * Math.sin(th * 2 + 0.7) + 1.3 * Math.sin(th * 5 - 1.1) + 0.7 * Math.sin(th * 9 + 2.3);
 }
 var BAR = 3.6;                       // a low dune: high enough to see the river from
 function gh(x, z) {
@@ -275,13 +264,6 @@ for (var i = 0; i < 360; i++) {
   EDGE.push({ th: th, x: Math.cos(th) * R0, z: Math.sin(th) * R0 });
 }
 
-/* the moon's face, placed once off the same LCG as everything else */
-var MOONFACE = [];
-for (var i6 = 0; i6 < 38; i6++) {
-  MOONFACE.push({ a: rnd() * 6.28318, r: Math.sqrt(rnd()) * 0.74,
-                  s: 0.055 + rnd() * 0.115, o: 0.045 + rnd() * 0.075 });
-}
-
 /* the moon: low over the water, the centre of gravity of the whole night */
 var MOON = { th: Math.PI * 1.5, dist: 620, y: 96, r: 56 };
 MOON.x = Math.cos(MOON.th) * MOON.dist;
@@ -289,23 +271,10 @@ MOON.z = Math.sin(MOON.th) * MOON.dist;
 
 /* white sand grains, so the bar reads as sand and not as a floor */
 var grains = [];
-for (var i2 = 0; i2 < 96000; i2++) {
+for (var i2 = 0; i2 < (SHOT ? 46000 : 46000); i2++) {
   var a2 = rnd() * Math.PI * 2, r2 = Math.sqrt(rnd()) * 1;
   var th2 = a2, rr2 = r2 * edgeR(th2) * 0.985;
   grains.push({ x: Math.cos(th2) * rr2, z: Math.sin(th2) * rr2, m: rnd(), k: rnd() });
-}
-
-/* 滟滟随波千万里 — the road's own shards. Laid out in ranks at a geometric spacing with
- * seven shards to a rank, the road keeps its rows however hard each shard's distance is
- * jittered inside its rank: close to the eye the ranks are far enough apart on screen
- * that you read them as regular lines of flecks, and it came back as scan lines. This is
- * a scattered field instead — every shard its own distance along the moon's axis, its own
- * offset across it, its own size and its own beat. */
-var ROAD = [];
-for (var i5 = 0; i5 < 2600; i5++) {
-  var rU = rnd();
-  ROAD.push({ d: 2.2 * Math.pow(520 / 2.2, rU),      // dense near, thinning away
-              lat: rnd() * 2 - 1, len: rnd(), ph: rnd() * 6.28318, fl: rnd() });
 }
 
 /* 花林: a grove whose blossom reads as sleet under the moon */
@@ -316,13 +285,8 @@ for (var i3 = 0; i3 < 22; i3++) {
    * the frame. Clumped, with the spacing and the heights both scattered, it reads as
    * a wood: crowns that grow into each other in places and let the night through in
    * others. All of it from the same deterministic rnd(), so shots stay reproducible. */
-  /* Evenly stepped angles left the wood a row of puffs at one spacing along one line.
-   * The step is now itself uneven and the scatter is three times wider, so the trees
-   * gather into clumps with real gaps of night between them; the radii spread much
-   * further too, so some stand well behind others instead of all along one baseline. */
-  var a3 = (i3 < 13 ? -0.46 + i3 * 0.070 : -0.66 + (i3 - 13) * 0.105)
-         + (rnd() - 0.5) * 0.26 + Math.sin(i3 * 2.3) * 0.030;
-  var r3 = (i3 < 13 ? 30 + rnd() * rnd() * 46 : 58 + rnd() * 52);
+  var a3 = (i3 < 13 ? -0.46 + i3 * 0.070 : -0.66 + (i3 - 13) * 0.105) + (rnd() - 0.5) * 0.085;
+  var r3 = (i3 < 13 ? 33 + rnd() * 15 : 64 + rnd() * 26);
   grove.push({ x: Math.cos(a3) * r3, z: Math.sin(a3) * r3,
                h: 3.4 + rnd() * rnd() * 7.0, seed: rnd() * 6.28,
                /* each crown its own build: wide and low, or tall and narrow, leaning a
@@ -339,7 +303,7 @@ for (var i3 = 0; i3 < 22; i3++) {
  * cross-hatch lying over the whole river. The same LCG that places the sand and the
  * grove has no such structure in it. */
 var WAVES = [];
-for (var i8 = 0; i8 < 20000; i8++) {
+for (var i8 = 0; i8 < 11000; i8++) {
   var wA = rnd() * Math.PI * 2, wB = rnd();
   WAVES.push({ ang: wA, rad: 2.5 + Math.pow(wB, 0.62) * 300,
                len: rnd(), ph: rnd() * 6.28318, bow: rnd() < 0.5 ? 1 : -1 });
@@ -425,17 +389,13 @@ function drawMoon() {
   ctx.fillStyle = disc; ctx.fill();
 
   /* the faintest mottling, so the disc has a surface rather than being a hole in the sky */
-  /* Nine patches at a golden angle with their radii taken from mi*37%11 and mi*53%7 put
-   * two obvious grey blotches on the face, and the same two in every shot. Thirty-eight
-   * smaller ones off the world's own LCG read as a surface instead of as markings. */
-  for (var mi = 0; mi < 38; mi++) {
-    var mq = MOONFACE[mi];
-    var mr = rad * mq.r;
-    var mx = p.x + Math.cos(mq.a) * mr, my = p.y + Math.sin(mq.a) * mr;
-    var ms = rad * mq.s;
+  for (var mi = 0; mi < 9; mi++) {
+    var ma = mi * 2.39996, mr = rad * (0.16 + 0.62 * ((mi * 37 % 11) / 11));
+    var mx = p.x + Math.cos(ma) * mr * 0.72, my = p.y + Math.sin(ma) * mr * 0.72;
+    var ms = rad * (0.10 + 0.16 * ((mi * 53 % 7) / 7));
     var mg = ctx.createRadialGradient(mx, my, 0, mx, my, ms);
-    mg.addColorStop(0, 'rgba(202,214,234,' + mq.o.toFixed(3) + ')');
-    mg.addColorStop(1, 'rgba(202,214,234,0)');
+    mg.addColorStop(0, 'rgba(206,218,236,.18)');
+    mg.addColorStop(1, 'rgba(206,218,236,0)');
     ctx.fillStyle = mg; ctx.fillRect(mx - ms, my - ms, ms * 2, ms * 2);
   }
   return p;
@@ -475,30 +435,10 @@ function drawFarBank() {
     ctx.fillStyle = bg2;
     ctx.beginPath(); ctx.arc(p.x, bcy, bw, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-
-    /* 落月摇情满江树 — and the whole far bank of them shaking in the river. The water
-     * lies between you and this bank, so this is the one line of the poem that can
-     * actually be given back to the surface: the tree's own light, pulled down, pulled
-     * out sideways, and broken across the swell so that it is never the tree's shape. */
-    var rr0 = Math.max(4, bh * 0.75), rsl = 7;
-    for (var rI = 0; rI < rsl; rI++) {
-      var rt2 = (rI + 0.5) / rsl;
-      var ry2 = p.y + rt2 * rr0;
-      var rwob = Math.sin(T * 1.1 + rI * 0.9 + b.x * 0.21) * (1.0 + rt2 * 4.5);
-      var rw2 = bw * (1.5 + rt2 * 1.1);
-      var ra3 = 0.085 * (1 - rt2) * (0.55 + 0.45 * Math.sin(T * 1.7 + rI * 1.3 + b.z * 0.13));
-      if (ra3 < 0.006) continue;
-      ctx.strokeStyle = 'rgba(150,172,200,' + ra3.toFixed(3) + ')';
-      ctx.lineWidth = Math.max(1, rr0 / rsl * 0.9);
-      ctx.beginPath();
-      ctx.moveTo(p.x - rw2 + rwob, ry2);
-      ctx.lineTo(p.x + rw2 + rwob, ry2);
-      ctx.stroke();
-    }
   }
   /* 明月楼 — 何处相思明月楼: eaves that lift at the corners, a railing, one lit window,
    * and the whole of it lying broken on the water. */
-  var TW = 5.6;
+  var TW = 6.4;
   /* how much of the tower this eye gets. From the grove station it is a hundred and
    * eighty metres off and half behind the mist, and drawn at full strength it read there
    * as a small grey block that could not be identified as anything. */
@@ -507,87 +447,30 @@ function drawFarBank() {
   if (tA < 0.02) return;
   ctx.save();
   ctx.globalAlpha = tA;
-  /* which way the moon lies from the tower, on screen */
-  var tmP = project({ x: MOON.x, y: MOON.y, z: MOON.z });
-  var tcP = project({ x: TOWER.x, y: 12, z: TOWER.z });
-  var towLit = (tmP && tcP && tmP.x < tcP.x) ? -1 : 1;
   function tface(y0, y1, half, fill) {
-    /* A storey filled with one flat colour has no light on it at all, and the tower ends
-     * up the only thing in the picture the moon has not touched. Each face now carries a
-     * gradient across it — the side the moon is on picks up a little of it, the far side
-     * goes down into the night — and a thin rim of moonlight down its lit corner. */
-    var la = project({ x: TOWER.x - half, y: y1, z: TOWER.z });
-    var lb = project({ x: TOWER.x + half, y: y1, z: TOWER.z });
-    var fg2 = fill;
-    if (la && lb) {
-      var xa = towLit < 0 ? la.x : lb.x, xb = towLit < 0 ? lb.x : la.x;
-      var gg = ctx.createLinearGradient(xa, 0, xb, 0);
-      gg.addColorStop(0, 'rgba(64,80,108,.96)');
-      gg.addColorStop(0.35, 'rgba(38,50,72,.96)');
-      gg.addColorStop(1, 'rgba(18,25,40,.96)');
-      fg2 = gg;
-    }
     poly([{ x: TOWER.x - half, y: y0, z: TOWER.z }, { x: TOWER.x + half, y: y0, z: TOWER.z },
           { x: TOWER.x + half, y: y1, z: TOWER.z }, { x: TOWER.x - half, y: y1, z: TOWER.z }],
-         fg2, null);
-    var e0 = project({ x: TOWER.x + towLit * half, y: y0, z: TOWER.z });
-    var e1 = project({ x: TOWER.x + towLit * half, y: y1, z: TOWER.z });
-    if (e0 && e1) {
-      ctx.strokeStyle = 'rgba(196,214,240,.20)';
-      ctx.lineWidth = Math.max(0.8, e0.s * 0.10);
-      ctx.beginPath(); ctx.moveTo(e0.x, e0.y); ctx.lineTo(e1.x, e1.y); ctx.stroke();
-    }
+         fill, null);
   }
   function teaves(y, half, lift) {
-    /* A Tang eave is a thin wide plate whose corners tick up, not a dome. Drawn as one
-     * bulging curve the tower came out as three equal drums under three domes and read
-     * as a lighthouse or a chess piece. The plate is shallow, it oversails the storey
-     * below it by a long way, and only the last stretch at each end lifts. */
-    var pts2 = [];
-    function PT(fx, fy) { return project({ x: TOWER.x + half * fx, y: y + lift * fy, z: TOWER.z }); }
-    var l0 = PT(-1.00, 0.46), l1 = PT(-0.86, 0.10), l2 = PT(-0.52, 0.00);
-    var r2 = PT(0.52, 0.00), r1 = PT(0.86, 0.10), r0 = PT(1.00, 0.46);
-    var t2 = PT(-0.40, 0.42), t3 = PT(0.40, 0.42);
-    if (!l0 || !l1 || !l2 || !r2 || !r1 || !r0 || !t2 || !t3) return;
+    /* the curve is the point: a Tang eave turns up at its ends */
+    var l0 = project({ x: TOWER.x - half, y: y, z: TOWER.z });
+    var r0 = project({ x: TOWER.x + half, y: y, z: TOWER.z });
+    var lt = project({ x: TOWER.x - half * 0.95, y: y + lift * 0.55, z: TOWER.z });
+    var rt = project({ x: TOWER.x + half * 0.95, y: y + lift * 0.55, z: TOWER.z });
+    var mid = project({ x: TOWER.x, y: y + lift, z: TOWER.z });
+    var inl = project({ x: TOWER.x - half * 0.42, y: y + lift * 0.92, z: TOWER.z });
+    var inr = project({ x: TOWER.x + half * 0.42, y: y + lift * 0.92, z: TOWER.z });
+    if (!l0 || !r0 || !lt || !rt || !mid || !inl || !inr) return;
     ctx.beginPath();
     ctx.moveTo(l0.x, l0.y);
-    ctx.quadraticCurveTo(l1.x, l1.y, l2.x, l2.y);   // the underside, nearly straight
-    ctx.lineTo(r2.x, r2.y);
-    ctx.quadraticCurveTo(r1.x, r1.y, r0.x, r0.y);
-    ctx.lineTo(t3.x, t3.y);                          // the ridge above it
-    ctx.lineTo(t2.x, t2.y);
+    ctx.quadraticCurveTo(lt.x, lt.y - 2, inl.x, inl.y);
+    ctx.lineTo(inr.x, inr.y);
+    ctx.quadraticCurveTo(rt.x, rt.y - 2, r0.x, r0.y);
     ctx.closePath();
     ctx.fillStyle = 'rgba(19,26,40,.97)'; ctx.fill();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(180,202,232,.055)'; ctx.lineWidth = 4.5; ctx.stroke();
-    ctx.strokeStyle = 'rgba(196,214,240,.15)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    ctx.strokeStyle = 'rgba(196,214,240,.18)'; ctx.lineWidth = 1; ctx.stroke();
   }
-
-  function troof(y, half, rise) {
-    /* the top is a hipped roof with a finial, not one more eave */
-    var a0 = project({ x: TOWER.x - half, y: y, z: TOWER.z });
-    var b0 = project({ x: TOWER.x + half, y: y, z: TOWER.z });
-    var pk = project({ x: TOWER.x, y: y + rise, z: TOWER.z });
-    var fn = project({ x: TOWER.x, y: y + rise * 1.42, z: TOWER.z });
-    if (!a0 || !b0 || !pk) return;
-    ctx.beginPath();
-    ctx.moveTo(a0.x, a0.y);
-    ctx.quadraticCurveTo(a0.x + (pk.x - a0.x) * 0.55, pk.y + (a0.y - pk.y) * 0.18, pk.x, pk.y);
-    ctx.quadraticCurveTo(b0.x + (pk.x - b0.x) * 0.55, pk.y + (b0.y - pk.y) * 0.18, b0.x, b0.y);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(17,24,38,.97)'; ctx.fill();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(180,202,232,.05)'; ctx.lineWidth = 4; ctx.stroke();
-    ctx.strokeStyle = 'rgba(196,214,240,.14)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
-    if (fn) {
-      ctx.strokeStyle = 'rgba(196,214,240,.16)';
-      ctx.lineWidth = Math.max(0.8, pk.s * 0.10);
-      ctx.beginPath(); ctx.moveTo(pk.x, pk.y); ctx.lineTo(fn.x, fn.y); ctx.stroke();
-    }
-  }
-
   function trail(y, half) {                 // the railing of the upper storey
     var n = 9;
     for (var ri = 0; ri <= n; ri++) {
@@ -627,20 +510,13 @@ function drawFarBank() {
 
   reflect(TOWER.x, TOWER.z, 20, TW * 0.7, 'rgba(178,198,228,$A)', 0.16);
 
-  /* Three storeys, and narrower. Two squat ones under one wide eave made a silhouette
-   * about as tall as it was wide, and every critic who looked at it said the same word:
-   * a top hat. A Tang tower is slender and it steps in as it rises. */
-  tface(0, 8.6, TW * 0.62, 'rgba(24,33,50,.95)');
-  teaves(8.6, TW * 0.94, 2.0);
-  trail(10.2, TW * 0.56);
-  tface(11.0, 18.4, TW * 0.50, 'rgba(28,38,56,.95)');
-  teaves(18.4, TW * 0.80, 2.1);
-  trail(19.9, TW * 0.45);
-  tface(20.6, 26.2, TW * 0.40, 'rgba(32,42,62,.95)');
-  teaves(26.2, TW * 0.62, 1.7);
-  troof(27.2, TW * 0.46, 3.4);
+  tface(0, 9.2, TW * 0.70, 'rgba(26,35,52,.95)');
+  teaves(9.2, TW * 1.02, 2.2);
+  trail(11.0, TW * 0.62);
+  tface(11.9, 18.0, TW * 0.56, 'rgba(30,40,58,.95)');
+  teaves(18.0, TW * 0.90, 2.4);
 
-  var wp = project({ x: TOWER.x + 1.2, y: 14.2, z: TOWER.z - 0.25 });
+  var wp = project({ x: TOWER.x + 1.5, y: 13.9, z: TOWER.z - 0.25 });
   if (wp) {
     /* 何处相思明月楼 — one window, and far away. The halo used to come out very nearly
      * the moon's own diameter and brighter at its heart, so the eye went to the tower
@@ -651,24 +527,8 @@ function drawFarBank() {
     gl.addColorStop(0.35, 'rgba(255,196,124,.07)');
     gl.addColorStop(1, 'rgba(255,196,124,0)');
     ctx.fillStyle = gl; ctx.fillRect(wp.x - ws * 3.6, wp.y - ws * 3.6, ws * 7.2, ws * 7.2);
-    /* a lattice window, and its light spilling past its own frame — a flat orange
-     * rectangle was the last hard-edged thing left in the picture */
-    var wgr = ctx.createLinearGradient(wp.x - ws * 0.5, 0, wp.x + ws * 0.5, 0);
-    wgr.addColorStop(0, 'rgba(255,214,152,.62)');
-    wgr.addColorStop(0.5, 'rgba(255,228,178,.92)');
-    wgr.addColorStop(1, 'rgba(255,214,152,.62)');
-    ctx.fillStyle = wgr;
+    ctx.fillStyle = 'rgba(255,222,168,.92)';
     ctx.fillRect(wp.x - ws * 0.5, wp.y - ws * 0.8, ws, ws * 1.6);
-    if (ws > 6) {
-      ctx.strokeStyle = 'rgba(120,88,52,.45)';
-      ctx.lineWidth = Math.max(0.7, ws * 0.055);
-      for (var mI = 1; mI <= 2; mI++) {
-        var mX = wp.x - ws * 0.5 + ws * (mI / 3);
-        ctx.beginPath(); ctx.moveTo(mX, wp.y - ws * 0.8); ctx.lineTo(mX, wp.y + ws * 0.8); ctx.stroke();
-      }
-      var mY = wp.y - ws * 0.8 + ws * 1.6 * 0.42;
-      ctx.beginPath(); ctx.moveTo(wp.x - ws * 0.5, mY); ctx.lineTo(wp.x + ws * 0.5, mY); ctx.stroke();
-    }
     /* 玉户帘中卷不去 — the lamp lies down on the river and will not be rolled away */
     reflect(TOWER.x + 1.5, TOWER.z, 15, 0.7, 'rgba(255,206,140,$A)', 0.24);
   }
@@ -730,10 +590,7 @@ function drawWater(moonP) {
       var flick = 0.42 + 0.58 * Math.sin(T * 1.7 + ph * 2.3);
       /* the off-axis floor had to come back down once the field was fifteen times as
        * dense: at the old weight the near water curdled into soft grey blotches */
-      /* 何处春江无月明 — the river away from the road is still lit river, not a colour.
-       * Only the road was carrying any texture at all and everything either side of it
-       * read as one flat fill. */
-      var alpha = (0.30 + 0.40 * near * near * flick) * flick * Math.max(0.22, 1 - along / 320);
+      var alpha = (0.125 + 0.42 * near * near * flick) * flick * Math.max(0.2, 1 - along / 300);
       if (alpha < 0.014) continue;
       /* seen at a grazing angle, a wavelet is a flat sliver: wide, and almost no height */
       var len = Math.min(17, Math.max(1.6, (0.35 + 1.5 * h1) * p.s * 1.5));
@@ -758,37 +615,56 @@ function drawWater(moonP) {
      * each one is short, round-capped and dimmer, and its brightness rides the same swell
      * phase as the water under it — 滟滟随波, light coming apart over a moving surface. */
     ctx.lineCap = 'round';
-    for (var ri2 = 0; ri2 < (SHOT ? 2600 : 2000); ri2++) {
-      var rc = ROAD[ri2];
-      var rd = rc.d;
-      if (rd < edgeR(Math.atan2(cam.z + uz * rd, cam.x + ux * rd)) * 0.2) continue;
-      /* 近宽远窄 in SCREEN terms: the ratio of width to distance is what falls away, so
-       * the road arrives as an open mouth and draws in towards the moon's foot */
-      var rhalf = rd * (0.40 - 0.255 * Math.min(1, rd / 150));
-      var wander = Math.sin(rd * 0.055 + T * 0.30) * rhalf * 0.55
-                 + Math.sin(rd * 0.021 - T * 0.17) * rhalf * 0.85;
-      var lat = rc.lat * rhalf + Math.sin(T * 0.85 + rc.ph) * rhalf * 0.3 + wander;
-      var rx = cam.x + ux * rd + px * lat;
-      var rz = cam.z + uz * rd + pz * lat;
-      if (Math.hypot(rx, rz) < edgeR(Math.atan2(rz, rx))) continue;   // the bar interrupts it
-      var rp = project({ x: rx, y: 0, z: rz });
-      if (!rp) continue;
-      var axis = 1 - Math.min(1, Math.abs(lat - wander) / rhalf);
-      var sw = Math.sin(rd * 0.30 - T * 1.25) * 0.5 + 0.5;
-      var fl = 0.30 + 0.70 * (0.45 * Math.sin(T * 2.1 + rc.ph * 2.3) + 0.55 * sw + 0.5) * 0.66;
-      var ra = (0.05 + 0.34 * fl) * axis * axis * Math.max(0.25, 1 - rd / 430);
-      if (ra < 0.02) continue;
-      var rlen = Math.min(46, Math.max(1.8, (0.5 + 1.1 * rc.len) * rp.s * 1.5));
-      ctx.strokeStyle = 'rgba(232,244,255,' + (ra * 0.34).toFixed(3) + ')';
-      ctx.lineWidth = Math.min(2.4, Math.max(0.9, rp.s * 0.34));
-      ctx.beginPath();
-      ctx.moveTo(rp.x - rlen * 0.62, rp.y); ctx.lineTo(rp.x + rlen * 0.62, rp.y);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(236,246,255,' + ra.toFixed(3) + ')';
-      ctx.lineWidth = Math.min(1.3, Math.max(0.6, rp.s * 0.17));
-      ctx.beginPath();
-      ctx.moveTo(rp.x - rlen * 0.34, rp.y); ctx.lineTo(rp.x + rlen * 0.34, rp.y);
-      ctx.stroke();
+    for (var ri2 = 0; ri2 < (SHOT ? 150 : 300); ri2++) {
+      var rd0 = 2.2 * Math.pow(1.0235, ri2);
+      if (rd0 > 520) break;
+      var rhalf = 0.8 + rd0 * 0.062 + Math.pow(rd0, 1.35) * 0.010;
+      var rungs = 7;
+      for (var gj = 0; gj < rungs; gj++) {
+        var hh = Math.sin(ri2 * 7.13 + gj * 31.7) * 43758.5453; hh -= Math.floor(hh);
+        var hj = Math.sin(ri2 * 3.71 + gj * 12.41) * 43758.5453; hj -= Math.floor(hj);
+        /* the scatter has to grow with the gap. At a flat five per cent the ranks stay
+         * ranks once they are close enough to be far apart on screen, and the road ends
+         * up a stack of even rows — read as stair-stepped compression blocks. */
+        var rd = rd0 * (1 + (hj - 0.5) * (0.055 + 12 / Math.max(6, rd0) * 0.09));
+        if (rd < edgeR(Math.atan2(cam.z + uz * rd, cam.x + ux * rd)) * 0.2) continue;
+        /* the road's own axis walks with the swell, so the column bends instead of
+         * standing dead straight with two cut edges down its sides */
+        var wander = Math.sin(rd * 0.055 + T * 0.30) * rhalf * 0.55
+                   + Math.sin(rd * 0.021 - T * 0.17) * rhalf * 0.85;
+        var lat = (hh * 2 - 1) * rhalf + Math.sin(T * 0.85 + ri2 * 0.28 + gj) * rhalf * 0.3
+                + wander;
+        var rx = cam.x + ux * rd + px * lat;
+        var rz = cam.z + uz * rd + pz * lat;
+        if (Math.hypot(rx, rz) < edgeR(Math.atan2(rz, rx))) continue;   // the bar interrupts it
+        var rp = project({ x: rx, y: 0, z: rz });
+        if (!rp) continue;
+        var axis = 1 - Math.min(1, Math.abs(lat) / rhalf);
+        /* the swell the whole river is running, so the road breaks where the water bends */
+        var sw = Math.sin(rd * 0.30 - T * 1.25) * 0.5 + 0.5;
+        var fl = 0.30 + 0.70 * (0.45 * Math.sin(T * 2.1 + ri2 * 0.7 + gj * 1.9) + 0.55 * sw + 0.5) * 0.66;
+        var ra = (0.05 + 0.30 * fl) * axis * axis * Math.max(0.25, 1 - rd / 430);
+        /* the old near-fade took the road out over its last sixteen metres, so it stopped
+         * dead well short of the shore and the moon was left unconnected to the water at
+         * your feet — 滟滟随波千万里 has to arrive somewhere */
+        if (ra < 0.02) continue;
+        /* 近宽远窄, 越近碎片越大越疏 — the fragments grow and thin out as the road
+         * arrives, instead of running down the frame at one width like a ruled band */
+        if (rd < 34 && hh > 0.26 + rd * 0.022) continue;
+        var rlen = Math.min(46, Math.max(1.8, (0.5 + 1.1 * hh) * rp.s * 1.5));
+        /* two passes: a dim wide one under a bright thin core, so each shard fades out
+         * sideways instead of ending on a right angle */
+        ctx.strokeStyle = 'rgba(232,244,255,' + (ra * 0.34).toFixed(3) + ')';
+        ctx.lineWidth = Math.min(2.4, Math.max(0.9, rp.s * 0.34));
+        ctx.beginPath();
+        ctx.moveTo(rp.x - rlen * 0.62, rp.y); ctx.lineTo(rp.x + rlen * 0.62, rp.y);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(236,246,255,' + ra.toFixed(3) + ')';
+        ctx.lineWidth = Math.min(1.3, Math.max(0.6, rp.s * 0.17));
+        ctx.beginPath();
+        ctx.moveTo(rp.x - rlen * 0.34, rp.y); ctx.lineTo(rp.x + rlen * 0.34, rp.y);
+        ctx.stroke();
+      }
     }
     ctx.lineCap = 'butt';
 
@@ -915,14 +791,7 @@ function drawBoat() {
   ctx.quadraticCurveTo(midU.x, midU.y - 2, strU.x, strU.y);   // the sheer line on top
   ctx.closePath();
   ctx.fillStyle = 'rgba(12,18,30,.97)'; ctx.fill();
-  /* Two strokes, one wide and faint under one thin and quiet. A single bright hairline
-   * made the boat a piece of vector art sitting in a world that is otherwise all soft
-   * edges — every critic who looked at it said so. The wide pass is the mist on the
-   * sheer; the thin one is only enough to keep the hull's shape readable. */
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(206,224,248,.10)'; ctx.lineWidth = 4.5; ctx.stroke();
-  ctx.strokeStyle = 'rgba(222,236,254,.40)'; ctx.lineWidth = 1.1; ctx.stroke();
-  ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+  ctx.strokeStyle = 'rgba(222,236,254,.66)'; ctx.lineWidth = 1.2; ctx.stroke();
 
   /* the awning: a bowed roof on two posts, the shape that says boat and not plank */
   var aL = P(-1.7, 0.80), aR = P(1.7, 0.80), aTop = P(0, 2.35);
@@ -935,10 +804,7 @@ function drawBoat() {
     ctx.lineTo(aR.x, aR.y);
     ctx.closePath();
     ctx.fillStyle = 'rgba(18,26,40,.95)'; ctx.fill();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(206,224,248,.08)'; ctx.lineWidth = 4; ctx.stroke();
-    ctx.strokeStyle = 'rgba(210,226,248,.28)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    ctx.strokeStyle = 'rgba(210,226,248,.44)'; ctx.lineWidth = 1; ctx.stroke();
   }
 
   /* 扁舟子 — the one person in this world, and the only way we draw a person here:
@@ -991,22 +857,10 @@ function drawBoat() {
   var lp = P(0.5, 1.45);
   if (lp) {
     var ls = Math.max(1.4, 1.1 * (project({ x: bx, y: 0, z: bz }) || { s: 1 }).s);
-    /* Three soft passes rather than one disc. A single radial gradient at a third of an
-     * alpha shows its own circle on the water, and a lamp on a river does not come with
-     * a rim; layered and stretched sideways it reads as light in the air over water. */
-    for (var lgI = 0; lgI < 3; lgI++) {
-      var lr = ls * (1.8 + lgI * 2.2);
-      var la2 = 0.30 / (1 + lgI * 1.25);
-      ctx.save();
-      ctx.translate(lp.x, lp.y); ctx.scale(1, 0.72 - lgI * 0.12); ctx.translate(-lp.x, -lp.y);
-      var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, lr);
-      lg.addColorStop(0, 'rgba(255,198,126,' + la2.toFixed(3) + ')');
-      lg.addColorStop(0.45, 'rgba(255,196,124,' + (la2 * 0.42).toFixed(3) + ')');
-      lg.addColorStop(1, 'rgba(255,196,124,0)');
-      ctx.fillStyle = lg;
-      ctx.beginPath(); ctx.arc(lp.x, lp.y, lr, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
+    var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, ls * 3.4);
+    lg.addColorStop(0, 'rgba(255,198,126,.34)');
+    lg.addColorStop(1, 'rgba(255,198,126,0)');
+    ctx.fillStyle = lg; ctx.fillRect(lp.x - ls * 3.4, lp.y - ls * 3.4, ls * 6.8, ls * 6.8);
     ctx.fillStyle = 'rgba(255,224,176,.92)';
     ctx.fillRect(lp.x - ls * 0.32, lp.y - ls * 0.42, ls * 0.64, ls * 0.84);
     reflect(bx + 0.5, bz, 2.0, 0.5, 'rgba(255,206,140,$A)', 0.26);
@@ -1142,19 +996,8 @@ function drawSandbar() {
       if (oc < 0 || oc >= nCol) continue;
       if (envOut[oc] === undefined || oq.y < envOut[oc]) envOut[oc] = oq.y;
     }
-    var envReal = [];
-    for (ci2 = 0; ci2 < nCol; ci2++) envReal[ci2] = envOut[ci2] !== undefined ? 1 : 0;
     for (ci2 = 1; ci2 < nCol; ci2++) if (envOut[ci2] === undefined) envOut[ci2] = envOut[ci2 - 1];
     for (ci2 = nCol - 2; ci2 >= 0; ci2--) if (envOut[ci2] === undefined) envOut[ci2] = envOut[ci2 + 1];
-    /* and the wash dies away across any stretch the outer ring never reached. Carried on
-     * at full strength it ran out to the frame's edge as a level bright line lying on the
-     * river — the same mistake as the meadow's shore, in a third place. */
-    for (var er = 0; er < 26; er++) {
-      var er2 = envReal.slice();
-      for (ci2 = 1; ci2 < nCol - 1; ci2++)
-        er2[ci2] = Math.min(1, (envReal[ci2 - 1] + envReal[ci2] * 2 + envReal[ci2 + 1]) / 4);
-      envReal = er2;
-    }
     for (var smo = 0; smo < 8; smo++) {
       var eo2 = envOut.slice();
       for (ci2 = 1; ci2 < nCol - 1; ci2++) {
@@ -1163,48 +1006,18 @@ function drawSandbar() {
       }
       envOut = eo2;
     }
-    /* Layered as continuous curves across the whole frame rather than a rectangle per
-     * column. Column rectangles put an even vertical striation down the band — a ruled
-     * procedural texture, which is exactly what the shallows must not look like. Each
-     * layer runs between the two envelopes at its own fraction and is stroked thick
-     * enough to overlap its neighbours. */
-    /* Back to one short vertical wash per screen column, which is the only version of
-     * this that has ever measured clean: layered curves across the frame either comb the
-     * near shallows into stripes or, when widened enough not to, flood the whole channel.
-     * Clipped under the horizon, because unclipped the layers once swung up off the top
-     * of the river and laid concentric arcs across the night sky. */
-    var hyS = waterTop();
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, hyS, W, H - hyS); ctx.clip();
     for (ci2 = 0; ci2 < nCol; ci2++) {
       var yS = env[ci2], yO = envOut[ci2];
-      if (yO === undefined || !(yS - yO > 2) || yO < hyS - 4 || yS - yO > H * 0.9) continue;
-      var wgt = envReal[ci2];
-      if (wgt < 0.02) continue;
+      if (yO === undefined || !(yS - yO > 2)) continue;
       var sg2 = ctx.createLinearGradient(0, yO, 0, yS);
       sg2.addColorStop(0.00, 'rgba(206,218,238,0)');
-      sg2.addColorStop(0.45, 'rgba(210,222,240,' + (0.125 * wgt).toFixed(3) + ')');
-      sg2.addColorStop(0.80, 'rgba(214,226,242,' + (0.078 * wgt).toFixed(3) + ')');
-      /* it does NOT go out at the shore. Both the wash and the sand's own fill were
-       * fading to nothing at the same line, so the dark river showed through between
-       * them — a hard dark edge in exactly the place the poem says there is no edge. */
-      /* and low at the shore itself: at any weight this last stop draws a bright rim
-       * along the top of the bar, which the eye then counts as one more band of value */
-      sg2.addColorStop(1.00, 'rgba(216,228,244,' + (0.045 * wgt).toFixed(3) + ')');
-      /* (the gradient's own coordinates stop at the shore, so the extra strip below it
-       *  simply carries the last stop's value) */
+      sg2.addColorStop(0.45, 'rgba(210,222,240,.185)');
+      sg2.addColorStop(0.80, 'rgba(214,226,242,.105)');
+      sg2.addColorStop(1.00, 'rgba(214,226,242,0)');
       ctx.fillStyle = sg2;
-      /* Exactly abutting, on whole pixels. Overlapped by a pixel or two "to hide the
-       * seams", every overlap took the wash twice and the river came out ruled with an
-       * even four-pixel beat — read as CRT scan lines lying on the water. */
-      var xA = Math.round(ci2 * COLW - 4), xB = Math.round((ci2 + 1) * COLW - 4);
-      /* and it runs on a little way UNDER the shore. Stopping dead on the shoreline, the
-       * wash's last value met the sand's own ramp starting from nothing, and the sum
-       * stepped down across that one line: the "hard outline" reported along the top of
-       * the bar. The sand is painted over this afterwards, so the overlap costs nothing. */
-      ctx.fillRect(xA, yO, xB - xA, (yS - yO) + 46);
+      /* the columns overlap by a couple of pixels so their edges cannot be counted */
+      ctx.fillRect(ci2 * COLW - 4 - 1.5, yO, COLW + 3, yS - yO);
     }
-    ctx.restore();
 
     function barShore(sink) {           // the visible shore, open, left to right
       sink.moveTo(-4, env[0]);
@@ -1250,9 +1063,7 @@ function drawSandbar() {
      * went from water to bar in about eight pixels and read as a line ruled across the
      * frame; an alpha that comes up over the first fifty has no line in it anywhere.
      * 汀上白沙看不见. */
-    /* a long ramp. At a fifth of the bar's height the transition was short enough that
-     * the eye counts it as one of three or four stacked bands of value — 「色阶带」. */
-    var fadeH = Math.max(46, Math.min(190, (barBot - barTop) * 0.46));
+    var fadeH = Math.max(28, Math.min(80, (barBot - barTop) * 0.22));
     var t1 = Math.min(0.95, fadeH / Math.max(1, barBot - barTop));
     g.addColorStop(0, 'rgba(157,171,194,0)');
     g.addColorStop(t1 * 0.45, 'rgba(157,171,194,.52)');
@@ -1288,71 +1099,46 @@ function drawSandbar() {
      * across the sand — the bar read as an untextured low-poly mesh with its facets
      * showing. A patch has no edges to show. Placed from hashes of their own index, so
      * the same dunes stand in the same places in every round's shot. */
-    for (var dI = 0; dI < 90; dI++) {
+    for (var dI = 0; dI < 34; dI++) {
       var d1 = Math.sin(dI * 12.9898) * 43758.5453; d1 -= Math.floor(d1);
       var d2 = Math.sin(dI * 78.233) * 43758.5453;  d2 -= Math.floor(d2);
       var d3 = Math.sin(dI * 39.425) * 43758.5453;  d3 -= Math.floor(d3);
-      var d4 = Math.sin(dI * 21.77) * 43758.5453;   d4 -= Math.floor(d4);
-      var dth = d1 * Math.PI * 2, drr = Math.sqrt(d2) * edgeR(dth) * 0.94;
+      var dth = d1 * Math.PI * 2, drr = Math.sqrt(d2) * edgeR(dth) * 0.92;
       var dx2 = Math.cos(dth) * drr, dz2 = Math.sin(dth) * drr;
       var dp = project({ x: dx2, y: gh(dx2, dz2), z: dz2 });
-      if (!dp || dp.z > 110) continue;
+      if (!dp || dp.z > 90) continue;
       /* capped. A dune two metres from the eye projected a patch the better part of a
        * thousand pixels across, and thirty of those at five per cent white washed the
        * whole foreground back up to one flat value whatever the sand's own ramp did. */
-      var drad = Math.max(12, Math.min(dp.s * 2.2, 170));
-      /* A ridge is a pale face and a dark one beside it. Painted as pale patches alone
-       * the bar had blotches but no relief, and every critic read it as a flat plane with
-       * noise on it. The dark half is offset AWAY from the moon, so the whole bar is
-       * modelled by the same light as everything else in the picture. */
-      for (var dS = 0; dS < 2; dS++) {
-        var dOff = (dS === 0 ? -1 : 1) * drad * 0.34;
-        var dcx = dp.x + dOff * (0.4 + 0.6 * d4), dcy = dp.y + dOff * 0.10;
-        var dcol = dS === 0 ? '255,255,255' : '62,74,100';
-        var damp = (dS === 0 ? 0.072 : 0.060) * (0.45 + d3);
-        ctx.save();
-        ctx.translate(dcx, dcy); ctx.scale(1, 0.26); ctx.translate(-dcx, -dcy);
-        var dg2 = ctx.createRadialGradient(dcx, dcy, 0, dcx, dcy, drad);
-        dg2.addColorStop(0, 'rgba(' + dcol + ',' + damp.toFixed(3) + ')');
-        dg2.addColorStop(0.6, 'rgba(' + dcol + ',' + (damp * 0.35).toFixed(3) + ')');
-        dg2.addColorStop(1, 'rgba(' + dcol + ',0)');
-        ctx.fillStyle = dg2;
-        ctx.beginPath(); ctx.arc(dcx, dcy, drad, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
+      var drad = Math.max(14, Math.min(dp.s * 2.6, 190));
+      ctx.save();
+      ctx.translate(dp.x, dp.y); ctx.scale(1, 0.30); ctx.translate(-dp.x, -dp.y);
+      var dg2 = ctx.createRadialGradient(dp.x, dp.y, 0, dp.x, dp.y, drad);
+      var dcol = d3 > 0.5 ? '255,255,255' : '78,92,120';
+      dg2.addColorStop(0, 'rgba(' + dcol + ',' + (0.055 * (0.5 + d3)).toFixed(3) + ')');
+      dg2.addColorStop(1, 'rgba(' + dcol + ',0)');
+      ctx.fillStyle = dg2;
+      ctx.beginPath(); ctx.arc(dp.x, dp.y, drad, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
 
-    /* 湿沙 — the mark the tide leaves, as separate stretches rather than five copies of
-     * the shore's own curve shifted inward. Copied that way they read as contour lines
-     * ruled across the sand, which is the one thing the shore is not allowed to look
-     * like. Each stretch covers a short span of the shore and fades out at both ends. */
-    ctx.lineCap = 'round';
-    for (var wsI = 0; wsI < 13; wsI++) {
-      var q1w = Math.sin(wsI * 12.9898) * 43758.5453; q1w -= Math.floor(q1w);
-      var q2w = Math.sin(wsI * 78.233) * 43758.5453;  q2w -= Math.floor(q2w);
-      var q3w = Math.sin(wsI * 39.425) * 43758.5453;  q3w -= Math.floor(q3w);
-      var wStart = q1w * EDGE.length, wSpan = (14 + q2w * 34);
-      var kW = 1 - 0.006 - q3w * 0.055;
-      var wPrev = null;
-      for (var wj = 0; wj <= wSpan; wj++) {
-        var we = EDGE[Math.floor(wStart + wj) % EDGE.length];
-        var wq = project({ x: we.x * kW, y: gh(we.x * kW, we.z * kW), z: we.z * kW });
-        if (!wq) { wPrev = null; continue; }
-        if (wPrev) {
-          var wu = wj / wSpan;
-          var wEnds = Math.min(1, Math.min(wu, 1 - wu) / 0.3);
-          var wLen = Math.hypot(wq.x - wPrev.x, wq.y - wPrev.y);
-          var wAa = 0.075 * wEnds * wEnds * Math.min(1, 24 / Math.max(6, wLen));
-          if (wAa > 0.004) {
-            ctx.strokeStyle = 'rgba(112,128,158,' + (wAa * 0.55).toFixed(3) + ')';
-            ctx.lineWidth = 9 + q2w * 14;
-            ctx.beginPath(); ctx.moveTo(wPrev.x, wPrev.y); ctx.lineTo(wq.x, wq.y); ctx.stroke();
-          }
-        }
-        wPrev = wq;
+    /* 湿沙: the strip the tide just left, darker, holding a little of the moon */
+    for (var wsI = 0; wsI < 5; wsI++) {
+      ctx.beginPath(); var wst = false;
+      for (i9 = 0; i9 <= EDGE.length; i9 += 2) {
+        var we = EDGE[i9 % EDGE.length];
+        var k3 = 1 - wsI * 0.014;
+        var wq = project({ x: we.x * k3, y: gh(we.x * k3, we.z * k3), z: we.z * k3 });
+        if (!wq) { wst = false; continue; }
+        if (!wst) { ctx.moveTo(wq.x, wq.y); wst = true; } else ctx.lineTo(wq.x, wq.y);
       }
+      /* wide and faint: at three pixels these read as ruled lines drawn on the sand
+       * rather than as the mark a tide leaves */
+      ctx.strokeStyle = 'rgba(120,136,164,' + (0.055 - wsI * 0.009).toFixed(3) + ')';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 13 + wsI * 5; ctx.stroke();
+      ctx.lineCap = 'butt';
     }
-    ctx.lineCap = 'butt';
     ctx.restore();
   }
 
@@ -1395,29 +1181,10 @@ function drawSandbar() {
     /* faint and wide: 看不见 means the eye must not be able to fix this edge. At the old
      * weight it was the brightest line in the picture, which draws the boundary the poem
      * says you cannot find. */
-    ctx.strokeStyle = 'rgba(214,226,244,' + (0.006 * lw).toFixed(3) + ')';
+    ctx.strokeStyle = 'rgba(214,226,244,' + (0.016 * lw).toFixed(3) + ')';
     ctx.lineWidth = lw * 7.0; ctx.stroke();
   }
   ctx.restore();
-
-  /* NOTE for whoever comes back to this. The sand at your feet is smoother than the sand
-   * twenty metres off, and it always will be: a grain field of even density in the world
-   * is spread over more and more pixels the nearer it gets to the eye. Four critics in a
-   * row called the foreground a flat fill with noise on it, and three different fixes
-   * were built and measured against that:
-   *   - each far grain standing in for a patch and scattering into sub-specks: at every
-   *     setting the patches became the texture — first pebbles, then pale blotches, in
-   *     the end plainly visible rectangles;
-   *   - a quarter-metre lattice laid around the camera: thins out towards the eye for
-   *     exactly the same reason as the world field, because it is still a world field;
-   *   - walking the pixels and un-projecting each one onto the ground, hashing the grain
-   *     from where it lands: even density at last, but the three-pixel sampling step and
-   *     the hash cell together read as a woven lattice, and with the cell scaled by
-   *     distance it still clots. A worse artefact than the smoothness it replaced.
-   * What carries the foreground instead is the dune shading — paired lit and shaded
-   * faces, the shaded one always away from the moon — and the drift field that makes the
-   * grain coarse in some stretches and swept smooth in others. If you try again, the
-   * thing to beat is a regular lattice showing through at STEP-sized spacing. */
 
   /* grains of sand, and 空里流霜不觉飞 drifting just above them */
   for (i9 = 0; i9 < grains.length; i9++) {
@@ -1432,21 +1199,8 @@ function drawSandbar() {
      * at it. Half the grains are darker than the sand now and half are lighter, both at
      * a weight you can see, so the surface has a texture without getting any brighter —
      * which is the whole of 汀上白沙看不见: not dark, not loud, just impossible to fix. */
-    /* the cap was two pixels, which every grain within twenty metres hit, so the whole
-     * bar was covered in dots of one size — plainly a noise texture rather than sand
-     * seen at a distance and sand seen at your feet */
-    var gsz = Math.max(0.8, Math.min(2.8, gp.s * 0.032));
-    /* and the biggest ones have to be the faintest, or the sand at your feet turns into
-     * a scatter of little pale tiles */
-    /* Sand is not evenly grained. A single density everywhere is exactly what makes a
-     * scatter read as a noise texture laid over a flat fill; real sand has coarse drifts
-     * and swept-smooth stretches. This is a slow field in world space, so the drifts stay
-     * put as you walk over them, and it also decides which grains appear at all. */
-    var drift = 0.5 + 0.5 * Math.sin(gr.x * 0.46 + gr.z * 0.21)
-                    * Math.sin(gr.z * 0.37 - gr.x * 0.17 + 1.3);
-    if (gr.k > 0.52 + 0.48 * drift) continue;
-    var ga = (0.09 + 0.30 * near2) * (0.45 + 0.55 * gr.k) * (0.45 + 0.95 * drift)
-           * Math.min(1, 2.0 / Math.max(1, gp.s * 0.032)) * 1.45;
+    var gsz = Math.max(0.8, Math.min(2.0, gp.s * 0.06));
+    var ga = (0.09 + 0.30 * near2) * (0.45 + 0.55 * gr.k);
     var gaL = 'rgba(252,253,255,' + ga.toFixed(3) + ')';
     var gaD = 'rgba(126,138,162,' + (ga * 0.80).toFixed(3) + ')';
     /* One speck, one grain, and simply a great many grains. Standing each grain in for a
@@ -1590,22 +1344,13 @@ function drawMeadow() {
 }
 
 function drawGrove() {
-  /* which way the moon lies, in screen terms, for every crown in the wood */
-  var mP = project({ x: MOON.x, y: MOON.y, z: MOON.z });
-  var moonDirX = 0, moonDirY = -1;
-  if (mP) {
-    var mdx = mP.x - W * 0.5, mdy = mP.y - H * 0.5, mdl = Math.hypot(mdx, mdy) || 1;
-    moonDirX = mdx / mdl; moonDirY = mdy / mdl;
-  }
   /* 月照花林皆似霰 — a canopy of white, with a tree's shape: a crown that holds light,
    * a short trunk under it, and the blossom read as sleet caught in the crown. */
   for (var i7 = 0; i7 < grove.length; i7++) {
     var g = grove[i7];
     var y0 = gh(g.x, g.z);
     var sway = Math.sin(T * 0.5 + g.seed) * 0.10;
-    /* the crown sits lower on the trunk, so the bare stretch between the blossom and the
-     * ground stops reading as a stalk the tree is hanging from */
-    var crownY = y0 + g.h * 0.66;
+    var crownY = y0 + g.h * 0.80;
     var cp2 = project({ x: g.x + sway, y: crownY, z: g.z });
     if (!cp2) continue;
     var cr = Math.max(3, g.h * 0.62 * g.wid * cp2.s);
@@ -1619,12 +1364,9 @@ function drawGrove() {
      * is. Everything is deterministic in i7/k2, so shots stay byte-reproducible. */
     ctx.save();
     ctx.translate(cp2.x, cp2.y); ctx.scale(1, 0.70); ctx.translate(-cp2.x, -cp2.y);
-    /* barely there. At any real strength this halo is a glowing ring around the crown,
-     * and it is what made every critic read the wood as fireworks or dandelion clocks
-     * rather than as trees: a tree does not come with a light around it. */
     var cg = ctx.createRadialGradient(cp2.x, cp2.y, cr * 0.1, cp2.x, cp2.y, cr * 1.05);
-    cg.addColorStop(0, 'rgba(232,240,252,.045)');
-    cg.addColorStop(0.6, 'rgba(224,234,250,.018)');
+    cg.addColorStop(0, 'rgba(232,240,252,.13)');
+    cg.addColorStop(0.6, 'rgba(224,234,250,.06)');
     cg.addColorStop(1, 'rgba(220,232,248,0)');
     ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(cp2.x, cp2.y, cr * 1.05, 0, Math.PI * 2); ctx.fill();
@@ -1673,63 +1415,26 @@ function drawGrove() {
     }
 
 
-    /* 皆似霰 — the blossom hangs on BOUGHS. Scattered over a disc it made a ball of even
-     * noise, and every critic in turn called the wood fireworks, a spray can, a puff.
-     * Each tree now throws five or six boughs out of the top of its trunk, each bough a
-     * curve with its own direction and reach, and the sleet is laid ALONG them: thick
-     * where the bough is, thinning as it gets away from it, thinning again towards the
-     * tip. That gives the crown an outline no circle could give it, a structure you can
-     * follow with your eye, and gaps of night through it. Everything is hashed off the
-     * tree's index, so the same wood stands in every round's shot. */
-    var nB = 5 + (i7 % 3);
-    for (var bJ = 0; bJ < nB; bJ++) {
-      var w1 = Math.sin(i7 * 91.7 + bJ * 27.3) * 43758.5453; w1 -= Math.floor(w1);
-      var w2 = Math.sin(i7 * 43.1 + bJ * 61.9) * 43758.5453; w2 -= Math.floor(w2);
-      var w3 = Math.sin(i7 * 17.9 + bJ * 83.1) * 43758.5453; w3 -= Math.floor(w3);
-      /* boughs fan upward and outward, never straight down */
-      /* a narrower fan, or the boughs reach so far sideways that neighbouring trees run
-       * together into one long bank of blossom and no tree keeps a shape of its own */
-      var bAng = -Math.PI * 0.86 + (bJ + 0.15 + 0.7 * w1) / nB * Math.PI * 0.72;
-      var bLen = cr * (0.46 + 0.42 * w2);
-      var bx0 = cp2.x, by0 = cp2.y + cr * 0.46;
-      var bx1 = bx0 + Math.cos(bAng) * bLen * (1 + g.lean * 0.6);
-      var by1 = by0 + Math.sin(bAng) * bLen * g.flat * 1.35;
-      var bcx = bx0 + (bx1 - bx0) * 0.42 - Math.sin(bAng) * bLen * 0.22;
-      var bcy = by0 + (by1 - by0) * 0.42 + Math.cos(bAng) * bLen * 0.12;
-      /* the bough itself, only where it is thick enough to be seen through the blossom */
-      ctx.strokeStyle = 'rgba(48,58,78,.30)';
-      ctx.lineWidth = Math.max(0.6, 0.055 * cp2.s);
-      ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(bx0, by0);
-      ctx.quadraticCurveTo(bcx, bcy, bx0 + (bx1 - bx0) * 0.55, by0 + (by1 - by0) * 0.55);
-      ctx.stroke();
-      ctx.lineCap = 'butt';
-      var nBl = Math.max(16, Math.min(190, Math.round(bLen * bLen * 0.10 * g.dens)));
-      for (var kB = 0; kB < nBl; kB++) {
-        var z1 = Math.sin(i7 * 51.13 + bJ * 13.7 + kB * 17.31) * 43758.5453; z1 -= Math.floor(z1);
-        var z2 = Math.sin(i7 * 11.71 + bJ * 29.3 + kB * 29.07) * 43758.5453; z2 -= Math.floor(z2);
-        var z3 = Math.sin(i7 * 7.19 + bJ * 71.1 + kB * 41.53) * 43758.5453; z3 -= Math.floor(z3);
-        var z4 = Math.sin(i7 * 33.7 + bJ * 5.9 + kB * 63.7) * 43758.5453;  z4 -= Math.floor(z4);
-        var tB = Math.pow(z1, 0.62);                    // more blossom out along the bough
-        var m0 = (1 - tB) * (1 - tB), m1b = 2 * (1 - tB) * tB, m2 = tB * tB;
-        var qx = m0 * bx0 + m1b * bcx + m2 * bx1;
-        var qy = m0 * by0 + m1b * bcy + m2 * by1;
-        /* a cloud around the bough, fatter out at the tip and thinner at the fork */
-        var puff = cr * (0.075 + 0.20 * tB) * (0.45 + 0.8 * w3);
-        var pa = z2 * 6.28318, pr = Math.sqrt(z3) * puff;
-        var px3 = qx + Math.cos(pa) * pr;
-        var py3 = qy + Math.sin(pa) * pr * g.flat;
-        var lit = 0.5 + 0.5 * ((px3 - cp2.x) * moonDirX + (py3 - cp2.y) * moonDirY)
-                        / Math.max(1, cr);
-        lit = Math.max(0, Math.min(1, lit));
-        var szB = Math.max(0.9, Math.min(2.6, 0.045 * cp2.s * (0.55 + 1.15 * z4)));
-        var twB = 0.45 + 0.55 * Math.abs(Math.sin(z4 * 9 + T * 0.4));
-        var gaB = (0.13 + 0.34 * (1 - pr / Math.max(0.001, puff) * 0.6)) * twB
-                * (0.40 + 1.00 * lit * lit);
-        if (gaB < 0.03) continue;
-        ctx.fillStyle = 'rgba(248,251,255,' + gaB.toFixed(3) + ')';
-        ctx.fillRect(px3 - szB / 2, py3 - szB / 2, szB, szB);
-      }
+    /* the sleet itself */
+    var nGr = Math.max(26, Math.min(460, Math.round(cr * cr * 0.34 * g.dens)));
+    for (var k2 = 0; k2 < nGr; k2++) {
+      var q1 = Math.sin(i7 * 51.13 + k2 * 17.31) * 43758.5453; q1 -= Math.floor(q1);
+      var q2 = Math.sin(i7 * 11.71 + k2 * 29.07) * 43758.5453; q2 -= Math.floor(q2);
+      var q3 = Math.sin(i7 * 7.19 + k2 * 41.53) * 43758.5453; q3 -= Math.floor(q3);
+      var a = q1 * 6.28318;
+      /* sqrt keeps the grains even across the disc instead of piling at the centre;
+       * the ragged term makes the crown's outline a blossom's, not a circle's */
+      var rr3 = Math.sqrt(q2) * (0.86 + 0.20 * Math.sin(a * 3.1 + g.seed));
+      var px2 = cp2.x + Math.cos(a) * cr * rr3 + Math.sin(a) * cr * rr3 * g.lean;
+      var py2 = cp2.y + Math.sin(a) * cr * rr3 * g.flat;
+      var sz = Math.max(0.9, Math.min(2.0, 0.045 * cp2.s));
+      var tw2 = 0.40 + 0.60 * Math.abs(Math.sin(q3 * 9 + T * 0.4));
+      /* brighter at the crown's heart, thinning out at its edge — the way a flowering
+       * tree holds the moon, and the way the edge is allowed to dissolve */
+      var ga2 = (0.16 + 0.52 * (1 - rr3 * 0.82)) * tw2;
+      if (ga2 < 0.03) continue;
+      ctx.fillStyle = 'rgba(248,251,255,' + ga2.toFixed(3) + ')';
+      ctx.fillRect(px2 - sz / 2, py2 - sz / 2, sz, sz);
     }
   }
 }
@@ -1739,7 +1444,6 @@ var keys = Object.create(null);
 addEventListener('keydown', function (e) {
   keys[e.code] = true;
   if (['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
-  pokeLive();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -1749,7 +1453,6 @@ stage.addEventListener('pointerdown', function (e) {
   if (e.target.closest('#touch') || e.target.closest('#enter')) return;
   drag = { x: e.clientX, y: e.clientY };
   try { stage.setPointerCapture(e.pointerId); } catch (err) {}
-  pokeLive();
 });
 stage.addEventListener('pointermove', function (e) {
   if (!drag) return;
@@ -1757,7 +1460,6 @@ stage.addEventListener('pointermove', function (e) {
   cam.pitch -= (e.clientY - drag.y) * 0.0023;
   cam.pitch = Math.max(-0.42, Math.min(0.45, cam.pitch));
   drag = { x: e.clientX, y: e.clientY };
-  pokeLive();
 });
 addEventListener('pointerup', function () { drag = null; });
 
@@ -1851,46 +1553,12 @@ function markShotReady() {
 }
 
 function frame(now) {
-  if (SHOT) return;
-  if (!wantLive(now)) { loopOn = false; return; }
-  requestAnimationFrame(frame);
-  if (now - lastDrawT < 1000 / LIVE_FPS) return;
   var dt = Math.min(0.05, (now - last) / 1000); last = now;
-  lastDrawT = now;
-  T += dt; step(dt);
+  if (SHOT) { T = FROZEN_T; } else { T += dt; step(dt); }
   drawFrame();
+  if (SHOT && ++shotFrames >= SHOT_FRAMES) { markShotReady(); return; }
+  requestAnimationFrame(frame);
 }
-
-var loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
-function wantLive(now) {
-  if (document.hidden) return false;
-  if (roamHold) return true;
-  if (now < liveUntil) return true;
-  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
-      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.Space) return true;
-  if (drag || jx || jz) return true;
-  return false;
-}
-function pokeLive() {
-  liveUntil = performance.now() + 1400;
-  kickLoop();
-}
-function kickLoop() {
-  if (SHOT || document.hidden) return;
-  if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(frame); }
-}
-document.addEventListener('visibilitychange', function () {
-  if (document.hidden) loopOn = false;
-  else pokeLive();
-});
-window.__poemPerf = {
-  poke: pokeLive,
-  roam: function (on) {
-    roamHold = !!on;
-    keys.KeyW = !!on;
-    if (on) pokeLive();
-  }
-};
 
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
@@ -1950,7 +1618,7 @@ if (SHOT) {
   markShotReady();
 } else {
   last = performance.now();
-  drawFrame();
+  requestAnimationFrame(frame);
 }
 
 })();
