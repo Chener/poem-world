@@ -35,14 +35,29 @@ DPR=1 and one synchronous frame (`data-shot-ready`) — do not wait on rAF, offs
 and headless often never fire it. If Metal does not come up, the script falls back to
 headed-offscreen Metal, then SwiftShader. Numbers and the why live in README「截图与资源」.
 
-**Shots must stay byte-reproducible.** Every world freezes its clock (`FROZEN_T`) and
-places its contents from hashes of stable indices, never from runtime randomness, so the
-same camera in round 3 and round 9 frames the same scene. Verify with `md5` after changes
-to placement code.
+**Shots must stay reproducible.** Every world freezes its clock (`FROZEN_T`) and places
+its contents from hashes of stable indices, never from runtime randomness, so the same
+camera in round 3 and round 9 frames the same scene. `md5` on two rounds' same-named
+shots is the check — but only within one rasteriser: changing the ANGLE backend changes
+every byte while changing nothing in the world.
 
 **The timeline reads `log.jsonl`; `log.js` is a generated mirror** for `file://`, where
 `fetch` of a sibling file is blocked. Append rounds with `shared/logrow.py`, which
 regenerates the mirror; never hand-edit `log.js`.
+
+**Spend mesh resolution where the eye is, and check the winding.** Two bugs cost
+gitanjali-60 six rounds of critics writing "the sea is a pastel plane": a uniform grid
+over four kilometres put one vertex every 6.8m under wave trains 6.2m long, so the surf
+could not exist; and a hand-built `BufferGeometry` whose quads were wound the wrong way
+was silently back-face culled, showing the sky dome through the water — which looks
+enough like a flat sea to waste an afternoon on. Non-uniform rows fixed the first. For
+the second, a mesh that vanishes but leaves the scene looking plausible is almost always
+winding or `side`.
+
+**A camera's `y` in `CAMS` is world-absolute, not height above ground.** gitanjali-60's
+`children` camera reads as 0.95m but sits 8cm above the sand there, so anything flat and
+close to it smears across the frame. Check a camera against the terrain height at its
+own x/z before believing its eye height.
 
 **Rendered content avoids violent or morbid imagery**, whatever the source poem contains.
 Public-domain originals live in `POEM.md`; the world, the screenshots and the prose around
