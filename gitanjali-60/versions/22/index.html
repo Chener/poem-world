@@ -1346,25 +1346,14 @@ function buildPearlBoat() {
    * read the men on these as "people standing on the water". A mast with its
    * sail furled on the yard is a tall, unmistakable silhouette: it says boat
    * from a quarter of a mile, and it says WORKING boat, not a child's. */
-  /* The rig has to be telling something apart, not repeating it. From the sand
-   * the pearl boats, the wreck and the merchants were all "a thin black pole
-   * with a pale crossbar", and the critic read three unrelated worlds as one
-   * row of repeated props. So: no yard across the mast here — the sail is
-   * lashed in a diagonal bundle along it, the mast is short and raked, and
-   * there is an awning over the after end. A working boat lying to her line. */
-  var pmast = new THREE.Mesh(new THREE.CylinderGeometry(L * 0.012, L * 0.020, L * 0.62, 6), WOOD_DARK);
-  pmast.position.set(0, L * 0.30, L * 0.10);
-  pmast.rotation.x = -0.16;
+  var pmast = new THREE.Mesh(new THREE.CylinderGeometry(L * 0.012, L * 0.020, L * 0.92, 6), WOOD_DARK);
+  pmast.position.set(0, L * 0.44, L * 0.10);
+  pmast.rotation.x = -0.09;
   o.add(pmast);
-  var bundle = new THREE.Mesh(new THREE.CylinderGeometry(L * 0.026, L * 0.034, L * 0.54, 6), CLOTH_PALE);
-  bundle.position.set(L * 0.035, L * 0.32, L * 0.13);
-  bundle.rotation.set(-0.16, 0, 0.30);
+  var bundle = new THREE.Mesh(new THREE.CylinderGeometry(L * 0.030, L * 0.030, L * 0.50, 6), CLOTH_PALE);
+  bundle.position.set(0, L * 0.70, L * 0.085);
+  bundle.rotation.set(0, 0, Math.PI / 2 - 0.10);
   o.add(bundle);
-
-  var awn = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.26, L * 0.34), CLOTH_PALE);
-  awn.rotation.x = -Math.PI / 2 + 0.10;
-  awn.position.set(0, L * 0.115, -L * 0.20);
-  o.add(awn);
 
   var tender = deckHand(1.72, 0xbfa07a);
   tender.position.set(0, L * 0.02, -L * 0.20);
