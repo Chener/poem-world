@@ -258,22 +258,17 @@ var camera = new THREE.PerspectiveCamera(55, 1, 0.1, 6000);
 
 /* The palette of a pale, luminous, slightly overcast hour: the beach smiles,
  * but the smile is pale. Everything else is tuned to these five colours. */
-/* The haze used to be 0xd7d1c2 — a warm near-white — and with a wide seam at
- * the horizon it welded sea and sky into one blank wall a few hundred metres
- * out. "The infinite sky is motionless overhead" cannot be read off a wall,
- * and neither can an endless coast. Cooler, greyer, less of it; and the vault
- * above it goes properly deep. */
 var PAL = {
-  skyTop:  new THREE.Color(0x3d6086),
-  skyHaze: new THREE.Color(0xc3c6c1),
+  skyTop:  new THREE.Color(0x4c7398),
+  skyHaze: new THREE.Color(0xd7d1c2),
   sun:     new THREE.Color(0xfff2dc),
   seaDeep: new THREE.Color(0x1d3b4b),
   seaShal: new THREE.Color(0x38787b),
   sand:    new THREE.Color(0xbcaa89),
   sandWet: new THREE.Color(0x7c7263)
 };
-var FOG = new THREE.Color(0xb9bdba);
-scene.fog = new THREE.Fog(FOG, 420, 3400);
+var FOG = new THREE.Color(0xc0c1bb);
+scene.fog = new THREE.Fog(FOG, 300, 2600);
 
 var SUNDIR = new THREE.Vector3(-0.34, 0.20, -0.92).normalize(); // low, ahead-left, over the sea
 
@@ -309,7 +304,7 @@ var sky = new THREE.Mesh(
        * down, so the dome has depth from the first metre above the horizon. */
       '  float el = vDir.y;',
       '  float elc = clamp(el, 0.0, 1.0);',
-      '  float t = pow(elc, 0.50);',
+      '  float t = pow(elc, 0.42);',
       '  vec3 col = mix(uHaze, uTop, t);',
       /* and it keeps deepening overhead, so there is a weight above you */
       '  col = mix(col, uTop * 0.52, pow(elc, 1.40) * 0.88);',
@@ -334,10 +329,10 @@ var sky = new THREE.Mesh(
       '  float airy = fbm(vec2(dn.x, dn.z) * 1.35 + vec2(3.7, 1.9));',
       '  col *= 0.955 + 0.095 * airy;',
       '  float layers = 0.5 + 0.5 * sin(pow(elc, 0.55) * 22.0 + 1.3);',
-      '  col = mix(col, uHaze, pow(1.0 - elc, 9.0) * layers * 0.07);',
+      '  col = mix(col, uHaze, pow(1.0 - elc, 7.0) * layers * 0.16);',
       /* a seam at the horizon so sky and sea meet without a cut - but a narrow
        * one: the old band was six degrees wide and swallowed the horizon */
-      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*26.0,0.0,1.0), 2.0)*0.15);',
+      '  col = mix(col, uHaze, pow(1.0 - clamp(abs(vDir.y)*16.0,0.0,1.0), 2.0)*0.32);',
       /* --------------------------------------------------------------------
        * "Tempest roams in the pathless sky."  Two lines of this poem look like
        * a contradiction — the sky is motionless overhead, AND a tempest roams
@@ -816,8 +811,8 @@ var sandUniforms = {
   uTime:    { value: 0 },
   uSunDir:  { value: SUNDIR },
   uFogCol:  { value: FOG },
-  uFogNear: { value: 480 },
-  uFogFar:  { value: 3400 }
+  uFogNear: { value: 250 },
+  uFogFar:  { value: 1500 }
 };
 var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
   uniforms: sandUniforms,
@@ -996,7 +991,7 @@ var SPRAY_PERIOD = (function () {
   return 6.28318 / (Math.sqrt(9.8 / k) * k * WAVE_SPEED);
 })();
 
-var SPRAY_CELLS = 150, SPRAY_PER_CELL = 11, SPRAY_TILE = 240;
+var SPRAY_CELLS = 150, SPRAY_PER_CELL = 8, SPRAY_TILE = 240;
 var SPRAY_N = SPRAY_CELLS * SPRAY_PER_CELL;
 var SPRAY_LIFE = 1.70, SPRAY_Z = -13.0;
 
@@ -1045,9 +1040,7 @@ function updateSpray(t, camX) {
   for (var c = 0; c < SPRAY_CELLS; c++) {
     var x = x0 + (c + 0.5) * cell;
     /* seconds since the crest at this stretch of shore toppled */
-    /* thrown from where the wave is actually toppling — the break line wanders
-     * along the shore, and spray pinned to a fixed distance lands behind it */
-    var zc = -(breakAtJS(x) + (h1(c * 1.31) - 0.5) * 4.6);
+    var zc = SPRAY_Z + 3.0 - h1(c * 1.31) * 6.8;
     var u = wavePhaseJS(SPRAY_WAVE, x, zc, t) / 6.28318
           + 0.13 * Math.sin(x * 0.09) + 0.21 * Math.sin(x * 0.031 + 1.7)
           + 0.08 * Math.sin(x * 0.27);
@@ -1057,7 +1050,7 @@ function updateSpray(t, camX) {
     var surf = seaHeightJS(x, zc, t);
     for (var k = 0; k < SPRAY_PER_CELL; k++) {
       var j = c * SPRAY_PER_CELL + k;
-      var vy = 5.2 + h1(j * 1.7) * 5.4;
+      var vy = 4.4 + h1(j * 1.7) * 4.6;
       var vz = 1.2 + h1(j * 2.9 + 5) * 2.4;      // carried shoreward as it flies
       var jx = (h1(j * 4.1 + 11) - 0.5) * cell * 2.4;
       var y = surf + 0.35 + vy * age - 4.9 * age * age;
@@ -1065,7 +1058,7 @@ function updateSpray(t, camX) {
       if (y < gy) continue;                       // it has fallen back into the sea
       _dummy.position.set(x + jx, y, zc + vz * age);
       _dummy.quaternion.copy(camera.quaternion);  // face the eye
-      var grow = 0.78 + age * 2.15 + h1(j * 3.3 + 2) * 0.85;
+      var grow = 0.60 + age * 1.70 + h1(j * 3.3 + 2) * 0.70;
       _dummy.scale.set(grow, grow, grow);
       _dummy.updateMatrix();
       iSpray.setMatrixAt(n, _dummy.matrix);
@@ -1087,13 +1080,6 @@ function updateSpray(t, camX) {
  * anything floated on the water sits on the surface the shader actually draws.
  * (It carries only the vertical term; the horizontal Gerstner pull moves a
  * floating thing sideways by under a metre, which nothing here would notice.) */
-/* MUST stay identical to breakAt() in SHOAL_GLSL. The spray and the floating
- * things both need to know where the water is actually breaking, not where it
- * used to break before the line was given a wander. */
-function breakAtJS(x) {
-  return 10.5 + 3.2 * Math.sin(x * 0.0455) + 1.7 * Math.sin(x * 0.0171 + 2.1);
-}
-
 function seaHeightJS(x, z, t) {
   var d = -z;
   var ru = Math.min(1, Math.max(0, (d + 1.0) / 6.5));   // smoothstep(-1.0, 5.5, d)
@@ -1103,7 +1089,7 @@ function seaHeightJS(x, z, t) {
   /* MUST stay identical to breakAt()/shoal() in SHOAL_GLSL: this mirror is what
    * floats the leaf boats and the wrecks. When it drifts from the shader, the
    * boats sail under the water. */
-  var brk = breakAtJS(x);
+  var brk = 10.5 + 3.2 * Math.sin(x * 0.0455) + 1.7 * Math.sin(x * 0.0171 + 2.1);
   var rear = 1 + 2.45 * Math.exp(-Math.pow((d - brk) / 3.8, 2))
                + 0.95 * Math.exp(-Math.pow((d - 29.0) / 8.0, 2));
   var f = runUp * deep * rear;
@@ -1588,9 +1574,9 @@ function mergeGeos(list) {
   return out;
 }
 
-var THIGH_L = 0.174, SHIN_L = 0.174, LEG_L = THIGH_L + SHIN_L;
+var THIGH_L = 0.186, SHIN_L = 0.186, LEG_L = THIGH_L + SHIN_L;
 var UPARM_L = 0.155, FORE_L  = 0.170, ARM_L = UPARM_L + FORE_L;
-var TORSO_L = 0.395, FOOT_H = 0.042, HEAD_R = 0.1405, NECK_L = 0.042;
+var TORSO_L = 0.40, FOOT_H = 0.044, HEAD_R = 0.1335, NECK_L = 0.048;
 var HIP_Y = LEG_L + FOOT_H;                       // hips above the sand, standing
 var HEAD_Y = TORSO_L + NECK_L + HEAD_R * 0.86;    // head centre above the hips
 var SHO_Y = TORSO_L - 0.052;
@@ -2045,35 +2031,17 @@ function poseChild(state, t, lean) {
     armL.root.rotation.z = 0.30; armR.root.rotation.z = -0.30;
     rHead.rotation.x = 0.34 + reach * 0.24;
   } else {
-    /* Standing in the ring, watching whoever is talking. Nobody stands like a
-     * mannequin: the weight is on one leg, one arm usually does something with
-     * itself, and the head keeps turning. Three of these, because a beach of
-     * identical resting figures was the thing that read as copy-paste. */
+    /* just standing in the ring, looking at whoever is talking */
     a = Math.sin(t * 1.15);
-    var w = Math.floor(((t * 0.023) % 1) * 3);
     rHips.position.y = HIP_Y + a * 0.012;
-    rHips.rotation.z = (w === 0 ? 0.055 : -0.045);          // weight on one leg
+    armL.root.rotation.x = a * 0.14;  armR.root.rotation.x = -a * 0.14;
+    armL.root.rotation.z = 0.24; armR.root.rotation.z = -0.24;
+    armL.joint.rotation.x = 0.32 + a * 0.10; armR.joint.rotation.x = 0.32 - a * 0.10;
     legL.root.rotation.x = 0.13; legR.root.rotation.x = -0.11;
-    legL.root.rotation.z = (w === 0 ? 0.02 : 0.16);
-    legR.root.rotation.z = (w === 0 ? -0.16 : -0.02);
     legL.joint.rotation.x = -0.30 - a * 0.06; legR.joint.rotation.x = -0.24 + a * 0.06;
-    if (w === 0) {                                          // both arms hanging, easy
-      armL.root.rotation.x = a * 0.14;  armR.root.rotation.x = -a * 0.14;
-      armL.root.rotation.z = 0.24; armR.root.rotation.z = -0.22;
-      armL.joint.rotation.x = 0.36 + a * 0.10; armR.joint.rotation.x = 0.30 - a * 0.10;
-    } else if (w === 1) {                                   // one hand on the hip
-      armL.root.rotation.x = 0.22; armL.root.rotation.z = 0.62;
-      armL.joint.rotation.x = 1.55;
-      armR.root.rotation.x = -a * 0.16; armR.root.rotation.z = -0.24;
-      armR.joint.rotation.x = 0.34;
-    } else {                                                // arms folded in front
-      armL.root.rotation.x = -0.62; armL.root.rotation.z = 0.30;
-      armR.root.rotation.x = -0.58; armR.root.rotation.z = -0.30;
-      armL.joint.rotation.x = 1.75; armR.joint.rotation.x = 1.70;
-    }
     rSpine.rotation.y = a * 0.09;
-    rHead.rotation.y = Math.sin(t * 0.7 + 1.2) * 0.52;
-    rHead.rotation.x = -0.06 + a * 0.05;
+    rHead.rotation.y = Math.sin(t * 0.7 + 1.2) * 0.42;
+    rHead.rotation.x = -0.06;
   }
   rSpine.rotation.x += lean;
 }
@@ -2598,15 +2566,15 @@ function updateChildren(t, camX) {
           var tau = (sph - 0.42) / 0.58 * 0.95;
           _hand.set(0, -FORE_L / 2 - 0.028, 0).applyMatrix4(armR.b.matrixWorld);
           var hx = _hand.x, hz = _hand.z, hy = _hand.y;
-          for (var b = 0; b < 9 && nPb < PEBBLE_POOL; b++) {
-            var spread = (h2(g, 460 + c * 9 + b) - 0.5) * 1.9;
-            var vf = 1.7 + h2(g, 490 + c * 9 + b) * 1.3;
-            var vy = 1.15 + h2(g, 520 + c * 9 + b) * 0.85;
+          for (var b = 0; b < 5 && nPb < PEBBLE_POOL; b++) {
+            var spread = (h2(g, 460 + c * 5 + b) - 0.5) * 1.5;
+            var vf = 1.7 + h2(g, 490 + c * 5 + b) * 1.3;
+            var vy = 1.15 + h2(g, 520 + c * 5 + b) * 0.85;
             var dx2 = -Math.sin(yaw + spread), dz2 = -Math.cos(yaw + spread);
             var bx2 = hx + dx2 * vf * tau, bz2 = hz + dz2 * vf * tau;
             var by2 = hy + vy * tau - 4.9 * tau * tau;
             putProp(iPebble, nPb++, bx2, Math.max(groundY(bx2, bz2) + 0.006, by2), bz2,
-                    tau * 9.0, 1.15 + h2(g, 550 + c * 9 + b) * 0.8);
+                    tau * 9.0, 0.8 + h2(g, 550 + c * 5 + b) * 0.7);
           }
         }
       }
