@@ -1434,23 +1434,12 @@ function buildPearlBoat() {
   /* the legs of a man who has just gone in head first */
   var legs = new THREE.Object3D();
   var skin = new THREE.MeshLambertMaterial({ color: 0x9a7051, flatShading: true });
-  /* Long enough to be seen from the sand. Two legs sticking out of the sea is
-   * the only unambiguous picture of "pearl fishers dive for pearls" — a man
-   * standing in a boat is a man standing in a boat. */
   for (var s = -1; s <= 1; s += 2) {
-    var lg = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.058, 1.55, 6), skin);
-    lg.position.set(s * 0.13, 0.78, 0);
-    lg.rotation.z = s * 0.19;
+    var lg = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.046, 0.92, 6), skin);
+    lg.position.set(s * 0.10, 0.46, 0);
+    lg.rotation.z = s * 0.16;
     legs.add(lg);
   }
-  /* the water he went through */
-  var splashGeo = new THREE.RingGeometry(0.25, 1.5, 20, 1);
-  splashGeo.rotateX(-Math.PI / 2);
-  var splash = new THREE.Mesh(splashGeo, new THREE.MeshBasicMaterial({
-    color: 0xf2f6f5, transparent: true, opacity: 0.70, depthWrite: false, fog: true, side: THREE.DoubleSide
-  }));
-  splash.position.y = -0.78;
-  legs.add(splash);
   legs.position.set(1.15, 0, -0.5);
   o.add(legs);
   o.userData.legs = legs;
@@ -1469,7 +1458,7 @@ function buildPearlBoat() {
   o.add(gourd);
   o.userData.gourd = gourd;
 
-  var ringGeo = new THREE.RingGeometry(0.7, 3.4, 22, 1);
+  var ringGeo = new THREE.RingGeometry(0.7, 2.6, 22, 1);
   ringGeo.rotateX(-Math.PI / 2);
   var ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
     color: 0xe8efee, transparent: true, opacity: 0.30, depthWrite: false, fog: true, side: THREE.DoubleSide
@@ -1519,7 +1508,7 @@ function updatePearlers(t, camX) {
     } else if (ph < 0.22) {                // in, head first: two legs and a splash
       diver.visible = false; legs.visible = true;
       var q = (ph - 0.12) / 0.10;
-      legs.position.set(1.35, 1.35 - q * 2.75, -0.5);
+      legs.position.set(1.35, 0.95 - q * 2.05, -0.5);
       legs.rotation.set(0.30 * q, 0, -0.12 + q * 0.28);
     } else if (ph < 0.76) {                // down. nothing on the water but the gourd
       diver.visible = false; legs.visible = false;
