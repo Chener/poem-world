@@ -375,20 +375,8 @@ const waterP = prog(`
   precision highp float;
   varying vec3 vW; varying float vD;
   uniform vec3 uCam; uniform float uT;
-  uniform vec3 uLampA; uniform vec3 uLampB;
   ${SKY_GLSL}
   ${WAVE_GLSL}
-  // 灯落在水上：廊下那盏就点在湖面上方，它该在水里留下一道碎光
-  vec3 lampOnWater(vec3 p, vec3 n, vec3 lp) {
-    vec3 d = lp - p;
-    float r2 = dot(d, d);
-    if (r2 > 520.0) return vec3(0.0);
-    vec3 l = normalize(d);
-    vec3 v = normalize(uCam - p);
-    float spec = pow(max(dot(reflect(-l, n), v), 0.0), 60.0);
-    float diff = max(dot(n, l), 0.0);
-    return vec3(1.00, 0.60, 0.26) * ((spec * 3.4 + diff * 0.22) / (1.0 + r2 * 0.055));
-  }
   void main(){
     vec2 p = vW.xz;
     // 采样间距随距离张开：远处自动滤掉细浪、留下大浪，
@@ -426,7 +414,6 @@ const waterP = prog(`
     c -= vec3(0.030, 0.034, 0.036) * trough * near;
     // 夕阳在波上碎成一条路 — the sun broken into a road on the water
     vec3 hv = normalize(v + SUN_DIR);
-    c += lampOnWater(vW, n, uLampA) + lampOnWater(vW, n, uLampB);
     c += vec3(1.0, 0.76, 0.46) * pow(max(dot(n, hv), 0.0), 220.0) * 1.25;
     c += vec3(0.92, 0.66, 0.38) * pow(max(dot(n, hv), 0.0), 26.0) * 0.16;
     float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
@@ -470,15 +457,6 @@ const terrP = prog(`
   varying vec3 vW; varying vec3 vN; varying float vD;
   uniform vec3 uCam; uniform float uT;
   ${SKY_GLSL}
-  uniform vec3 uLampA; uniform vec3 uLampB;
-  vec3 lampLight(vec3 p, vec3 n, vec3 lp) {
-    vec3 d = lp - p;
-    float r2 = dot(d, d);
-    if (r2 > 42.0) return vec3(0.0);
-    float lam = max(dot(n, normalize(d)), 0.0);
-    return vec3(1.00, 0.62, 0.28) * (lam * 1.7 / (1.0 + r2 * 0.9));
-  }
-
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
   float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
     return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
@@ -502,7 +480,6 @@ const terrP = prog(`
     vec3 c = alb * (0.30 + 1.05 * lam);
     c += alb * skyColor(vec3(0.0,1.0,0.0)) * 0.34 * (0.5 + 0.5 * n.y);
     // foam where the swell meets the shoal
-    c += alb * (lampLight(vW, n, uLampA) + lampLight(vW, n, uLampB));   // 灯落在地上的那一圈
     float foam = smoothstep(0.26, 0.0, abs(vW.y - 0.03 - 0.10*sin(vW.x*0.5 + uT*1.1) - 0.08*sin(vW.z*0.62 - uT*0.9)));
     c = mix(c, vec3(0.70,0.69,0.66), foam * 0.42);
     vec3 v = normalize(uCam - vW);
@@ -605,7 +582,7 @@ const bladeP = prog(`
   precision highp float;
   attribute vec3 aP; attribute vec3 aQ;   // aQ = (tipFlag, phase, tint)
   uniform mat4 uVP; uniform float uT; uniform vec3 uCam; uniform vec2 uWind;
-  varying float vT; varying float vTint; varying float vD; varying vec3 vP;
+  varying float vT; varying float vTint; varying float vD;
   void main(){
     vec3 p = aP;
     float s = aQ.x;
@@ -618,22 +595,13 @@ const bladeP = prog(`
     p.xz += vec2(cos(lean), sin(lean)) * (0.14 + 0.16 * fract(aQ.y * 7.31)) * s * s;
     p.xz += uWind * (0.30 + 0.42 * sway) * gust * s * s;
     p.y  -= (0.10 + 0.16 * fract(aQ.y * 7.31)) * s * s * gust;
-    vT = s; vTint = aQ.z; vD = length(p - uCam); vP = p;
+    vT = s; vTint = aQ.z; vD = length(p - uCam);
     gl_Position = uVP * vec4(p, 1.0);
   }
 `, `
-  precision highp float; varying float vT; varying float vTint; varying float vD; varying vec3 vP;
+  precision highp float; varying float vT; varying float vTint; varying float vD;
   uniform vec3 uCam;
   ${SKY_GLSL}
-  uniform vec3 uLampA; uniform vec3 uLampB;
-  vec3 lampLight(vec3 p, vec3 n, vec3 lp) {
-    vec3 d = lp - p;
-    float r2 = dot(d, d);
-    if (r2 > 42.0) return vec3(0.0);
-    float lam = max(dot(n, normalize(d)), 0.0);
-    return vec3(1.00, 0.62, 0.28) * (lam * 1.7 / (1.0 + r2 * 0.9));
-  }
-
   void main(){
     if (vD < 0.20) discard;        // 贴着眼睛的那一根不画，理由同物件着色器
     vec3 base = mix(vec3(0.245,0.225,0.168), vec3(0.330,0.305,0.225), vTint);
@@ -643,9 +611,6 @@ const bladeP = prog(`
     // 贴着眼睛的那几步草是背光的，原来黑成一块洞。给它一点从天上落下来的散光，
     // 只在最近的三四米里，远处不动。
     c += mix(vec3(0.0), fogColor(vec3(0.0,0.35,1.0)) * 0.16, 1.0 - smoothstep(1.0, 5.5, vD));
-    // 灯照在草上：席边那盏灯的光该落进白薠里，不是只在物件上
-    vec3 gn = normalize(vec3(0.0, 0.55, 0.0) + vec3(0.35, 0.0, 0.35));
-    c += (base + tip) * 0.5 * (lampLight(vP, gn, uLampA) + lampLight(vP, gn, uLampB));
     float fog = 1.0 - exp(-pow(vD * 0.0031, 1.75));
     c = mix(c, fogColor(normalize(vec3(0.0,0.05,1.0))), fog * 0.9);
     gl_FragColor = vec4(c, 1.0);
@@ -984,25 +949,15 @@ function makeHouse() {
     const x = HX + Math.cos(a) * r, z = HZ + Math.sin(a) * r * 0.80;
     const k = h2(i, 8.8);
     const col = [0.250 + 0.075 * k, 0.352 + 0.098 * k, 0.268 + 0.070 * k];
-    // 荷不全浮着：有一部分是立叶，撑在水面上一两尺高，叶心微微凹下去。
-    // 全铺在水面上的是睡莲，不是荷。
-    const stand = h2(i, 13.7) > 0.79 ? 0.24 + 0.42 * h2(i, 17.3) : 0;   // 立叶少一点、矮一点：远看一排高立叶会读成一片小桌子
-    if (stand > 0) box(x, stand * 0.5 + 0.04, z, 0.035, stand, 0.035, [0.232, 0.300, 0.208], 1);
-    lotusPad(x, 0.07 + 0.05 * k + stand, z, 0.40 + 0.52 * k,
-             (h2(i, 11.2) - .5) * (stand > 0 ? 0.16 : 0.30), col, 1, 11);
-    if (k > 0.955) {                                  // 一枝菡萏，始终不开
-      // 花苞是鼓的、带粉的，不是一支白蜡烛：中间放宽、上尖下收，瓣尖再压一点红。
-      box(x, 0.58, z, 0.045, 0.98, 0.045, [0.250, 0.320, 0.220], 1);
-      const bud = [0.560, 0.392, 0.408], budTip = [0.620, 0.404, 0.436];
-      const y0 = 1.02, y1 = 1.20, y2 = 1.46;
-      for (let q = 0; q < 7; q++) {
-        const b0 = q / 7 * Math.PI * 2, b1 = (q + 1) / 7 * Math.PI * 2;
-        const p0 = [x + Math.cos(b0) * 0.052, y0, z + Math.sin(b0) * 0.052];
-        const p1 = [x + Math.cos(b1) * 0.052, y0, z + Math.sin(b1) * 0.052];
-        const m0 = [x + Math.cos(b0) * 0.105, y1, z + Math.sin(b0) * 0.105];
-        const m1 = [x + Math.cos(b1) * 0.105, y1, z + Math.sin(b1) * 0.105];
-        quad(p0, p1, m1, m0, bud, 1);
-        tri(m0, m1, [x, y2, z], budTip, 1);
+    lotusPad(x, 0.07 + 0.05 * k, z, 0.40 + 0.52 * k, (h2(i, 11.2) - .5) * 0.30, col, 1, 11);
+    if (k > 0.94) {                                   // 一枝菡萏，始终不开
+      box(x, 0.60, z, 0.05, 1.02, 0.05, [0.250, 0.320, 0.220], 1);
+      const bud = [0.532, 0.436, 0.452];
+      for (let q = 0; q < 6; q++) {
+        const b0 = q / 6 * Math.PI * 2, b1 = (q + 1) / 6 * Math.PI * 2;
+        tri([x, 1.44, z],
+            [x + Math.cos(b0) * 0.075, 1.09, z + Math.sin(b0) * 0.075],
+            [x + Math.cos(b1) * 0.075, 1.09, z + Math.sin(b1) * 0.075], bud, 1);
       }
     }
   }
@@ -1188,18 +1143,8 @@ function makeWrongness() {
     for (let i = 0; i < nBird; i++) {
       const a = h2(seed * 3 + i, 2.2) * Math.PI * 2;
       const d = Math.sqrt(h2(seed * 3 + i, 6.6)) * r * 0.74;
-      const bx = cx + Math.cos(a) * d, bz = cz + Math.sin(a) * d;
-      // 鸟脚下必须有草。第 63 轮给蘋开了口子之后，有几只落在了空水面上，
-      // 远看像站在水上——「鸟何萃兮蘋中」，站的地方得是蘋。
-      for (let q = 0; q < 7; q++) {
-        const qa = h2(seed + i * 5.1 + q, 12.7) * Math.PI * 2;
-        const qd = 0.25 + h2(seed + i * 7.3 + q, 14.9) * 1.25;
-        const k = h2(seed + i + q, 16.3);
-        lotusPad(bx + Math.cos(qa) * qd, 0.045, bz + Math.sin(qa) * qd, 0.12 + 0.19 * k,
-                 (k - .5) * 0.5, PING.map(v => v * (0.70 + 0.55 * k)), 1, 7);
-      }
-      bird(bx, 0.02, bz, h2(seed + i, 8.1) * Math.PI * 2,
-           (0.62 + 0.26 * h2(seed + i, 3.4)) * bsc, 1);
+      bird(cx + Math.cos(a) * d, 0.02, cz + Math.sin(a) * d,
+           h2(seed + i, 8.1) * Math.PI * 2, (0.62 + 0.26 * h2(seed + i, 3.4)) * bsc, 1);
     }
   }
 
@@ -1659,7 +1604,7 @@ const CLOTHS = [
   // 褋：落在澧浦的浅滩上，盖在白薠上，再也漂不动了
   { x:  4.2, z: -70.6, ang: 1.92, w: 2.5, h: 1.30, tone: 0.62, snag: true },
 ];
-const CU = 27, CV = 13;   // 走到水上贴近看，20×9 的绢还是折成硬棱角
+const CU = 20, CV = 9;
 const clothData = new Float32Array(CLOTHS.length * CU * CV * 6 * 10);
 const clothBuf = buf(clothData, gl.DYNAMIC_DRAW);
 const CLOTH_N = CLOTHS.length * CU * CV * 6;
@@ -2161,9 +2106,6 @@ function step(dt, t) {
 
 function draw(t) {
   resize();
-  // 两盏灯的位置（廊下一盏、席边一盏）：水、地、草、物件都按它算光
-  const LA = LAMPS[0] ? [LAMPS[0][0], LAMPS[0][1], LAMPS[0][2]] : [0, -999, 0];
-  const LB = LAMPS[1] ? [LAMPS[1][0], LAMPS[1][1], LAMPS[1][2]] : [0, -999, 0];
   const W = canvas.width, H = canvas.height;
   gl.viewport(0, 0, W, H);
   gl.enable(gl.DEPTH_TEST);
@@ -2204,8 +2146,6 @@ function draw(t) {
   gl.uniformMatrix4fv(waterP.u.uVP, false, vp);
   gl.uniform3fv(waterP.u.uCam, eye);
   gl.uniform1f(waterP.u.uT, t);
-  gl.uniform3fv(waterP.u.uLampA, LA);
-  gl.uniform3fv(waterP.u.uLampB, LB);
   gl.bindBuffer(gl.ARRAY_BUFFER, water.vb);
   gl.enableVertexAttribArray(waterP.a.aP);
   gl.vertexAttribPointer(waterP.a.aP, 2, gl.FLOAT, false, 0, 0);
@@ -2217,8 +2157,6 @@ function draw(t) {
   gl.uniformMatrix4fv(terrP.u.uVP, false, vp);
   gl.uniform3fv(terrP.u.uCam, eye);
   gl.uniform1f(terrP.u.uT, t);
-  gl.uniform3fv(terrP.u.uLampA, LA);
-  gl.uniform3fv(terrP.u.uLampB, LB);
   gl.bindBuffer(gl.ARRAY_BUFFER, terrain.vb);
   gl.enableVertexAttribArray(terrP.a.aP);
   gl.vertexAttribPointer(terrP.a.aP, 3, gl.FLOAT, false, 24, 0);
@@ -2233,8 +2171,8 @@ function draw(t) {
   gl.uniform3fv(objP.u.uCam, eye);
   gl.uniform1f(objP.u.uT, t);
   // 两盏灯的位置（廊下一盏、席边一盏）：谁离得近，谁就被它照着
-  gl.uniform3fv(objP.u.uLampA, LA);
-  gl.uniform3fv(objP.u.uLampB, LB);
+  gl.uniform3fv(objP.u.uLampA, LAMPS[0] ? [LAMPS[0][0], LAMPS[0][1], LAMPS[0][2]] : [0, -999, 0]);
+  gl.uniform3fv(objP.u.uLampB, LAMPS[1] ? [LAMPS[1][0], LAMPS[1][1], LAMPS[1][2]] : [0, -999, 0]);
   gl.bindBuffer(gl.ARRAY_BUFFER, house.vb);
   gl.enableVertexAttribArray(objP.a.aP);
   gl.vertexAttribPointer(objP.a.aP, 3, gl.FLOAT, false, 40, 0);
@@ -2297,8 +2235,6 @@ function draw(t) {
   gl.uniform3fv(bladeP.u.uCam, eye);
   gl.uniform1f(bladeP.u.uT, t);
   gl.uniform2fv(bladeP.u.uWind, WIND);
-  gl.uniform3fv(bladeP.u.uLampA, LA);
-  gl.uniform3fv(bladeP.u.uLampB, LB);
   gl.bindBuffer(gl.ARRAY_BUFFER, blades.vb);
   gl.enableVertexAttribArray(bladeP.a.aP);
   gl.vertexAttribPointer(bladeP.a.aP, 3, gl.FLOAT, false, 24, 0);

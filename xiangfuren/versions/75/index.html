@@ -984,25 +984,15 @@ function makeHouse() {
     const x = HX + Math.cos(a) * r, z = HZ + Math.sin(a) * r * 0.80;
     const k = h2(i, 8.8);
     const col = [0.250 + 0.075 * k, 0.352 + 0.098 * k, 0.268 + 0.070 * k];
-    // 荷不全浮着：有一部分是立叶，撑在水面上一两尺高，叶心微微凹下去。
-    // 全铺在水面上的是睡莲，不是荷。
-    const stand = h2(i, 13.7) > 0.79 ? 0.24 + 0.42 * h2(i, 17.3) : 0;   // 立叶少一点、矮一点：远看一排高立叶会读成一片小桌子
-    if (stand > 0) box(x, stand * 0.5 + 0.04, z, 0.035, stand, 0.035, [0.232, 0.300, 0.208], 1);
-    lotusPad(x, 0.07 + 0.05 * k + stand, z, 0.40 + 0.52 * k,
-             (h2(i, 11.2) - .5) * (stand > 0 ? 0.16 : 0.30), col, 1, 11);
-    if (k > 0.955) {                                  // 一枝菡萏，始终不开
-      // 花苞是鼓的、带粉的，不是一支白蜡烛：中间放宽、上尖下收，瓣尖再压一点红。
-      box(x, 0.58, z, 0.045, 0.98, 0.045, [0.250, 0.320, 0.220], 1);
-      const bud = [0.560, 0.392, 0.408], budTip = [0.620, 0.404, 0.436];
-      const y0 = 1.02, y1 = 1.20, y2 = 1.46;
-      for (let q = 0; q < 7; q++) {
-        const b0 = q / 7 * Math.PI * 2, b1 = (q + 1) / 7 * Math.PI * 2;
-        const p0 = [x + Math.cos(b0) * 0.052, y0, z + Math.sin(b0) * 0.052];
-        const p1 = [x + Math.cos(b1) * 0.052, y0, z + Math.sin(b1) * 0.052];
-        const m0 = [x + Math.cos(b0) * 0.105, y1, z + Math.sin(b0) * 0.105];
-        const m1 = [x + Math.cos(b1) * 0.105, y1, z + Math.sin(b1) * 0.105];
-        quad(p0, p1, m1, m0, bud, 1);
-        tri(m0, m1, [x, y2, z], budTip, 1);
+    lotusPad(x, 0.07 + 0.05 * k, z, 0.40 + 0.52 * k, (h2(i, 11.2) - .5) * 0.30, col, 1, 11);
+    if (k > 0.94) {                                   // 一枝菡萏，始终不开
+      box(x, 0.60, z, 0.05, 1.02, 0.05, [0.250, 0.320, 0.220], 1);
+      const bud = [0.532, 0.436, 0.452];
+      for (let q = 0; q < 6; q++) {
+        const b0 = q / 6 * Math.PI * 2, b1 = (q + 1) / 6 * Math.PI * 2;
+        tri([x, 1.44, z],
+            [x + Math.cos(b0) * 0.075, 1.09, z + Math.sin(b0) * 0.075],
+            [x + Math.cos(b1) * 0.075, 1.09, z + Math.sin(b1) * 0.075], bud, 1);
       }
     }
   }
@@ -1188,18 +1178,8 @@ function makeWrongness() {
     for (let i = 0; i < nBird; i++) {
       const a = h2(seed * 3 + i, 2.2) * Math.PI * 2;
       const d = Math.sqrt(h2(seed * 3 + i, 6.6)) * r * 0.74;
-      const bx = cx + Math.cos(a) * d, bz = cz + Math.sin(a) * d;
-      // 鸟脚下必须有草。第 63 轮给蘋开了口子之后，有几只落在了空水面上，
-      // 远看像站在水上——「鸟何萃兮蘋中」，站的地方得是蘋。
-      for (let q = 0; q < 7; q++) {
-        const qa = h2(seed + i * 5.1 + q, 12.7) * Math.PI * 2;
-        const qd = 0.25 + h2(seed + i * 7.3 + q, 14.9) * 1.25;
-        const k = h2(seed + i + q, 16.3);
-        lotusPad(bx + Math.cos(qa) * qd, 0.045, bz + Math.sin(qa) * qd, 0.12 + 0.19 * k,
-                 (k - .5) * 0.5, PING.map(v => v * (0.70 + 0.55 * k)), 1, 7);
-      }
-      bird(bx, 0.02, bz, h2(seed + i, 8.1) * Math.PI * 2,
-           (0.62 + 0.26 * h2(seed + i, 3.4)) * bsc, 1);
+      bird(cx + Math.cos(a) * d, 0.02, cz + Math.sin(a) * d,
+           h2(seed + i, 8.1) * Math.PI * 2, (0.62 + 0.26 * h2(seed + i, 3.4)) * bsc, 1);
     }
   }
 
@@ -1659,7 +1639,7 @@ const CLOTHS = [
   // 褋：落在澧浦的浅滩上，盖在白薠上，再也漂不动了
   { x:  4.2, z: -70.6, ang: 1.92, w: 2.5, h: 1.30, tone: 0.62, snag: true },
 ];
-const CU = 27, CV = 13;   // 走到水上贴近看，20×9 的绢还是折成硬棱角
+const CU = 20, CV = 9;
 const clothData = new Float32Array(CLOTHS.length * CU * CV * 6 * 10);
 const clothBuf = buf(clothData, gl.DYNAMIC_DRAW);
 const CLOTH_N = CLOTHS.length * CU * CV * 6;
