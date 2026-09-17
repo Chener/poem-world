@@ -473,9 +473,6 @@ const peakP = prog(`
   }
 `);
 
-/* 席铺在这里：白薠与席共用这个坐标，草得先踏平 */
-const SHOAL_MAT = [-2.05, -55.40];
-
 /* ---------- 白薠 : sedge blades on the shoal ---------- */
 function makeBlades() {
   const v = [], N = SHOT ? 23000 : 26000;
@@ -493,13 +490,10 @@ function makeBlades() {
     const px = -pt * 1.2, pz = -60 + pt * 24;
     const pd = Math.hypot(x - px, z - pz);
     const worn = 1 - Math.min(1, Math.max(0, (pd - 0.9) / 2.0));  // 1 = 正踩在路当中
-    // 席铺开的那一块，草是压平的：席底下不长草，四周被坐塌一圈
-    const md = Math.hypot((x - SHOAL_MAT[0]) / 1.55, (z - SHOAL_MAT[1]) / 1.20);
-    const flat = 1 - Math.min(1, Math.max(0, (md - 0.82) / 0.55));
-    dens *= (1 - 0.74 * worn) * (1 - 0.97 * flat);
+    dens *= 1 - 0.74 * worn;
     if (h2(guard, 33) > dens) continue;
     placed++;
-    const hgt = (0.52 + h2(guard, 5) * 0.86) * (1 - 0.62 * worn) * (1 - 0.80 * flat);
+    const hgt = (0.52 + h2(guard, 5) * 0.86) * (1 - 0.62 * worn);
     const w = 0.028 + h2(guard, 7) * 0.030;
     const ph = h2(guard, 11) * 6.28;
     const tint = h2(guard, 13);
@@ -712,48 +706,6 @@ function makeHouse() {
   // 白玉兮为镇：四块压席的白玉
   for (const sx of [-1, 1]) for (const sz of [-1, 1])
     box(HX + sx * 4.0, FLOOR + 0.22, HZ + sz * 3.4, 0.46, 0.44, 0.46, JADE, 0);
-  /* 与佳期兮夕张 —— 席铺好，白玉压着四角，案摆好，案上空无一物。
-     这是整个世界里唯一一处「已经准备好了」的地方。她没有来。
-     铺两处：一处在水中之室的门外廊下（诗里的「筑室兮水中」），
-     一处就在北渚上他站了一整天的地方（「登白薠兮骋望，与佳期兮夕张」是同一句的两半）。
-     远处那一处要走过去才看得见；近处这一处是三个机位里直接的证据。 */
-  const MAT  = [0.495, 0.468, 0.386];   // 莞席，新的，还没有人坐过
-  const HEM  = [0.432, 0.386, 0.310];   // 席边包的那道深色布
-  const AN   = [0.352, 0.286, 0.212];   // 案：一张矮几
-  function layMat(cx, cz, baseY, ang, k) {
-    const ca = Math.cos(ang), sa = Math.sin(ang);
-    const at = (lx, lz) => [cx + lx * ca - lz * sa, cz + lx * sa + lz * ca];
-    const hx = 1.16 * k, hz = 0.82 * k, my = baseY + 0.045 * k;   // 一张席：够两个人坐，不是一块甲板
-    // 席面：一条一条的莞草编起来，所以它有纹路，不是一块板
-    for (let lz = -hz; lz < hz; lz += 0.105 * k) {
-      const g = h2(lz * 9.1 + cz, 3.3);
-      const [x, z] = at(0, lz + 0.0675 * k);
-      box(x, my, z, hx * 2 * Math.abs(ca) + 0.084 * k * Math.abs(sa), 0.042 * k,
-          hx * 2 * Math.abs(sa) + 0.084 * k * Math.abs(ca),
-          MAT.map(v => v * (0.90 + 0.18 * g)), 0);
-    }
-    const [bx, bz] = at(0, 0);
-    box(bx, my - 0.012 * k, bz,
-        (hx * 2 + 0.16 * k) * Math.abs(ca) + (hz * 2 + 0.16 * k) * Math.abs(sa), 0.048 * k,
-        (hx * 2 + 0.16 * k) * Math.abs(sa) + (hz * 2 + 0.16 * k) * Math.abs(ca), HEM, 0);
-    // 白玉兮为镇：压住席的四个角，风再大席也不掀
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const [x, z] = at(sx * (hx - 0.16 * k), sz * (hz - 0.14 * k));
-      box(x, my + 0.07 * k, z, 0.185 * k, 0.14 * k, 0.185 * k, JADE.map(v => v * 0.80), 0);
-    }
-    // 案：摆在席正中，空的
-    const ay = my + 0.225 * k;
-    box(bx, ay, bz, 1.26 * k * Math.abs(ca) + 0.54 * k * Math.abs(sa), 0.075 * k,
-        1.26 * k * Math.abs(sa) + 0.54 * k * Math.abs(ca), AN.map(v => v * 1.25), 0);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const [x, z] = at(sx * 0.50 * k, sz * 0.19 * k);
-      box(x, ay - 0.115 * k, z, 0.085 * k, 0.185 * k, 0.085 * k, AN, 0);
-    }
-  }
-  layMat(HX, HZ - 5.75, FLOOR, 0, 1.0);
-  // 北渚上的那一处：踩出来的那条路的尽头，他站了一整天的地方
-  layMat(SHOAL_MAT[0], SHOAL_MAT[1], terrainH(SHOAL_MAT[0], SHOAL_MAT[1]) + 0.02, 0.34, 1.0);
-
   // 荷盖：一片压着一片的荷叶，铺满两面坡
   const tilt = Math.atan2(1.55, 5.45);
   for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
