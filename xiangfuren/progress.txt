@@ -1,3 +1,4 @@
 # 湘夫人 · Ralph progress
 # 一轮一条。格式： round <n> | <PRD 第几条> | <做了什么> | <自检结论>
 round 11 | PRD-1 | Ralph 化：PRD.md + progress.txt + 固定 prompt；页脚 loop 改标 Ralph；截图换 chrome-headless-shell 一次性进程 | 自检通过：三机位 5.7 秒拍完，画面未变，无人形，未碰 xiangfuren/ 以外
+round 12 | PRD-2 | 衣裳重做：加密网格 + 褶 + 软下摆；布不反天光、薄料透光；提亮素绢；缩小贴镜头那件 | 自检通过：布读成布，无人形，只动 xiangfuren/
