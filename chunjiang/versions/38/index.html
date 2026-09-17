@@ -275,21 +275,6 @@ for (var i = 0; i < 360; i++) {
   EDGE.push({ th: th, x: Math.cos(th) * R0, z: Math.sin(th) * R0 });
 }
 
-/* 白云一片: two thin strips, built once, each a run of soft puffs */
-var CLOUD = [];
-for (var i9c = 0; i9c < 2; i9c++) {
-  var puffs = [];
-  var n9 = 16 + Math.floor(rnd() * 10);
-  for (var j9 = 0; j9 < n9; j9++) {
-    var t9 = j9 / (n9 - 1);
-    puffs.push({ u: (t9 - 0.5) * 2, v: (rnd() - 0.5) * 0.9 + Math.sin(t9 * 3.1) * 0.25,
-                 r: 0.5 + rnd() * 0.75,
-                 a: Math.sin(Math.PI * t9) * (0.55 + rnd() * 0.65) });
-  }
-  CLOUD.push({ x0: rnd() * 1600, y: 150 + rnd() * 110, z: -420 - rnd() * 260,
-               w: 150 + rnd() * 90, h: 16 + rnd() * 10, puffs: puffs });
-}
-
 /* the moon's face, placed once off the same LCG as everything else */
 var MOONFACE = [];
 for (var i6 = 0; i6 < 38; i6++) {
@@ -408,38 +393,6 @@ function drawSky() {
   g.addColorStop(0.62, '#1b2c42');
   g.addColorStop(1.00, '#0a1020');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-}
-
-function drawClouds() {
-  /* 白云一片去悠悠 — one strip of cloud, and it is leaving. The sky in this world has
-   * been nothing but a gradient with a moon in it, and this is a line of the poem that
-   * was never in the picture at all. It is thin, it lies well off the moon so as not to
-   * take the eye from it, its underside carries a little of the moonlight, and it drifts
-   * so slowly that in any one look it is simply there. */
-  for (var cI = 0; cI < CLOUD.length; cI++) {
-    var cd = CLOUD[cI];
-    var drift = (cd.x0 + T * 0.55) % 1600 - 800;
-    var cp3 = project({ x: drift, y: cd.y, z: cd.z });
-    if (!cp3) continue;
-    var cw = cd.w * cp3.s, chh = cd.h * cp3.s;
-    if (cw < 4) continue;
-    for (var pI = 0; pI < cd.puffs.length; pI++) {
-      var pu = cd.puffs[pI];
-      var ux3 = cp3.x + pu.u * cw, uy3 = cp3.y + pu.v * chh;
-      var ur = pu.r * chh;
-      ctx.save();
-      ctx.translate(ux3, uy3); ctx.scale(1, 0.46); ctx.translate(-ux3, -uy3);
-      var cg3 = ctx.createRadialGradient(ux3, uy3, 0, ux3, uy3, ur);
-      /* lit from below, where the moon is */
-      var lift = 0.5 + 0.5 * (-pu.v);
-      cg3.addColorStop(0, 'rgba(150,172,204,' + (0.052 * pu.a * (0.5 + lift)).toFixed(3) + ')');
-      cg3.addColorStop(0.55, 'rgba(142,164,196,' + (0.024 * pu.a * (0.5 + lift)).toFixed(3) + ')');
-      cg3.addColorStop(1, 'rgba(138,160,192,0)');
-      ctx.fillStyle = cg3;
-      ctx.beginPath(); ctx.arc(ux3, uy3, ur, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-  }
 }
 
 function drawMoon() {
@@ -1639,9 +1592,6 @@ function drawMeadow() {
 function drawGrove() {
   /* which way the moon lies, in screen terms, for every crown in the wood */
   var mP = project({ x: MOON.x, y: MOON.y, z: MOON.z });
-  /* the moon's bearing on the ground, for the shadows the wood throws */
-  var mwl = Math.hypot(MOON.x, MOON.z) || 1;
-  var moonWx = MOON.x / mwl, moonWz = MOON.z / mwl;
   var moonDirX = 0, moonDirY = -1;
   if (mP) {
     var mdx = mP.x - W * 0.5, mdy = mP.y - H * 0.5, mdl = Math.hypot(mdx, mdy) || 1;
@@ -1679,25 +1629,6 @@ function drawGrove() {
     ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(cp2.x, cp2.y, cr * 1.05, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-
-    /* 月照花林 casts something. Without a shadow under it a tree is a sticker laid over
-     * the ground, which is how the whole wood has been reading; a pool of dark on the
-     * meadow, thrown away from the moon and squashed by the grazing angle, is enough to
-     * set each tree down on the ground it stands on. */
-    var shP = project({ x: g.x - moonWx * g.h * 0.55, y: y0 + 0.02,
-                        z: g.z - moonWz * g.h * 0.55 });
-    if (shP && shP.s > 0.4) {
-      var shR = Math.max(3, g.h * 0.58 * g.wid * shP.s);
-      ctx.save();
-      ctx.translate(shP.x, shP.y); ctx.scale(1, 0.26); ctx.translate(-shP.x, -shP.y);
-      var shG = ctx.createRadialGradient(shP.x, shP.y, 0, shP.x, shP.y, shR);
-      shG.addColorStop(0, 'rgba(10,16,28,.34)');
-      shG.addColorStop(0.55, 'rgba(12,18,30,.17)');
-      shG.addColorStop(1, 'rgba(14,20,32,0)');
-      ctx.fillStyle = shG;
-      ctx.beginPath(); ctx.arc(shP.x, shP.y, shR, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
 
     /* the trunk, and two boughs that reach up into the crown so it is held, not floating */
     var bp2 = project({ x: g.x, y: y0, z: g.z });
@@ -1903,7 +1834,6 @@ function updateSubs() {
 /* ---------------------------------------------------------------- LOOP -- */
 function drawFrame() {
   drawSky();
-  drawClouds();
   var moonP = drawMoon();
   drawFarBank();
   drawWater(moonP);
