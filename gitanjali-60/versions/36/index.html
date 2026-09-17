@@ -1073,18 +1073,10 @@ function updateSpray(t, camX) {
     u = u - Math.floor(u);
     var age = u * SPRAY_PERIOD;
     if (age > SPRAY_LIFE) continue;
-    /* "The sea surges up with LAUGHTER." A curtain of spray along the whole
-     * shore is weather; laughter comes in bursts. Where the bar is shallowest
-     * the wave stands highest and throws hardest, so the spray is bunched into
-     * a few places and thin between them — and a critic looking for the laugh
-     * has somewhere to find it. */
-    var burst = Math.sin(x * 0.086 + 1.3) * 0.5 + Math.sin(x * 0.031 - 0.7) * 0.5;
-    burst = Math.max(0, burst);
-    if (burst < 0.22) continue;
     var surf = seaHeightJS(x, zc, t);
     for (var k = 0; k < SPRAY_PER_CELL; k++) {
       var j = c * SPRAY_PER_CELL + k;
-      var vy = (5.2 + h1(j * 1.7) * 5.4) * (0.78 + burst * 0.42);
+      var vy = 5.2 + h1(j * 1.7) * 5.4;
       var vz = 1.2 + h1(j * 2.9 + 5) * 2.4;      // carried shoreward as it flies
       var jx = (h1(j * 4.1 + 11) - 0.5) * cell * 2.4;
       var y = surf + 0.35 + vy * age - 4.9 * age * age;
@@ -1092,7 +1084,7 @@ function updateSpray(t, camX) {
       if (y < gy) continue;                       // it has fallen back into the sea
       _dummy.position.set(x + jx, y, zc + vz * age);
       _dummy.quaternion.copy(camera.quaternion);  // face the eye
-      var grow = (0.78 + age * 2.15 + h1(j * 3.3 + 2) * 0.85) * (0.75 + burst * 0.55);
+      var grow = 0.78 + age * 2.15 + h1(j * 3.3 + 2) * 0.85;
       _dummy.scale.set(grow, grow, grow);
       _dummy.updateMatrix();
       iSpray.setMatrixAt(n, _dummy.matrix);
@@ -2074,15 +2066,11 @@ function poseChild(state, t, lean) {
     legL.root.rotation.x = 1.70; legR.root.rotation.x = 1.55;
     legL.joint.rotation.x = -1.90; legR.joint.rotation.x = -1.78;
     legL.root.rotation.z = 0.30; legR.root.rotation.z = -0.30;   // knees out, as children squat
-    /* The spine used to fold nearly flat and the head came out of the front of
-     * it sideways, which reads as a hinged box rather than as a child bending
-     * over its work. Less bend, and the head tips DOWN inside that bend so it
-     * is looking at what its hands are doing. */
-    rSpine.rotation.x = 0.44 + a * 0.07;
-    armL.root.rotation.x = -0.52 + a * 0.22; armR.root.rotation.x = -0.42 - a * 0.22;
+    rSpine.rotation.x = 0.62 + a * 0.08;
+    armL.root.rotation.x = -0.58 + a * 0.22; armR.root.rotation.x = -0.46 - a * 0.22;
     armL.joint.rotation.x = 1.15; armR.joint.rotation.x = 1.05;
     armL.root.rotation.z = 0.34; armR.root.rotation.z = -0.34;
-    rHead.rotation.x = 0.30;
+    rHead.rotation.x = 0.46;
   } else if (state === DANCE) {
     /* shouts and dances: arms thrown up, feet off the sand. This is the pose
      * the poem is loudest in — and there are three of it, because a shore
@@ -2262,24 +2250,6 @@ function updateChildren(t, camX) {
         putProp(iPebble, nPb++, kx2, groundY(kx2, kz2) + 0.004, kz2, kh * 33.0, 0.55 + kh * 0.5);
       }
     }
-  }
-
-  /* "children gather pebbles and scatter them again."
-   *
-   * A beach keeps its stones in one place: the line the last big water reached
-   * and dropped them on. Scattering them evenly over the sand meant the eye
-   * never saw stones, only speckle — and the one action the poem cares most
-   * about had nothing to happen on. So there is a shingle band just inside the
-   * wet sand, dense enough to read as stones, and it is exactly where the
-   * eye-level camera is looking. */
-  for (var sx0 = Math.floor((camX - 60) / 0.62); sx0 <= Math.ceil((camX + 60) / 0.62) && nPb < PEBBLE_POOL; sx0++) {
-    var sg = h1(sx0 * 1.913 + 0.31);
-    if (sg > 0.62) continue;
-    var shx = sx0 * 0.62 + (sg - 0.31) * 0.9;
-    var shz = 4.3 + h1(sx0 * 2.71) * 3.4 + Math.sin(shx * 0.021) * 1.1;
-    if (underfoot(shx, shz)) continue;
-    putProp(iPebble, nPb++, shx, groundY(shx, shz) + 0.006, shz,
-            h1(sx0 * 3.37) * TAU2, 0.85 + sg * 1.35);
   }
 
   /* and the prints that cover it. Every square metre of this sand has been
