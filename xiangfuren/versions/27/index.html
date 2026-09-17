@@ -465,13 +465,6 @@ const terrP = prog(`
     vec3 mud   = mix(vec3(0.150,0.130,0.108), vec3(0.205,0.178,0.142), g);
     vec3 sedge = mix(vec3(0.430,0.405,0.320), vec3(0.560,0.530,0.425), g);  // 白薠, bleached autumn grass
     vec3 alb = mix(sedge, mud, wet);
-    // 踩出来的那条路：白薠在这里被踏平（见 makeBlades），可地皮一直还是草色的，
-    // 于是那条路只在草的高度上存在，看不见。踩过的土是露出来的土。
-    float pt = clamp((vW.z + 60.0) / 24.0, 0.0, 1.0);
-    vec2 pp = vec2(-pt * 1.2, -60.0 + pt * 24.0);
-    float pd = length(vW.xz - pp);
-    float worn = 1.0 - smoothstep(0.9, 2.9, pd);
-    alb = mix(alb, mix(vec3(0.196,0.170,0.136), vec3(0.246,0.214,0.170), g), worn * 0.80);
     alb = mix(alb, vec3(0.088,0.082,0.070), smoothstep(0.35, -0.6, vW.y));
     float lam = max(dot(n, SUN_DIR), 0.0);
     vec3 c = alb * (0.30 + 1.05 * lam);
@@ -579,13 +572,8 @@ const bladeP = prog(`
     float s = aQ.x;
     float sway = sin(uT * 1.9 + aQ.y + p.x * 0.22 + p.z * 0.17) * 0.5 + 0.5;
     float gust = 0.55 + 0.45 * sin(uT * 0.47 + p.x * 0.012 + p.z * 0.009);
-    // 每根草自己的倒伏：秋深了，草是垂着的，各垂各的方向。
-    // 这一步只动尖子那一个顶点，所以草还是那么细、那么密——
-    // 真拿几何去弯它，一根草就要三个三角形，密度掉下来，草就成了纸带子。
-    float lean = aQ.y * 1.37;
-    p.xz += vec2(cos(lean), sin(lean)) * (0.14 + 0.16 * fract(aQ.y * 7.31)) * s * s;
     p.xz += uWind * (0.30 + 0.42 * sway) * gust * s * s;
-    p.y  -= (0.10 + 0.16 * fract(aQ.y * 7.31)) * s * s * gust;
+    p.y  -= 0.10 * s * s * gust;
     vT = s; vTint = aQ.z; vD = length(p - uCam);
     gl_Position = uVP * vec4(p, 1.0);
   }
@@ -780,7 +768,7 @@ function makeHouse() {
      铺两处：一处在水中之室的门外廊下（诗里的「筑室兮水中」），
      一处就在北渚上他站了一整天的地方（「登白薠兮骋望，与佳期兮夕张」是同一句的两半）。
      远处那一处要走过去才看得见；近处这一处是三个机位里直接的证据。 */
-  const MAT  = [0.452, 0.428, 0.352];   // 莞席，新的，还没有人坐过
+  const MAT  = [0.495, 0.468, 0.386];   // 莞席，新的，还没有人坐过
   const HEM  = [0.432, 0.386, 0.310];   // 席边包的那道深色布
   const AN   = [0.352, 0.286, 0.212];   // 案：一张矮几
   function layMat(cx, cz, baseY, ang, k) {
@@ -793,7 +781,7 @@ function makeHouse() {
       const [x, z] = at(0, lz + 0.0675 * k);
       box(x, my, z, hx * 2 * Math.abs(ca) + 0.084 * k * Math.abs(sa), 0.042 * k,
           hx * 2 * Math.abs(sa) + 0.084 * k * Math.abs(ca),
-          MAT.map(v => v * (0.82 + 0.30 * g)), 0);
+          MAT.map(v => v * (0.90 + 0.18 * g)), 0);
     }
     const [bx, bz] = at(0, 0);
     box(bx, my - 0.012 * k, bz,
@@ -802,55 +790,26 @@ function makeHouse() {
     // 白玉兮为镇：压住席的四个角，风再大席也不掀
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
       const [x, z] = at(sx * (hx - 0.16 * k), sz * (hz - 0.14 * k));
-      box(x, my + 0.050 * k, z, 0.165 * k, 0.085 * k, 0.165 * k, JADE.map(v => v * 0.68), 0);   // 镇：扁的，像块河里的白石
+      box(x, my + 0.07 * k, z, 0.185 * k, 0.14 * k, 0.185 * k, JADE.map(v => v * 0.80), 0);
     }
     // 案：摆在席正中，空的
-    // 案：薄面、翘边、四条微微外撇的腿。一块平板加四根方柱读成一张长凳。
     const ay = my + 0.225 * k;
-    const TOP = AN.map(v => v * 1.42);
-    const ax = 0.63 * k, az = 0.27 * k;
-    box(bx, ay, bz, ax * 2 * Math.abs(ca) + az * 2 * Math.abs(sa), 0.052 * k,
-        ax * 2 * Math.abs(sa) + az * 2 * Math.abs(ca), TOP, 0);
-    for (const sz of [-1, 1]) {                       // 两道翘起来的边
-      const [ex, ez] = at(0, sz * az);
-      box(ex, ay + 0.030 * k, ez, ax * 2 * Math.abs(ca) + 0.075 * k * Math.abs(sa), 0.042 * k,
-          ax * 2 * Math.abs(sa) + 0.075 * k * Math.abs(ca), TOP.map(v => v * 1.10), 0);
-    }
+    box(bx, ay, bz, 1.26 * k * Math.abs(ca) + 0.54 * k * Math.abs(sa), 0.075 * k,
+        1.26 * k * Math.abs(sa) + 0.54 * k * Math.abs(ca), AN.map(v => v * 1.25), 0);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const top = at(sx * (ax - 0.10 * k), sz * (az - 0.05 * k));
-      const foot = at(sx * (ax - 0.02 * k), sz * (az + 0.03 * k));
-      beam([top[0], ay - 0.022 * k, top[1]], [foot[0], my + 0.030 * k, foot[1]],
-           0.062 * k, 0.062 * k, AN, 0);               // 腿：往外撇一点
+      const [x, z] = at(sx * 0.50 * k, sz * 0.19 * k);
+      box(x, ay - 0.115 * k, z, 0.085 * k, 0.185 * k, 0.085 * k, AN, 0);
     }
   }
   /* 灯。夕张之后天要黑了，于是点一盏，搁在席边上。
      它是整张图里唯一的暖色，而且它照不到人 —— 席上没有人。 */
   function lamp(cx, baseY, cz, k) {
-    // 一盏灯：一根细木柱、一只浅陶盘、一朵火。方盒子加方盒子在暮色里
-    // 读成一台停车计时器，不是灯。
-    const POST = [0.196, 0.156, 0.120], BOWL = [0.352, 0.268, 0.186];
-    const FLAME = [2.80, 1.70, 0.62], WICK = [0.42, 0.30, 0.20];
-    const py = baseY + 0.30 * k;
-    box(cx, py, cz, 0.048 * k, 0.60 * k, 0.048 * k, POST, 0);              // 柱
-    box(cx, baseY + 0.045 * k, cz, 0.20 * k, 0.05 * k, 0.20 * k, POST, 0); // 柱脚
-    const by = baseY + 0.615 * k, br = 0.175 * k;
-    for (let i = 0; i < 10; i++) {                                          // 陶盘：浅浅一只
-      const a0 = i / 10 * Math.PI * 2, a1 = (i + 1) / 10 * Math.PI * 2;
-      const rim = (a, r, h) => [cx + Math.cos(a) * r, by + h, cz + Math.sin(a) * r];
-      tri([cx, by - 0.018 * k, cz], rim(a0, br, 0.035 * k), rim(a1, br, 0.035 * k),
-          BOWL.map(v => v * (0.86 + 0.24 * h2(i, 3.1))), 0);
-      tri(rim(a0, br, 0.035 * k), rim(a0, br * 0.78, -0.012 * k), rim(a1, br * 0.78, -0.012 * k),
-          BOWL.map(v => v * 0.70), 0);
-    }
-    const fy = by + 0.030 * k;
-    box(cx, fy + 0.020 * k, cz, 0.030 * k, 0.055 * k, 0.030 * k, WICK, 0); // 灯芯
-    for (let i = 0; i < 5; i++) {                                           // 火：一朵尖的
-      const a0 = i / 5 * Math.PI * 2, a1 = (i + 1) / 5 * Math.PI * 2, r = 0.050 * k;
-      tri([cx, fy + 0.185 * k, cz],
-          [cx + Math.cos(a0) * r, fy + 0.035 * k, cz + Math.sin(a0) * r],
-          [cx + Math.cos(a1) * r, fy + 0.035 * k, cz + Math.sin(a1) * r], FLAME, 0);
-    }
-    LAMPS.push([cx, fy + 0.10 * k, cz, k]);
+    const POST = [0.196, 0.156, 0.120], BOWL = [0.300, 0.226, 0.150];
+    const FLAME = [2.60, 1.62, 0.66];        // 亮过 1，是为了在暮色里烧穿
+    box(cx, baseY + 0.28 * k, cz, 0.055 * k, 0.56 * k, 0.055 * k, POST, 0);   // 一根矮杆
+    box(cx, baseY + 0.63 * k, cz, 0.290 * k, 0.085 * k, 0.290 * k, BOWL, 0);  // 灯盘
+    box(cx, baseY + 0.70 * k, cz, 0.115 * k, 0.090 * k, 0.115 * k, FLAME, 0); // 火
+    LAMPS.push([cx, baseY + 0.71 * k, cz, k]);
   }
   lamp(HX + 1.62, FLOOR, HZ - 5.75, 1.0);
 
@@ -949,40 +908,24 @@ function makeWrongness() {
 
   /* 树：秋深，叶子都在下，枝子是空的 */
   function branch(p, dir, len, rad, depth, seed) {
-    // 一根枝要收细，而且要弯。等粗的直棍接等粗的直棍，长出来的是一丛铁丝网，
-    // 不是一株深秋的树。所以每一节分三段画，边走边收、边走边偏。
-    const SEGS = 3;
-    let a0 = p.slice(), d0 = dir.slice();
-    for (let s = 0; s < SEGS; s++) {
-      const k0 = s / SEGS, k1 = (s + 1) / SEGS;
-      const bend = (h2(seed, s * 3.3 + 1) - 0.5) * 0.30 / SEGS;
-      d0 = [d0[0] + bend, d0[1] - Math.abs(bend) * 0.35, d0[2] + (h2(seed, s * 5.1) - 0.5) * 0.30 / SEGS];
-      const dl = Math.hypot(d0[0], d0[1], d0[2]) || 1;
-      d0 = [d0[0] / dl, d0[1] / dl, d0[2] / dl];
-      const a1 = [a0[0] + d0[0] * len / SEGS, a0[1] + d0[1] * len / SEGS, a0[2] + d0[2] * len / SEGS];
-      const w0 = rad * 2 * (1 - 0.42 * k0), w1 = rad * 2 * (1 - 0.42 * k1);
-      beam(a0, a1, (w0 + w1) * 0.5, (w0 + w1) * 0.5,
-           BARK.map(v => v * (0.85 + 0.30 * h2(seed, depth + s))), 0);
-      a0 = a1;
-    }
-    const q = a0;
-    dir = d0;
+    const q = [p[0] + dir[0] * len, p[1] + dir[1] * len, p[2] + dir[2] * len];
+    beam(p, q, rad * 2, rad * 2, BARK.map(v => v * (0.85 + 0.30 * h2(seed, depth))), 0);
     if (depth <= 0 || len < 0.34) return;
     const n = 2 + (h2(seed * 1.7, depth * 2.3) > 0.62 ? 1 : 0);
     for (let i = 0; i < n; i++) {
       const a = h2(seed + i * 3.1, depth * 5.7) * Math.PI * 2;
-      const tilt = 0.34 + h2(seed + i * 7.3, depth) * 0.52;
+      const tilt = 0.42 + h2(seed + i * 7.3, depth) * 0.70;
       const d = [dir[0] + Math.cos(a) * tilt, dir[1] * (0.62 + 0.26 * h2(seed + i, depth * 3)),
                  dir[2] + Math.sin(a) * tilt];
       const l = Math.hypot(d[0], d[1], d[2]) || 1;
       branch(q, [d[0]/l, d[1]/l, d[2]/l], len * (0.58 + 0.16 * h2(seed * 2 + i, depth)),
-             rad * 0.56, depth - 1, seed + i * 11 + depth);
+             rad * 0.62, depth - 1, seed + i * 11 + depth);
     }
   }
   function tree(x, z, h, seed) {
     const y = Math.max(terrainH(x, z), WATER_Y - 0.55);   // 站在水里的枯树，也算「木」
     branch([x, y - 0.5, z], [0.04 * (h2(seed, 1) - .5), 1, 0.04 * (h2(seed, 2) - .5)],
-           h * 0.44, 0.235 + 0.06 * h2(seed, 4), 4, seed);
+           h * 0.44, 0.19 + 0.05 * h2(seed, 4), 4, seed);
     return y;
   }
 
@@ -1272,7 +1215,7 @@ function makeWrongness() {
   // 这一句的反问要成立，得让人看见它站在本该是她的位置上。
   {
     // 就站在那条踩出来的路上：草在那儿被踏平了，四条腿才看得见
-    const ex = 3.60, ez = -45.10;
+    const ex = -0.95, ez = -45.60;
     elk(ex, terrainH(ex, ez), ez, 3.02);
   }
 
@@ -1305,11 +1248,8 @@ const CLOTHS = [
   { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.3, h: 1.25, tone: 0.96 },
   { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.2, h: 1.22, tone: 0.97 },
   { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 3.6, h: 1.40, tone: 0.97 },
-  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子。
-  // 这一句是全诗的那一下——袖子解下来扔进水里，让它自己走。这个机位必须看得见它。
+  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子
   { x:-64.2, z:  37.0, ang: 0.74, vx: 0.050, vz: 0.082, w: 3.8, h: 1.55, tone: 0.96 },
-  { x:-64.0, z:  36.5, ang: 1.08, vx: 0.046, vz: 0.078, w: 3.2, h: 1.32, tone: 0.96 },
-  { x:-66.6, z:  39.4, ang: 0.35, vx: 0.052, vz: 0.086, w: 2.6, h: 1.10, tone: 0.92 },
   { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 3.8, h: 1.45, tone: 0.94 },
   // 正从「登白薠兮骋望」眼前漂过去的那一件
   { x: -2.0, z: -25.0, ang: 1.22, vx: 0.058, vz: 0.094, w: 4.2, h: 1.85, tone: 0.99 },
@@ -1336,14 +1276,9 @@ function updateCloths(t) {
     if (C.hang) {                                    // 挂在枯枝上的那一件
       const ca2 = Math.cos(C.ang), sa2 = Math.sin(C.ang);
       const hangAt = (u, v, out) => {
-        // 一件搭在枯枝上的衣裳：肩上是搭过去的那道折，往下收一点，
-        // 下摆是烂的、参差的。直上直下的四边形只会读成一块挂着的板。
-        const hem = 1 - 0.30 * Math.abs(Math.sin(u * 5.7 + C.ang))
-                      - 0.16 * Math.abs(Math.sin(u * 13.1 + 1.7));    // 破了的下摆
-        const waist = 1 - 0.30 * v + 0.12 * Math.sin(Math.PI * v * 1.6);
-        const lx = (u - 0.5) * C.w * waist;
-        const ly = -v * C.h * hem - 0.30 * Math.sin(Math.PI * u)
-                 - 0.10 * Math.pow(1 - v, 3) * Math.cos(Math.PI * (u - 0.5));   // 肩上那道折
+        const hem = 1 - 0.22 * Math.abs(Math.sin(u * 5.7 + C.ang));   // 破了的下摆
+        const lx = (u - 0.5) * C.w * (1 - 0.34 * v);
+        const ly = -v * C.h * hem - 0.30 * Math.sin(Math.PI * u);
         const lz = 0.20 * Math.sin(t * 1.35 + u * 3.3 + v * 2.4) * (0.25 + 0.75 * v)
                  + 0.10 * Math.sin(t * 2.4 - u * 5.1)
                  // 挂着的衣裳是竖着皱的：一条一条的褶从肩上挂下来
@@ -1614,9 +1549,6 @@ const LINES = [
     en: 'I will build a house in the middle of the water, and thatch it over with lotus.' },
   { x:  14, z:  74, r: 40, zh: '九嶷缤兮并迎，灵之来兮如云。',
     en: 'The nine peaks of Jiuyi come thronging to meet her; the spirits arrive like cloud.' },
-  // 汀洲上那一丛杜若是第 20 轮长出来的，这一句一直没跟上：站到花跟前，它才该出现
-  { x:  -1, z: -70, r: 18, zh: '搴汀洲兮杜若，将以遗兮远者。',
-    en: 'On the flat islet I pick the pollia, to send to the one who is far away.' },
   { x: -70, z:  46, r: 38, zh: '时不可兮骤得，聊逍遥兮容与。',
     en: 'The hour cannot be seized when we want it. For now — wander; for now, be at ease, and wait.' },
 ];
@@ -1943,12 +1875,10 @@ if (window.PolishTimeline) {
     onReady: function (rounds) {
       const n = rounds.length;
       document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
-      // 只认最后一轮上的 stop。第一段在第 10 轮停过一次，第二段又接着跑；
-      // 拿「有没有任何一轮 stop 过」判断，页脚会一直挂着上一段的停止原因。
-      const last = rounds[n - 1];
-      if (last && last.stop) {
+      const stopped = rounds.filter(r => r.stop).pop();
+      if (stopped) {
         document.getElementById('ft-rounds').textContent = n + ' 轮';
-        document.getElementById('ft-stop').textContent = last.stop_reason || last.stop || '循环结束';
+        document.getElementById('ft-stop').textContent = stopped.stop_reason || stopped.stop || '循环结束';
       }
     }
   });

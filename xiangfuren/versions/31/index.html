@@ -465,13 +465,6 @@ const terrP = prog(`
     vec3 mud   = mix(vec3(0.150,0.130,0.108), vec3(0.205,0.178,0.142), g);
     vec3 sedge = mix(vec3(0.430,0.405,0.320), vec3(0.560,0.530,0.425), g);  // 白薠, bleached autumn grass
     vec3 alb = mix(sedge, mud, wet);
-    // 踩出来的那条路：白薠在这里被踏平（见 makeBlades），可地皮一直还是草色的，
-    // 于是那条路只在草的高度上存在，看不见。踩过的土是露出来的土。
-    float pt = clamp((vW.z + 60.0) / 24.0, 0.0, 1.0);
-    vec2 pp = vec2(-pt * 1.2, -60.0 + pt * 24.0);
-    float pd = length(vW.xz - pp);
-    float worn = 1.0 - smoothstep(0.9, 2.9, pd);
-    alb = mix(alb, mix(vec3(0.196,0.170,0.136), vec3(0.246,0.214,0.170), g), worn * 0.80);
     alb = mix(alb, vec3(0.088,0.082,0.070), smoothstep(0.35, -0.6, vW.y));
     float lam = max(dot(n, SUN_DIR), 0.0);
     vec3 c = alb * (0.30 + 1.05 * lam);
@@ -579,13 +572,8 @@ const bladeP = prog(`
     float s = aQ.x;
     float sway = sin(uT * 1.9 + aQ.y + p.x * 0.22 + p.z * 0.17) * 0.5 + 0.5;
     float gust = 0.55 + 0.45 * sin(uT * 0.47 + p.x * 0.012 + p.z * 0.009);
-    // 每根草自己的倒伏：秋深了，草是垂着的，各垂各的方向。
-    // 这一步只动尖子那一个顶点，所以草还是那么细、那么密——
-    // 真拿几何去弯它，一根草就要三个三角形，密度掉下来，草就成了纸带子。
-    float lean = aQ.y * 1.37;
-    p.xz += vec2(cos(lean), sin(lean)) * (0.14 + 0.16 * fract(aQ.y * 7.31)) * s * s;
     p.xz += uWind * (0.30 + 0.42 * sway) * gust * s * s;
-    p.y  -= (0.10 + 0.16 * fract(aQ.y * 7.31)) * s * s * gust;
+    p.y  -= 0.10 * s * s * gust;
     vT = s; vTint = aQ.z; vD = length(p - uCam);
     gl_Position = uVP * vec4(p, 1.0);
   }
@@ -1272,7 +1260,7 @@ function makeWrongness() {
   // 这一句的反问要成立，得让人看见它站在本该是她的位置上。
   {
     // 就站在那条踩出来的路上：草在那儿被踏平了，四条腿才看得见
-    const ex = 3.60, ez = -45.10;
+    const ex = -0.95, ez = -45.60;
     elk(ex, terrainH(ex, ez), ez, 3.02);
   }
 
@@ -1305,11 +1293,8 @@ const CLOTHS = [
   { x: -6.2, z:  -3.0, ang: 2.15, vx: 0.072, vz: 0.052, w: 3.3, h: 1.25, tone: 0.96 },
   { x: -4.9, z:  27.4, ang: 1.05, vx: 0.048, vz: 0.083, w: 3.2, h: 1.22, tone: 0.97 },
   { x:-58.6, z:  29.3, ang: 1.42, vx: 0.055, vz: 0.090, w: 3.6, h: 1.40, tone: 0.97 },
-  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子。
-  // 这一句是全诗的那一下——袖子解下来扔进水里，让它自己走。这个机位必须看得见它。
+  // 就漂在「时不可兮骤得」那个机位的跟前：够近、够大，看得出是一只袖子
   { x:-64.2, z:  37.0, ang: 0.74, vx: 0.050, vz: 0.082, w: 3.8, h: 1.55, tone: 0.96 },
-  { x:-64.0, z:  36.5, ang: 1.08, vx: 0.046, vz: 0.078, w: 3.2, h: 1.32, tone: 0.96 },
-  { x:-66.6, z:  39.4, ang: 0.35, vx: 0.052, vz: 0.086, w: 2.6, h: 1.10, tone: 0.92 },
   { x: 16.0, z:  86.0, ang: 0.30, vx: 0.040, vz: 0.070, w: 3.8, h: 1.45, tone: 0.94 },
   // 正从「登白薠兮骋望」眼前漂过去的那一件
   { x: -2.0, z: -25.0, ang: 1.22, vx: 0.058, vz: 0.094, w: 4.2, h: 1.85, tone: 0.99 },
@@ -1614,9 +1599,6 @@ const LINES = [
     en: 'I will build a house in the middle of the water, and thatch it over with lotus.' },
   { x:  14, z:  74, r: 40, zh: '九嶷缤兮并迎，灵之来兮如云。',
     en: 'The nine peaks of Jiuyi come thronging to meet her; the spirits arrive like cloud.' },
-  // 汀洲上那一丛杜若是第 20 轮长出来的，这一句一直没跟上：站到花跟前，它才该出现
-  { x:  -1, z: -70, r: 18, zh: '搴汀洲兮杜若，将以遗兮远者。',
-    en: 'On the flat islet I pick the pollia, to send to the one who is far away.' },
   { x: -70, z:  46, r: 38, zh: '时不可兮骤得，聊逍遥兮容与。',
     en: 'The hour cannot be seized when we want it. For now — wander; for now, be at ease, and wait.' },
 ];
@@ -1943,12 +1925,10 @@ if (window.PolishTimeline) {
     onReady: function (rounds) {
       const n = rounds.length;
       document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
-      // 只认最后一轮上的 stop。第一段在第 10 轮停过一次，第二段又接着跑；
-      // 拿「有没有任何一轮 stop 过」判断，页脚会一直挂着上一段的停止原因。
-      const last = rounds[n - 1];
-      if (last && last.stop) {
+      const stopped = rounds.filter(r => r.stop).pop();
+      if (stopped) {
         document.getElementById('ft-rounds').textContent = n + ' 轮';
-        document.getElementById('ft-stop').textContent = last.stop_reason || last.stop || '循环结束';
+        document.getElementById('ft-stop').textContent = stopped.stop_reason || stopped.stop || '循环结束';
       }
     }
   });
