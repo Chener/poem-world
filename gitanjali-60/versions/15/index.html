@@ -355,8 +355,8 @@ var sky = new THREE.Mesh(
       '  float acrossR = 1.0 - smoothstep(0.0, 0.46, abs(dar));',
       '  float veil = (1.0 - smoothstep(flatBase * 0.55, flatBase * 1.04, el))',
       '             * step(-0.02, el) * clamp(acrossR * 1.25, 0.0, 1.0);',
-      '  float streak = fbm(vec2(dar*21.0, el*17.0 - uTime*0.30));',
-      '  veil *= smoothstep(0.16, 0.86, streak) * 0.80 * smoothstep(-0.005, 0.030, el);',
+      '  float streak = fbm(vec2(dar*46.0, el*26.0 - uTime*0.30));',
+      '  veil *= smoothstep(0.24, 0.72, streak) * 0.85;',
       '  col = mix(col, vec3(0.235,0.250,0.282), veil);',
       '  vec3 stormCol = mix(vec3(0.062,0.068,0.082), vec3(0.300,0.312,0.342), n*n);',
       /* the sun is over the sea and it is above this thing: the anvil and the
@@ -789,17 +789,7 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  return normalize(vec3(-dx, 1.0, -dz));',
     '}',
     'void main(){',
-    '  float dcam = length(cameraPosition - vW);',
-    /* The child-height camera lies eight centimetres above the beach, so the
-     * bottom half of everything it sees is the sand directly under the lens,
-     * and that sand was a flat gradient — a critic called it "一整片什么都没有
-     * 的沙". Sand a hand away from your eye is not smooth: it is grain, and
-     * broken shell, and the pits where water drained. None of that is worth
-     * carrying past a few metres, so it is weighted by distance. */
-    '  float nearW = 1.0 - smoothstep(0.6, 9.0, dcam);',
     '  float g = noise(vW.xz*2.6)*0.5 + noise(vW.xz*11.0)*0.26 + noise(vW.xz*46.0)*0.14;',
-    '  g += (noise(vW.xz*175.0) - 0.5) * 0.62 * nearW;',
-    '  g += (noise(vW.xz*61.0) - 0.5) * 0.30 * nearW;',
     /* ------------------------------------------------------------------
      * "pale gleams the smile of the sea beach."
      *
@@ -847,10 +837,8 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
     '  col = mix(col, vec3(0.955,0.955,0.938), lace * smoothstep(0.24, 0.78, lacen) * 0.72);',
     '  float sp = step(0.9975, hash(floor(vW.xz*26.0)));',
     '  col = mix(col, vec3(0.95,0.93,0.88), sp*(1.0-wet)*0.45);',
-    /* splinters of shell, only where you could actually see one */
-    '  float chip = step(0.982, hash(floor(vW.xz*120.0)));',
-    '  col = mix(col, vec3(0.97,0.955,0.915), chip * nearW * (1.0-wet) * 0.70);',
-    '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, dcam));',
+    '  float d = length(cameraPosition - vW);',
+    '  col = mix(col, uFogCol, smoothstep(uFogNear, uFogFar, d));',
     '  gl_FragColor = vec4(col,1.0);',
     '  #include <tonemapping_fragment>',
     '  #include <colorspace_fragment>',
@@ -1380,9 +1368,9 @@ function h2(a, b) { return h1(a * 311.7 + b * 269.5 + 0.7); }
  * meeting is crowded. Until round 11 the knots were sixteen metres apart and
  * the pool ran out after forty of them, so the shore read as a thin queue with
  * a lot of empty sand around it. */
-var GROUP_SPAN = 6;      // metres of shore between one gathering and the next
-var CHILD_RANGE = 300;   // how far down the shore children are drawn
-var POOL = 920;          // instances held ready; groups are mapped into it each frame
+var GROUP_SPAN = 11;     // metres of shore between one gathering and the next
+var CHILD_RANGE = 430;   // how far down the shore children are drawn
+var POOL = 720;          // instances held ready; groups are mapped into it each frame
 
 var SKIN  = [0x9a7051, 0xb08a64, 0xc29a71, 0x845a3f, 0xbe9469];
 var CLOTH = [0xf0ece1, 0xc95a4e, 0x4a6fa5, 0xe0b04a, 0xf6f4ee, 0x7a9e7e, 0xd8d3c4, 0xb0553f];
@@ -1640,21 +1628,11 @@ var shellGeo = (function () {
 var pebbleGeo = new THREE.IcosahedronGeometry(0.058, 0);
 pebbleGeo.scale(1, 0.66, 0.88);
 
-/* Round 4 made the sand houses darker than the beach, reasoning that they are
- * built of wet sand. Three critics running have read them as mud or as heaps of
- * earth — "土疙瘩", "巧克力色的土堆" — because a dark brown lump on pale sand is
- * not something a child built out of that sand. Sand piled and patted is
- * lighter than flat sand, not darker: it catches the sky on every drip. */
-var matSandProp = new THREE.MeshLambertMaterial({ color: 0xcfbf9d, flatShading: true });
-var matSandDark = new THREE.MeshLambertMaterial({ color: 0x6d5f47 });
+var matSandProp = new THREE.MeshLambertMaterial({ color: 0x8b7a5e });
 var matShell = new THREE.MeshLambertMaterial({ color: 0xfdfaf2, flatShading: true });
 var matPebble = new THREE.MeshLambertMaterial({ color: 0x6d675e });
 
-/* the doorway: a dark recess pressed into the foot of the front tower, which
- * is the one mark that turns a mound into a house */
-var gateGeo = new THREE.BoxGeometry(0.115, 0.135, 0.09);
-var SHELL_POOL = 1500, PEBBLE_POOL = 900, TURRET_POOL = 300, WALL_POOL = 110, GATE_POOL = 110;
-var iGate = inst(gateGeo, matSandDark, GATE_POOL);
+var SHELL_POOL = 1500, PEBBLE_POOL = 900, TURRET_POOL = 300, WALL_POOL = 110;
 var iTurret = inst(turretGeo, matSandProp, TURRET_POOL);
 var iWall   = inst(wallGeo, matSandProp, WALL_POOL);
 var iShell  = inst(shellGeo, matShell, SHELL_POOL);
@@ -1870,7 +1848,7 @@ var PROP_RANGE = 190;   // props are small; drawing them to the horizon is waste
 function updateChildren(t, camX) {
   var gMin = Math.floor((camX - CHILD_RANGE) / GROUP_SPAN);
   var gMax = Math.ceil((camX + CHILD_RANGE) / GROUP_SPAN);
-  var n = 0, nSh = 0, nPb = 0, nTu = 0, nWa = 0, nFr = 0, nFp = 0, nGa = 0;
+  var n = 0, nSh = 0, nPb = 0, nTu = 0, nWa = 0, nFr = 0, nFp = 0;
 
   /* A flat decal a few centimetres from the eye is seen edge-on and smears
    * across half the frame. The child-height camera sits eight centimetres above
@@ -1902,10 +1880,8 @@ function updateChildren(t, camX) {
       if (hh > 0.52) continue;
       var sx2 = gx * CS + (h2(gx, gz + 71) - 0.5) * CS * 0.9;
       var sz2 = 1.7 + gz * 2.4 + (h2(gx, gz + 91) - 0.5) * 2.0;
-      /* a shell, not a boulder: the child-height camera lies almost on the sand,
-       * and at that eye a half-metre scallop in the foreground is a white dome */
       putProp(iShell, nSh++, sx2, groundY(sx2, sz2) + 0.005, sz2,
-              h2(gx, gz + 111) * TAU2, 0.38 + hh * 0.80);
+              h2(gx, gz + 111) * TAU2, 0.55 + hh * 1.6);
     }
   }
 
@@ -1942,30 +1918,14 @@ function updateChildren(t, camX) {
      * hub and grow to fifteen or twenty children, and quiet bands between them
      * with three children and a lot of sand. */
     var band = Math.floor(g / 7);
-    /* even the quiet stretches are a shore with children on it — a band that
-     * empties out completely leaves whichever camera stands in it looking at
-     * bare sand, which happened to the eye-level one */
-    var crowd = 0.34 + 0.66 * Math.pow(h1(band * 3.71 + 0.3), 0.8);
+    var crowd = Math.pow(h1(band * 3.71 + 0.3), 0.75);
     var hubX = band * 7 * GROUP_SPAN + (h1(band * 5.13 + 2.1) - 0.5) * 46;
     var ax = g * GROUP_SPAN + (h2(g, 1) - 0.5) * 26;
     ax += (hubX - ax) * crowd * 0.34;
     /* most knots are down at the water, a few are well up the sand: a shore
      * where every child stands in one ten-metre band leaves the foreground of
      * every low camera empty, and reads as a queue rather than as a meeting */
-    /* The crowd used to be a line: every knot within fourteen metres of the
-     * water, so from above it read as a queue along a ruler-straight beach. A
-     * crowded stretch spreads back up the dry sand, and the whole shore is
-     * given a very long meander — fifteen hundred metres to a wave of it — so
-     * that the coast bends away into the haze instead of running out of the
-     * frame perfectly straight. */
-    /* Walking into this world should be walking INTO the crowd. Every low
-     * camera so far has had ten empty metres in front of it and all the
-     * children on a thin line at the water, because the depth distribution was
-     * weighted hard toward the waterline. Flatten it: knots sit anywhere from
-     * the wet sand to well up the dry beach, so wherever you stand there is
-     * somebody playing beside you. */
-    var az = 3.9 + Math.pow(h2(g, 2), 1.05) * (16 + crowd * 20)
-           + 3.6 * Math.sin(g * GROUP_SPAN * 0.0042);
+    var az = 5.0 + Math.pow(h2(g, 2), 1.15) * 14;
     var size = 3 + Math.floor(h2(g, 3) * 4 + crowd * crowd * 9);    // 3..15
 
     /* the trail this knot walked down to the water, and the churned sand it
@@ -1999,15 +1959,9 @@ function updateChildren(t, camX) {
     }
 
     for (var c = 0; c < size && n < POOL; c++) {
-      /* Every knot sends somebody down to the edge, and a crowded one sends
-       * three. The eye-level camera stands on the shore looking out to sea, so
-       * the band of sand it actually shows is the last few metres before the
-       * water — and the last few metres before the water is where this poem
-       * puts its clearest picture: children crouched at the edge letting
-       * withered leaves go. */
-      var launchers = 1 + Math.floor(crowd * 2.4);
+      /* every second knot sends one child down to the edge to let a leaf go */
       var state = c === 0 ? BUILD : c === 1 ? SCATTER
-                : (c >= 2 && c < 2 + launchers) ? LAUNCH
+                : (c === 2 && h2(g, 41) > 0.45) ? LAUNCH
                 : STATE_MIX[Math.floor(h2(g, 50 + c) * STATE_MIX.length)];
       var ring = h2(g, 10 + c) * TAU2;
       var rad = 0.9 + h2(g, 30 + c) * 2.4 + size * 0.26;   // a big knot is a wide ring
@@ -2033,24 +1987,14 @@ function updateChildren(t, camX) {
         /* the one child who is not in the ring: crouched at the very edge with
          * a leaf held out over the water. Still on sand — the poem is exact
          * about that — but as far forward as sand goes. */
-        cx = ax + (h2(g, 44 + c) - 0.5) * 7.8;
-        cz = 2.5 + h2(g, 45 + c) * 1.6;
+        cx = ax + (h2(g, 44) - 0.5) * 5.4;
+        cz = 2.6 + h2(g, 45) * 1.1;
         yaw = Math.PI;                            // facing the sea (forward is +z)
       }
       cz = Math.max(state === LAUNCH ? 2.6 : 4.2, Math.min(34, cz));  // never into the water
 
       var scale = 0.82 + h2(g, 130 + c) * 0.26;   // four years old to ten, and nobody older
       poseChild(state, t * spd + ph, (h2(g, 150 + c) - 0.5) * 0.12);
-      /* the same pose function for every child of a kind gave a beach full of
-       * identical arms. A little private variation per child — one shoulder
-       * carried higher, arms held wider or tighter, the head turned a bit —
-       * costs nothing and breaks the repetition the eye picks up first. */
-      var vA = (h2(g, 620 + c) - 0.5), vB = (h2(g, 640 + c) - 0.5), vC = (h2(g, 660 + c) - 0.5);
-      armL.root.rotation.z += vA * 0.42;  armR.root.rotation.z += vB * 0.42;
-      armL.root.rotation.x += vB * 0.30;  armR.root.rotation.x += vA * 0.30;
-      armL.joint.rotation.x += vC * 0.55; armR.joint.rotation.x -= vC * 0.55;
-      rHead.rotation.y += vA * 0.55;
-      rSpine.rotation.y += vC * 0.22;
 
       rig.position.set(cx, groundY(cx, cz), cz);
       rig.rotation.y = yaw;
@@ -2081,7 +2025,7 @@ function updateChildren(t, camX) {
         var sa = h2(g, 170 + c * 3 + q) * TAU2, sr = 0.5 + h2(g, 200 + c * 3 + q) * 2.6;
         var sx = cx + Math.cos(sa) * sr, sz = Math.max(3.4, cz + Math.sin(sa) * sr);
         putProp(iShell, nSh++, sx, groundY(sx, sz) + 0.008, sz,
-                h2(g, 230 + c * 3 + q) * TAU2, 0.50 + h2(g, 260 + c * 3 + q) * 0.50);
+                h2(g, 230 + c * 3 + q) * TAU2, 0.7 + h2(g, 260 + c * 3 + q) * 0.7);
       }
       if (nPb < PEBBLE_POOL) {
         var pa = h2(g, 290 + c) * TAU2, pr = 0.4 + h2(g, 310 + c) * 2.2;
@@ -2093,31 +2037,13 @@ function updateChildren(t, camX) {
       /* what the builders are building, right where they are reaching */
       if (state === BUILD && nTu + 3 <= TURRET_POOL) {
         var fx = cx - Math.sin(yaw) * 0.62, fz = cz - Math.cos(yaw) * 0.62;
-        /* one tower that is clearly the tallest, two smaller beside it: a
-         * silhouette with a middle reads as a building, three equal lumps do
-         * not */
-        /* knee-high on a child, no more: the child-height camera lies on the
-         * sand, so a half-metre tower two metres away is already a cliff */
-        var hgt = [1.15, 0.86, 0.68];
         for (var u = 0; u < 3; u++) {
-          var ta = h2(g, 370 + c * 3 + u) * TAU2, tr = (u === 0 ? 0.0 : 0.26 + h2(g, 400 + c * 3 + u) * 0.34);
+          var ta = h2(g, 370 + c * 3 + u) * TAU2, tr = h2(g, 400 + c * 3 + u) * 0.42;
           var tx = fx + Math.cos(ta) * tr, tz = fz + Math.sin(ta) * tr;
           putProp(iTurret, nTu++, tx, groundY(tx, tz) - 0.01, tz, ta,
-                  (hgt[u] + h2(g, 430 + c * 3 + u) * 0.22) * scale);
+                  (0.95 + h2(g, 430 + c * 3 + u) * 0.80) * scale);
         }
-        if (nWa < WALL_POOL) putProp(iWall, nWa++, fx, groundY(fx, fz) - 0.02, fz, yaw + 2.6, 1.05 * scale);
-        /* the door, in the foot of the big tower, facing whoever built it */
-        if (nGa < GATE_POOL) {
-          var gx2 = fx + Math.sin(yaw) * 0.135 * scale, gz2 = fz + Math.cos(yaw) * 0.135 * scale;
-          putProp(iGate, nGa++, gx2, groundY(gx2, gz2) + 0.055 * scale, gz2, yaw, 1.45 * scale);
-        }
-        /* shells pushed into the top of the wall, the way children finish one */
-        for (var sw = 0; sw < 4 && nSh < SHELL_POOL; sw++) {
-          var wa = yaw + 2.6 + (sw + 0.5) * 0.62;
-          var wx = fx + Math.cos(wa) * 0.50 * 1.05 * scale;
-          var wz = fz + Math.sin(wa) * 0.50 * 1.05 * scale;
-          putProp(iShell, nSh++, wx, groundY(wx, wz) + 0.095 * scale, wz, wa, 0.55 * scale);
-        }
+        if (nWa < WALL_POOL) putProp(iWall, nWa++, fx, groundY(fx, fz) - 0.02, fz, yaw + 2.6, 0.95 * scale);
       }
 
       /* the leaves this one has brought down to the water: two or three still
@@ -2126,8 +2052,8 @@ function updateChildren(t, camX) {
        * the deep started. */
       if (state === LAUNCH) {
         for (var lf = 0; lf < 3 && nFr < FRESH; lf++) {
-          var lx = cx + (h2(g, 600 + c * 3 + lf) - 0.5) * 1.5;
-          var lz = cz + 0.25 + h2(g, 620 + c * 3 + lf) * 0.9;
+          var lx = cx + (h2(g, 600 + lf) - 0.5) * 1.5;
+          var lz = cz + 0.25 + h2(g, 620 + lf) * 0.9;
           _dummy.position.set(lx, groundY(lx, lz) + 0.012, lz);
           _dummy.rotation.set(0, h2(g, 640 + lf) * TAU2, 0);
           _dummy.scale.setScalar(0.95 + h2(g, 660 + lf) * 0.35);
@@ -2137,9 +2063,9 @@ function updateChildren(t, camX) {
         if (nFr < FRESH) {
           /* the one that is away: it has been on the water for a few seconds,
            * still close enough that you can see whose hands it left */
-          var gone = ((t * 0.33 + h2(g, 680 + c) * 3) % 3) / 3;
+          var gone = ((t * 0.33 + h2(g, 680) * 3) % 3) / 3;
           var bz = cz - 0.9 - gone * 5.5;
-          var bx = cx + (h2(g, 690 + c) - 0.5) * 0.8 + Math.sin(t * 0.4 + g + c) * 0.35;
+          var bx = cx + (h2(g, 690) - 0.5) * 0.8 + Math.sin(t * 0.4 + g) * 0.35;
           var by = seaHeightJS(bx, bz, t);
           var eps = 0.5;
           _dummy.position.set(bx, Math.max(groundY(bx, bz) + 0.01, by + 0.03), bz);
@@ -2189,25 +2115,7 @@ function updateChildren(t, camX) {
     }
   }
 
-  /* the sand houses of whoever was here before: half-slumped, well up the dry
-   * beach where nobody is playing now. An empty beach behind the crowd says
-   * the crowd is all there is; these say the shore has been like this for a
-   * long time in both directions. */
-  for (var ox = Math.floor((camX - 150) / 26); ox <= Math.ceil((camX + 150) / 26) && nTu < TURRET_POOL; ox++) {
-    var oh = h2(ox * 1.77, 13);
-    if (oh > 0.66) continue;
-    var obx = ox * 26 + (h2(ox, 21) - 0.5) * 22;
-    var obz = 20 + h2(ox, 31) * 46;
-    for (var ot = 0; ot < 2 && nTu < TURRET_POOL; ot++) {
-      var oa = h2(ox, 41 + ot) * TAU2, orr = h2(ox, 51 + ot) * 0.8;
-      var otx = obx + Math.cos(oa) * orr, otz = obz + Math.sin(oa) * orr;
-      putProp(iTurret, nTu++, otx, groundY(otx, otz) - 0.06, otz, oa,
-              (0.7 + h2(ox, 61 + ot) * 0.55));
-    }
-  }
-
   iTurret.count = nTu; iWall.count = nWa; iShell.count = nSh; iPebble.count = nPb;
-  iGate.count = nGa; iGate.instanceMatrix.needsUpdate = true;
   iFresh.count = nFr; iFoot.count = Q.get('nodecal') ? 0 : nFp;
   iTurret.instanceMatrix.needsUpdate = true; iWall.instanceMatrix.needsUpdate = true;
   iShell.instanceMatrix.needsUpdate = true; iPebble.instanceMatrix.needsUpdate = true;

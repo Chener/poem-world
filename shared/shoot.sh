@@ -24,6 +24,19 @@ LOCK=/tmp/poem-world-shot.lock
 # artifact from the same puppeteer cache, it has no window to show, it still supports
 # --screenshot, and it exits the moment the file is written - about four seconds a
 # frame instead of hanging until the alarm.
+#
+# ANGLE backend: Metal, not SwiftShader. Measured on this machine, same scene, same
+# frozen clock, one frame of camera 1:
+#
+#     --disable-gpu --use-angle=swiftshader   real 10.6s   cpu 19.6s
+#     --use-angle=metal                       real  6.0s   cpu  2.0s
+#
+# SwiftShader rasterises on the cores the operator is using, and at 350-400% CPU it
+# was pushing the network stack around; Metal hands the work to the GPU and costs a
+# tenth of the CPU time. --disable-gpu must NOT be passed with it or the WebGL
+# context never comes up and the page is captured still on its loading veil, which
+# is what a 30KB screenshot means. SwiftShader stays as the fallback for any machine
+# where the Metal context fails.
 CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome-headless-shell/mac_arm-150.0.7871.24/chrome-headless-shell-mac-arm64/chrome-headless-shell}"
 
 [ -x "$CTF" ] || { echo "no chrome-headless-shell at: $CTF" >&2; exit 1; }
@@ -38,7 +51,7 @@ wait_for_machine() {
     free=$(memory_pressure 2>/dev/null | sed -n 's/.*memory free percentage: \([0-9]*\)%.*/\1/p')
     [ -z "$load" ] && load=0
     [ -z "$free" ] && free=100
-    if [ "$load" -lt 8 ] && [ "$free" -gt 30 ]; then return 0; fi
+    if [ "$load" -lt 6 ] && [ "$free" -gt 40 ]; then return 0; fi
     echo "  machine busy (load ${load}, free ${free}%), waiting 60s..."
     sleep 60
     i=$((i + 1))
@@ -61,19 +74,35 @@ trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
 # the job. --virtual-time-budget only needs to be long enough for three.js to settle,
 # it is NOT a licence to hang until the frame is finished.
 SHOT_ALARM=90
-for c in $CAMS; do
-  n="${c%%-*}"
-  prof=$(mktemp -d /tmp/pw-shot-profile.XXXXXX)
-  rm -f "$OUT/$c.png"
-  nice -n 10 perl -e 'alarm shift; exec @ARGV' "$SHOT_ALARM" \
-         "$CTF" --disable-gpu --use-angle=swiftshader \
+
+# taskpolicy -c background puts the whole process tree in the macOS background QoS
+# class: efficiency cores, throttled I/O, and it yields to whatever the operator is
+# doing in the foreground. This is a machine somebody is using during the day.
+shoot_one() {
+  _angle="$1"; _n="$2"; _dst="$3"
+  _prof=$(mktemp -d /tmp/pw-shot-profile.XXXXXX)
+  taskpolicy -c background nice -n 20 perl -e 'alarm shift; exec @ARGV' "$SHOT_ALARM" \
+         "$CTF" $_angle \
          --hide-scrollbars --mute-audio --no-first-run --no-default-browser-check \
          --disable-extensions --disable-background-networking \
-         --user-data-dir="$prof" \
+         --user-data-dir="$_prof" \
          --window-size=960,600 --virtual-time-budget=5000 \
-         --screenshot="$PWD/$OUT/$c.png" \
-         "http://127.0.0.1:$PORT/$W/index.html?shot=$n" >/dev/null 2>&1 || true
-  rm -rf "$prof"
+         --screenshot="$_dst" \
+         "http://127.0.0.1:$PORT/$W/index.html?shot=$_n" >/dev/null 2>&1 || true
+  rm -rf "$_prof"
+}
+
+for c in $CAMS; do
+  n="${c%%-*}"
+  rm -f "$OUT/$c.png"
+  shoot_one "--use-angle=metal" "$n" "$PWD/$OUT/$c.png"
+  # a Metal context that never came up captures the loading veil: tens of KB, not
+  # hundreds. Fall back rather than log a blank round.
+  if [ ! -s "$OUT/$c.png" ] || [ "$(wc -c < "$OUT/$c.png")" -lt 120000 ]; then
+    echo "  metal gave nothing usable for $c, falling back to swiftshader" >&2
+    rm -f "$OUT/$c.png"
+    shoot_one "--disable-gpu --use-angle=swiftshader" "$n" "$PWD/$OUT/$c.png"
+  fi
   if [ ! -s "$OUT/$c.png" ]; then
     # Skip the rest of the round rather than wait: a wedged Chrome will not get
     # better on the next camera, and the loop is supposed to keep moving.
