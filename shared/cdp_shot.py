@@ -230,6 +230,12 @@ def chrome_cmd(backend, chrome, profile, port, w, h):
         "--user-data-dir=%s" % profile,
         "--window-size=%d,%d" % (w, h),
     ] + COMMON_FLAGS
+    if os.environ.get("POEM_SHOT_SPREAD", "1") != "0":
+        flags += [
+            "--num-raster-threads=1",
+            "--renderer-process-limit=1",
+            "--js-flags=--single-threaded",
+        ]
     if backend == "headed-metal":
         flags += GPU_FLAGS + [
             "--window-position=-20000,0",
@@ -241,6 +247,7 @@ def chrome_cmd(backend, chrome, profile, port, w, h):
             "--headless=new",
             "--disable-gpu",
             "--use-angle=swiftshader",
+            "--disable-gpu-compositing",
         ]
     else:
         raise SystemExit("unknown backend: %s" % backend)

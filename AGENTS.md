@@ -27,13 +27,19 @@ instanced colours come out squared and nearly black.
 keep it that way. A JS mirror that drifts from the shader puts boats under the surface.
 
 **Screenshots are one Chrome process per round, niced.** `shared/shoot.sh` launches
-Chrome for Testing with `--headless=new` and the Metal GPU flags, captures all three
-cameras over CDP (`shared/cdp_shot.py`), then exits. Cameras switch through
-`window.__poemShot` so the scene is not rebuilt. Shared `mkdir` lock at
+Chrome for Testing with `--headless=new`, Metal GPU flags, and single-core spread
+(`--num-raster-threads=1 --renderer-process-limit=1 --js-flags=--single-threaded`),
+captures all three cameras over CDP (`shared/cdp_shot.py`), then exits. Cameras switch
+through `window.__poemShot` so the scene is not rebuilt. Shared `mkdir` lock at
 `/tmp/poem-world-shot.lock`; `taskpolicy -c background nice -n 20`. `?shot=1` is
 DPR=1 and one synchronous frame (`data-shot-ready`) — do not wait on rAF, offscreen
 and headless often never fire it. If Metal does not come up, the script falls back to
-headed-offscreen Metal, then SwiftShader. Numbers and the why live in README「截图与资源」.
+headed-offscreen Metal, then SwiftShader. Numbers live in README「截图与资源」.
+
+**Interactive pages pause when still.** DPR cap 1.5, 30 fps, no shadow maps, freeze the
+loop after the first frame until input, and pause when `document.hidden`. `?lite=1` (or
+`prefers-reduced-motion`) is the degrade switch. Do not keep a rAF loop spinning on an
+idle tab.
 
 **Shots must stay byte-reproducible.** Every world freezes its clock (`FROZEN_T`) and
 places its contents from hashes of stable indices, never from runtime randomness, so the

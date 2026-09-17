@@ -150,6 +150,8 @@
 
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen clock, no UI
+var LITE = Q.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+var LIVE_FPS = LITE ? 20 : 30;
 var FROZEN_T = 21.0;
 /* Software GL would otherwise faithfully render every frame of Chrome's virtual-time
  * budget, which takes minutes per image. In shot mode we draw a few frames and stop. */
@@ -207,7 +209,7 @@ var ctx = cv.getContext('2d');
 var W = 0, H = 0, DPR = 1;
 
 function resize() {
-  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, LITE ? 1 : 1.5);
   W = Math.max(1, (SHOT ? (window.innerWidth || 960) : cv.clientWidth) | 0);
   H = Math.max(1, (SHOT ? (window.innerHeight || 600) : cv.clientHeight) | 0);
   cv.width = Math.max(1, Math.round(W * DPR));
@@ -825,6 +827,7 @@ var keys = Object.create(null);
 addEventListener('keydown', function (e) {
   keys[e.code] = true;
   if (['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
+  pokeLive();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -834,6 +837,7 @@ stage.addEventListener('pointerdown', function (e) {
   if (e.target.closest('#touch') || e.target.closest('#enter')) return;
   drag = { x: e.clientX, y: e.clientY };
   try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+  pokeLive();
 });
 stage.addEventListener('pointermove', function (e) {
   if (!drag) return;
@@ -841,6 +845,7 @@ stage.addEventListener('pointermove', function (e) {
   cam.pitch -= (e.clientY - drag.y) * 0.0023;
   cam.pitch = Math.max(-0.42, Math.min(0.45, cam.pitch));
   drag = { x: e.clientX, y: e.clientY };
+  pokeLive();
 });
 addEventListener('pointerup', function () { drag = null; });
 
@@ -932,12 +937,46 @@ function markShotReady() {
 }
 
 function frame(now) {
-  var dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (SHOT) { T = FROZEN_T; } else { T += dt; step(dt); }
-  drawFrame();
-  if (SHOT && ++shotFrames >= SHOT_FRAMES) { markShotReady(); return; }
+  if (SHOT) return;
+  if (!wantLive(now)) { loopOn = false; return; }
   requestAnimationFrame(frame);
+  if (now - lastDrawT < 1000 / LIVE_FPS) return;
+  var dt = Math.min(0.05, (now - last) / 1000); last = now;
+  lastDrawT = now;
+  T += dt; step(dt);
+  drawFrame();
 }
+
+var loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
+function wantLive(now) {
+  if (document.hidden) return false;
+  if (roamHold) return true;
+  if (now < liveUntil) return true;
+  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
+      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.Space) return true;
+  if (drag || jx || jz) return true;
+  return false;
+}
+function pokeLive() {
+  liveUntil = performance.now() + 1400;
+  kickLoop();
+}
+function kickLoop() {
+  if (SHOT || document.hidden) return;
+  if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(frame); }
+}
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) loopOn = false;
+  else pokeLive();
+});
+window.__poemPerf = {
+  poke: pokeLive,
+  roam: function (on) {
+    roamHold = !!on;
+    keys.KeyW = !!on;
+    if (on) pokeLive();
+  }
+};
 
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
@@ -997,7 +1036,7 @@ if (SHOT) {
   markShotReady();
 } else {
   last = performance.now();
-  requestAnimationFrame(frame);
+  drawFrame();
 }
 
 })();

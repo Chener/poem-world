@@ -16,7 +16,7 @@ ROOT=$(cd "$HERE/.." && pwd)
 OUT="$ROOT/$W/shots/$R"
 LOCK=/tmp/poem-world-shot.lock
 BACKEND="${POEM_SHOT_BACKEND:-headless-gpu}"
-SHOT_ALARM="${SHOT_ALARM:-40}"
+SHOT_ALARM="${SHOT_ALARM:-60}"
 CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing}"
 
 [ -x "$CTF" ] || { echo "no Chrome for Testing at: $CTF" >&2; exit 1; }

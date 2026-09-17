@@ -215,6 +215,8 @@
 
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen time, no UI
+var LITE = Q.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+var LIVE_FPS = LITE ? 20 : 30;
 var FROZEN_T = 14.0;                                   // deterministic clock for shots
 var SHOT_FRAMES = 1;                                   // one frame, then resolve — software GL would otherwise spend the virtual-time budget
 var shotFrames = 0;
@@ -249,10 +251,11 @@ var CAMS = [
 
 /* ----------------------------------------------------------- RENDERER -- */
 var canvas = document.getElementById('view');
-var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !SHOT, powerPreference: 'high-performance' });
-renderer.setPixelRatio(SHOT ? 1 : Math.min(devicePixelRatio || 1, 2));
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !SHOT && !LITE, powerPreference: 'high-performance' });
+renderer.setPixelRatio(SHOT ? 1 : Math.min(devicePixelRatio || 1, LITE ? 1 : 1.5));
+renderer.shadowMap.enabled = false;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = LITE ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.02;
 
 var scene = new THREE.Scene();
@@ -835,7 +838,7 @@ var SPRAY_PERIOD = (function () {
   return 6.28318 / (Math.sqrt(9.8 / k) * k * WAVE_SPEED);
 })();
 
-var SPRAY_CELLS = 150, SPRAY_PER_CELL = SHOT ? 4 : 8, SPRAY_TILE = 240;
+var SPRAY_CELLS = 150, SPRAY_PER_CELL = SHOT ? 4 : 8, SPRAY_TILE = 240; // particle cap
 var SPRAY_N = SPRAY_CELLS * SPRAY_PER_CELL;
 var SPRAY_LIFE = 1.70, SPRAY_Z = -13.0;
 
@@ -2095,6 +2098,7 @@ var locked = false;
 addEventListener('keydown', function (e) {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
+  pokeLive();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -2113,6 +2117,7 @@ document.addEventListener('mousemove', function (e) {
   player.yaw   -= e.movementX * 0.0022;
   player.pitch -= e.movementY * 0.0022;
   player.pitch = Math.max(-1.25, Math.min(1.15, player.pitch));
+  pokeLive();
 });
 
 /* touch: left half drags a stick, right half looks */
@@ -2274,10 +2279,45 @@ function renderOnce() {
   renderer.render(scene, camera);
 }
 
-function frame() {
+var loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
+function wantLive(now) {
+  if (document.hidden) return false;
+  if (roamHold) return true;
+  if (now < liveUntil) return true;
+  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
+      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight ||
+      keys.ShiftLeft || keys.ShiftRight) return true;
+  if (player.vel && player.vel.length() > 0.04) return true;
+  return false;
+}
+function pokeLive() {
+  liveUntil = performance.now() + 1400;
+  kickLoop();
+}
+function kickLoop() {
+  if (SHOT || document.hidden) return;
+  if (!loopOn) { loopOn = true; requestAnimationFrame(frame); }
+}
+function frame(now) {
+  if (SHOT) return;
+  if (!wantLive(now)) { loopOn = false; return; }
   requestAnimationFrame(frame);
+  if (now - lastDrawT < 1000 / LIVE_FPS) return;
+  lastDrawT = now;
   renderOnce();
 }
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) loopOn = false;
+  else pokeLive();
+});
+window.__poemPerf = {
+  poke: pokeLive,
+  roam: function (on) {
+    roamHold = !!on;
+    keys.KeyW = !!on;
+    if (on) pokeLive();
+  }
+};
 
 window.__poemShot = function (n) {
   SHOT = parseInt(n, 10) || SHOT;
@@ -2331,7 +2371,7 @@ if (SHOT) {
     ' shells=' + iShell.count + ' pebbles=' + iPebble.count +
     ' prints=' + iFoot.count + ' fresh=' + iFresh.count);
 } else {
-  frame();
+  renderOnce();
   requestAnimationFrame(function () {
     requestAnimationFrame(function () {
       var b = document.getElementById('boot');
