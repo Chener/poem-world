@@ -37,7 +37,7 @@ python3 -m http.server 8731     # 然后开 http://127.0.0.1:8731/
 
 ## 截图与资源
 
-循环工人和这台电脑共用一台机器，截图必须又轻又短：同样 3 张机位，单张墙钟 ≤ 10 秒，
+循环工人和这台电脑共用一台机器，截图必须又轻又短：同样 3 张机位，单张墙钟 ≤ 60 秒，
 单进程 CPU 峰值不超过一核。调度本身也要轻——不常驻浏览器，不引入 puppeteer。
 
 入口是各世界的 `shots.sh`（`xiangfuren/shoot.sh` 是同内容的别名），全部 `exec` 到
@@ -57,7 +57,24 @@ python3 -m http.server 8731     # 然后开 http://127.0.0.1:8731/
 | 3. Playwright WebKit 无头 | — | — | — | — | 未试：1 和 2 已可用，不引入新依赖 |
 | 4. 仅场景侧 `?shot=1`（叠加在捕获通道上） | 见上 | 见上 | 见上 | 见上 | 是。同一 CDP 换 SwiftShader 一轮 8.2s，单张仍 < 1s |
 
-选定 **2 + 4**：headless 不抢焦点、不占一块屏；Metal 起来了就把绘制交给 GPU；CPU 峰值按单进程算低于一核。只加 `--use-angle=metal`、不加另外三条 GPU 标志时 headless 曾 90 秒不出图，所以标志要齐。GPU 起不来时 `shared/shoot.sh` 依次退到 headed-metal、SwiftShader。旧路径（`chrome-headless-shell --screenshot --virtual-time-budget=5000 --disable-gpu`）会让软件 GL 把虚拟时间里的每一帧都画完，一张图可以到分钟级。
+选定 **2 + 4**：headless 不抢焦点、不占一块屏；Metal 起来了就把绘制交给 GPU；CPU 峰值按单进程算低于一核。只加 `--use-angle=metal`、不加另外三条 GPU 标志时 headless 曾 90 秒不出图，所以标志要齐。GPU 起不来时 `shared/shoot.sh` 依次退到 headed-metal、SwiftShader。旧路径（`chrome-headless-shell --screenshot --virtual-time-budget=5000 --disable-gpu`）会让软件 GL 把虚拟时间里的每一帧都画完，一张图可以到分钟级，单进程 CPU 350–390%。
+
+截图进程再加拉开标志：`--num-raster-threads=1 --renderer-process-limit=1 --js-flags=--single-threaded`（SwiftShader 另加 `--disable-gpu-compositing`）。本机前后（`gitanjali-60` 三机位）：
+
+| | 一轮 | 单张 | 单进程 CPU 峰值 | 进程树 CPU |
+|---|---|---|---|---|
+| 拉开前（方案 2，无上述标志） | 4.2s | 0.38–0.57s | 56% | 176% |
+| 拉开后 | 3.5s | 0.25–0.43s | 92%（≤ 一核） | 303%（多进程启动瞬间加总；无一进程超一核） |
+
+页面本身也有预算，交互语义不变：DPR 上限 1.5、帧率上限 30、首帧之后相机不动就不重绘、标签不可见时暂停、无 shadow map、粒子有常数上限、`?lite=1` 或 `prefers-reduced-motion` 关抗锯齿并去掉 ACES。本机 Chrome for Testing 读进程 `%cpu`（接近任务管理器那一栏）：
+
+| 世界 | 静止峰值 / 均值 | 漫游峰值 / 均值 |
+|---|---|---|
+| gitanjali-60 | 2.8% / 0.7% | 16.4% / 12.4% |
+| chunjiang | 4.7% / 1.2% | 15.8% / 13.9% |
+| xiangfuren | 12.4% / 1.8% | 15.8% / 11.9% |
+
+静止 ≤ 15%、漫游 ≤ 60%。
 
 ```sh
 sh gitanjali-60/shots.sh <round> [port]

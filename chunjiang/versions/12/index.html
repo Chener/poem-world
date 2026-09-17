@@ -150,8 +150,6 @@
 
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen clock, no UI
-var LITE = Q.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-var LIVE_FPS = LITE ? 20 : 30;
 var FROZEN_T = 21.0;
 /* Software GL would otherwise faithfully render every frame of Chrome's virtual-time
  * budget, which takes minutes per image. In shot mode we draw a few frames and stop. */
@@ -209,7 +207,7 @@ var ctx = cv.getContext('2d');
 var W = 0, H = 0, DPR = 1;
 
 function resize() {
-  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, LITE ? 1 : 1.5);
+  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   W = Math.max(1, (SHOT ? (window.innerWidth || 960) : cv.clientWidth) | 0);
   H = Math.max(1, (SHOT ? (window.innerHeight || 600) : cv.clientHeight) | 0);
   cv.width = Math.max(1, Math.round(W * DPR));
@@ -734,7 +732,6 @@ function drawBoat() {
   }
 }
 
-var barPath = null;
 function drawSandbar() {
   /* The bar is one polygon: the lip loop, clipped against the near plane and closed
    * along the bottom of the screen. Reconstructing it per screen column produced a
@@ -769,7 +766,6 @@ function drawSandbar() {
     if (ain) chain.push(a);
     if (ain !== bin) chain.push(mix(a, b, (NEAR - a.Z) / (b.Z - a.Z)));
   }
-  barPath = null;
   if (chain.length > 2) {
     var pts = [];
     for (i9 = 0; i9 < chain.length; i9++) pts.push(toScreen(chain[i9]));
@@ -781,34 +777,19 @@ function drawSandbar() {
     ctx.lineTo(W + 4, pts[pts.length - 1].y); // else the corners cut off as dark wedges
     ctx.lineTo(W + 4, H + 4);
     ctx.closePath();
+    /* 汀上白沙看不见 — not because it is dark, because it is white under this moon */
+    var g = ctx.createLinearGradient(0, H * 0.40, 0, H);
+    g.addColorStop(0, '#aab4c6');
+    g.addColorStop(0.45, '#c6cddb');
+    g.addColorStop(1, '#dde3ec');
+    ctx.fillStyle = g; ctx.fill();
+
+    /* its upper edge dissolves back into the river, so the bar is not a pasted mask */
     var topY = 1e9, botY = -1e9;
     for (i9 = 0; i9 < pts.length; i9++) {
       if (pts[i9].y < topY) topY = pts[i9].y;
       if (pts[i9].y > botY) botY = pts[i9].y;
     }
-    /* 汀上白沙看不见 — not because it is dark, because it is white under this moon.
-     * The ramp used to run over a fixed screen band (0.40H..H), so from a camera where
-     * the bar sits high and shallow the whole thing took only the grey top of the ramp
-     * and came out as one flat slab. It is laid over the bar's own extent now, and it
-     * starts much paler: sand this close to a full moon is nearly the colour of the
-     * moon itself. */
-    var barTop = Math.min(topY, H), barBot = Math.max(botY, barTop + 40);
-    var g = ctx.createLinearGradient(0, barTop, 0, barBot + (H - barBot) * 0.6);
-    g.addColorStop(0, '#c3cbd9');
-    g.addColorStop(0.35, '#d6dce7');
-    g.addColorStop(1, '#e9edf4');
-    ctx.fillStyle = g; ctx.fill();
-    /* kept so the sand grains can be tested against it: the bar is drawn as the near
-     * lip closed down to the bottom of the frame, and a grain sitting on the ring's far
-     * side projects ABOVE that lip, out over open water. Culling by distance alone let
-     * those through as a spray of white dots across the river. */
-    barPath = new Path2D();
-    barPath.moveTo(-4, H + 4); barPath.lineTo(-4, pts[0].y);
-    for (i9 = 0; i9 < pts.length; i9++) barPath.lineTo(pts[i9].x, pts[i9].y);
-    barPath.lineTo(W + 4, pts[pts.length - 1].y); barPath.lineTo(W + 4, H + 4);
-    barPath.closePath();
-
-    /* its upper edge dissolves back into the river, so the bar is not a pasted mask */
     ctx.save(); ctx.clip();
     var fade = ctx.createLinearGradient(0, topY - 6, 0, topY + Math.max(40, (botY - topY) * 0.55));
     fade.addColorStop(0, 'rgba(18,28,46,.72)');
@@ -843,11 +824,8 @@ function drawSandbar() {
       if (!p3) { st = false; continue; }
       if (!st) { ctx.moveTo(p3.x, p3.y); st = true; } else ctx.lineTo(p3.x, p3.y);
     }
-    /* faint and wide: 看不见 means the eye must not be able to fix this edge. At the old
-     * weight it was the brightest line in the picture, which draws the boundary the poem
-     * says you cannot find. */
-    ctx.strokeStyle = 'rgba(214,226,244,' + (0.022 * lw).toFixed(3) + ')';
-    ctx.lineWidth = lw * 4.2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(214,226,244,' + (0.05 * lw).toFixed(3) + ')';
+    ctx.lineWidth = lw * 2.4; ctx.stroke();
   }
   ctx.restore();
 
@@ -855,89 +833,20 @@ function drawSandbar() {
   for (i9 = 0; i9 < grains.length; i9++) {
     var gr = grains[i9];
     var gp = project({ x: gr.x, y: gh(gr.x, gr.z), z: gr.z });
-    if (!gp || gp.z > 130) continue;
-    if (barPath && !ctx.isPointInPath(barPath, gp.x, gp.y)) continue;
-    var near2 = 1 - Math.min(1, gp.z / 130);
-    var gsz = Math.max(0.9, Math.min(2.4, gp.s * 0.11));
+    if (!gp || gp.z > 70) continue;
+    var near2 = 1 - Math.min(1, gp.z / 70);
     ctx.fillStyle = gr.m > 0.5
-      ? 'rgba(250,252,255,' + (0.06 + 0.20 * near2).toFixed(3) + ')'
-      : 'rgba(150,162,186,' + (0.05 + 0.18 * near2).toFixed(3) + ')';
-    ctx.fillRect(gp.x, gp.y, gsz, gsz);
+      ? 'rgba(244,248,255,' + (0.05 + 0.13 * near2).toFixed(3) + ')'
+      : 'rgba(126,140,166,' + (0.04 + 0.12 * near2).toFixed(3) + ')';
+    ctx.fillRect(gp.x, gp.y, 1.2, 1.2);
     if (gr.m > 0.86) {                    // frost, a little above the sand, never felt falling
       var fp = project({ x: gr.x + Math.sin(T * 0.3 + gr.m * 9) * 1.4,
                          y: gh(gr.x, gr.z) + 0.6 + gr.m * 2.2, z: gr.z });
-      if (fp && (!barPath || ctx.isPointInPath(barPath, fp.x, fp.y + 6))) {
+      if (fp) {
         ctx.fillStyle = 'rgba(246,250,255,' + (0.05 + 0.16 * near2).toFixed(3) + ')';
         ctx.fillRect(fp.x, fp.y, 1.1, 1.1);
       }
     }
-  }
-}
-
-function drawMeadow() {
-  /* 江流宛转绕芳甸 — the meadow the grove stands on. Without it the trees' trunks ran
-   * down into open water and stopped in mid-air. It is the same plane as the river
-   * (y = 0), so a trunk's foot lands exactly on its surface; only the colour changes,
-   * and the channel between it and you stays water. */
-  var inner = 18, outer = 104;
-  /* Sampled in contiguous runs: from a camera standing inside the bend, part of the
-   * meadow's arc falls behind the eye and projects to nothing. Bailing out on the first
-   * such sample dropped the whole meadow and left the grove's trunks hanging in the air,
-   * so each unbroken run is filled as its own piece instead. */
-  var runs = [], cur = null;
-  for (var mi = 0; mi <= 72; mi++) {
-    var ma = -0.90 + (mi / 72) * 1.68;
-    var wob = 1 + 0.055 * Math.sin(ma * 7.3) + 0.035 * Math.sin(ma * 13.1 + 1.7);
-    var n1 = project({ x: Math.cos(ma) * inner * wob, y: 0, z: Math.sin(ma) * inner * wob });
-    var f1 = project({ x: Math.cos(ma) * outer * wob, y: 0, z: Math.sin(ma) * outer * wob });
-    if (!n1 || !f1) { cur = null; continue; }
-    if (!cur) { cur = { near: [], far: [] }; runs.push(cur); }
-    cur.near.push(n1); cur.far.push(f1);
-  }
-  for (var ri = 0; ri < runs.length; ri++) {
-    var near = runs[ri].near, far = runs[ri].far, mj;
-    if (near.length < 2) continue;
-    ctx.beginPath();
-    ctx.moveTo(near[0].x, near[0].y);
-    for (mj = 1; mj < near.length; mj++) ctx.lineTo(near[mj].x, near[mj].y);
-    for (mj = far.length - 1; mj >= 0; mj--) ctx.lineTo(far[mj].x, far[mj].y);
-    ctx.closePath();
-    /* a shade the river is not: at (21,32,48) it sat within a point or two of the water
-     * under it and the meadow was invisible, which is how the grove ended up standing on
-     * nothing. 芳甸 is grass, and grass under a full moon carries a little of it. */
-    /* measured over the whole run: taken from the run's first sample alone the two stops
-     * can land on the same y, and a degenerate gradient paints nothing at all — which is
-     * why the meadow was in the frame and yet invisible. */
-    var mTop = 1e9, mBot = -1e9, mk;
-    for (mk = 0; mk < far.length; mk++) if (far[mk].y < mTop) mTop = far[mk].y;
-    for (mk = 0; mk < near.length; mk++) if (near[mk].y > mBot) mBot = near[mk].y;
-    if (!(mBot > mTop + 1)) mBot = mTop + 2;
-    ctx.fillStyle = '#1d2c42'; ctx.fill();          // a bank, opaque, never the river
-    ctx.save(); ctx.clip();
-    /* grass takes the moon the way water does not: flat, dry, a little warmer, and
-     * brightest where it runs down to its own shore */
-    var mg = ctx.createLinearGradient(0, mTop - 6, 0, mBot + 16);
-    mg.addColorStop(0, 'rgba(46,62,84,0)');
-    mg.addColorStop(0.45, 'rgba(52,68,90,.55)');
-    mg.addColorStop(1, 'rgba(66,84,108,.90)');
-    ctx.fillStyle = mg; ctx.fillRect(0, mTop - 8, W, mBot - mTop + 28);
-    /* its far edge is not an edge: the meadow gives out into the haze over the river
-     * rather than being ruled off straight across the picture */
-    var fg = ctx.createLinearGradient(0, mTop - 14, 0, mTop + Math.max(26, (mBot - mTop) * 0.45));
-    fg.addColorStop(0, 'rgba(24,36,54,.95)');
-    fg.addColorStop(0.5, 'rgba(24,36,54,.42)');
-    fg.addColorStop(1, 'rgba(24,36,54,0)');
-    ctx.fillStyle = fg; ctx.fillRect(0, mTop - 16, W, (mBot - mTop) * 0.5 + 30);
-    /* the shore of it: a breath of pale, not a line */
-    ctx.lineCap = 'round';
-    for (var lw2 = 3; lw2 >= 1; lw2--) {
-      ctx.beginPath(); ctx.moveTo(near[0].x, near[0].y);
-      for (mj = 1; mj < near.length; mj++) ctx.lineTo(near[mj].x, near[mj].y);
-      ctx.strokeStyle = 'rgba(184,202,228,' + (0.030 * lw2).toFixed(3) + ')';
-      ctx.lineWidth = lw2 * 3.4; ctx.stroke();
-    }
-    ctx.lineCap = 'butt';
-    ctx.restore();
   }
 }
 
@@ -953,65 +862,36 @@ function drawGrove() {
     if (!cp2) continue;
     var cr = Math.max(3, g.h * 0.62 * cp2.s);
 
-    /* 皆似霰 — 霰 is sleet: grains you could count. The crown used to be a big radial
-     * gradient with three dozen flecks laid on top, which reads as a ball of cotton wool
-     * near to and as a clean little dot cluster far off — two different pictures of the
-     * same tree in one frame. It is one recipe now at every distance: a very faint halo
-     * to sit the tree in the air, a few boughs, and a cloud of grains whose COUNT rises
-     * with the crown's area so the density on screen stays the same however far away it
-     * is. Everything is deterministic in i7/k2, so shots stay byte-reproducible. */
-    ctx.save();
-    ctx.translate(cp2.x, cp2.y); ctx.scale(1, 0.70); ctx.translate(-cp2.x, -cp2.y);
-    var cg = ctx.createRadialGradient(cp2.x, cp2.y, cr * 0.1, cp2.x, cp2.y, cr * 1.05);
-    cg.addColorStop(0, 'rgba(232,240,252,.13)');
-    cg.addColorStop(0.6, 'rgba(224,234,250,.06)');
+    /* the crown: white, soft-edged, wider than it is tall */
+    var cg = ctx.createRadialGradient(cp2.x, cp2.y, cr * 0.15, cp2.x, cp2.y, cr);
+    cg.addColorStop(0, 'rgba(238,244,254,.42)');
+    cg.addColorStop(0.55, 'rgba(226,236,250,.20)');
     cg.addColorStop(1, 'rgba(220,232,248,0)');
+    ctx.save();
+    ctx.translate(cp2.x, cp2.y); ctx.scale(1, 0.66); ctx.translate(-cp2.x, -cp2.y);
     ctx.fillStyle = cg;
-    ctx.beginPath(); ctx.arc(cp2.x, cp2.y, cr * 1.05, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cp2.x, cp2.y, cr, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
-    /* the trunk, and two boughs that reach up into the crown so it is held, not floating */
+    /* the trunk: short, dark, only as much as holds the crown up */
     var bp2 = project({ x: g.x, y: y0, z: g.z });
     if (bp2) {
-      ctx.strokeStyle = 'rgba(50,60,80,.40)';
-      ctx.lineWidth = Math.max(0.9, 0.15 * cp2.s);
-      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(58,68,86,.34)';
+      ctx.lineWidth = Math.max(0.9, 0.16 * cp2.s);
       ctx.beginPath();
       ctx.moveTo(bp2.x, bp2.y);
-      ctx.quadraticCurveTo(bp2.x + (cp2.x - bp2.x) * 0.5 + cr * 0.06, cp2.y + cr * 0.72,
-                           cp2.x, cp2.y + cr * 0.18);
+      ctx.lineTo(cp2.x, cp2.y + cr * 0.30);
       ctx.stroke();
-      ctx.lineWidth = Math.max(0.6, 0.075 * cp2.s);
-      ctx.strokeStyle = 'rgba(50,60,80,.26)';
-      for (var bI = -1; bI <= 1; bI += 2) {
-        ctx.beginPath();
-        ctx.moveTo(cp2.x, cp2.y + cr * 0.34);
-        ctx.quadraticCurveTo(cp2.x + bI * cr * 0.34, cp2.y + cr * 0.20,
-                             cp2.x + bI * cr * 0.62, cp2.y - cr * 0.10);
-        ctx.stroke();
-      }
-      ctx.lineCap = 'butt';
     }
 
-    /* the sleet itself */
-    var nGr = Math.max(26, Math.min(420, Math.round(cr * cr * 0.34)));
-    for (var k2 = 0; k2 < nGr; k2++) {
-      var q1 = Math.sin(i7 * 51.13 + k2 * 17.31) * 43758.5453; q1 -= Math.floor(q1);
-      var q2 = Math.sin(i7 * 11.71 + k2 * 29.07) * 43758.5453; q2 -= Math.floor(q2);
-      var q3 = Math.sin(i7 * 7.19 + k2 * 41.53) * 43758.5453; q3 -= Math.floor(q3);
-      var a = q1 * 6.28318;
-      /* sqrt keeps the grains even across the disc instead of piling at the centre;
-       * the ragged term makes the crown's outline a blossom's, not a circle's */
-      var rr3 = Math.sqrt(q2) * (0.86 + 0.20 * Math.sin(a * 3.1 + g.seed));
-      var px2 = cp2.x + Math.cos(a) * cr * rr3;
-      var py2 = cp2.y + Math.sin(a) * cr * rr3 * 0.70;
-      var sz = Math.max(0.9, Math.min(2.0, 0.045 * cp2.s));
-      var tw2 = 0.40 + 0.60 * Math.abs(Math.sin(q3 * 9 + T * 0.4));
-      /* brighter at the crown's heart, thinning out at its edge — the way a flowering
-       * tree holds the moon, and the way the edge is allowed to dissolve */
-      var ga2 = (0.16 + 0.52 * (1 - rr3 * 0.82)) * tw2;
-      if (ga2 < 0.03) continue;
-      ctx.fillStyle = 'rgba(248,251,255,' + ga2.toFixed(3) + ')';
+    /* blossom: sleet caught in the crown, never below it */
+    for (var k2 = 0; k2 < 34; k2++) {
+      var a = g.seed + k2 * 1.21;
+      var rr3 = 0.34 + (k2 % 6) * 0.13;
+      var px2 = cp2.x + Math.cos(a) * cr * rr3 * 1.15;
+      var py2 = cp2.y + Math.sin(a * 1.7) * cr * rr3 * 0.62;
+      var sz = Math.max(1, 0.05 * cp2.s);
+      ctx.fillStyle = 'rgba(248,251,255,' + (0.30 + 0.46 * Math.abs(Math.sin(a * 3 + T * 0.4))).toFixed(3) + ')';
       ctx.fillRect(px2 - sz / 2, py2 - sz / 2, sz, sz);
     }
   }
@@ -1022,7 +902,6 @@ var keys = Object.create(null);
 addEventListener('keydown', function (e) {
   keys[e.code] = true;
   if (['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
-  pokeLive();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -1032,7 +911,6 @@ stage.addEventListener('pointerdown', function (e) {
   if (e.target.closest('#touch') || e.target.closest('#enter')) return;
   drag = { x: e.clientX, y: e.clientY };
   try { stage.setPointerCapture(e.pointerId); } catch (err) {}
-  pokeLive();
 });
 stage.addEventListener('pointermove', function (e) {
   if (!drag) return;
@@ -1040,7 +918,6 @@ stage.addEventListener('pointermove', function (e) {
   cam.pitch -= (e.clientY - drag.y) * 0.0023;
   cam.pitch = Math.max(-0.42, Math.min(0.45, cam.pitch));
   drag = { x: e.clientX, y: e.clientY };
-  pokeLive();
 });
 addEventListener('pointerup', function () { drag = null; });
 
@@ -1120,7 +997,6 @@ function drawFrame() {
   var moonP = drawMoon();
   drawFarBank();
   drawWater(moonP);
-  drawMeadow();
   drawBoat();
   drawSandbar();
   drawGrove();
@@ -1133,46 +1009,12 @@ function markShotReady() {
 }
 
 function frame(now) {
-  if (SHOT) return;
-  if (!wantLive(now)) { loopOn = false; return; }
-  requestAnimationFrame(frame);
-  if (now - lastDrawT < 1000 / LIVE_FPS) return;
   var dt = Math.min(0.05, (now - last) / 1000); last = now;
-  lastDrawT = now;
-  T += dt; step(dt);
+  if (SHOT) { T = FROZEN_T; } else { T += dt; step(dt); }
   drawFrame();
+  if (SHOT && ++shotFrames >= SHOT_FRAMES) { markShotReady(); return; }
+  requestAnimationFrame(frame);
 }
-
-var loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
-function wantLive(now) {
-  if (document.hidden) return false;
-  if (roamHold) return true;
-  if (now < liveUntil) return true;
-  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
-      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.Space) return true;
-  if (drag || jx || jz) return true;
-  return false;
-}
-function pokeLive() {
-  liveUntil = performance.now() + 1400;
-  kickLoop();
-}
-function kickLoop() {
-  if (SHOT || document.hidden) return;
-  if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(frame); }
-}
-document.addEventListener('visibilitychange', function () {
-  if (document.hidden) loopOn = false;
-  else pokeLive();
-});
-window.__poemPerf = {
-  poke: pokeLive,
-  roam: function (on) {
-    roamHold = !!on;
-    keys.KeyW = !!on;
-    if (on) pokeLive();
-  }
-};
 
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
@@ -1232,7 +1074,7 @@ if (SHOT) {
   markShotReady();
 } else {
   last = performance.now();
-  drawFrame();
+  requestAnimationFrame(frame);
 }
 
 })();

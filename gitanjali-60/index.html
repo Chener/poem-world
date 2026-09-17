@@ -215,6 +215,8 @@
 
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen time, no UI
+var LITE = Q.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+var LIVE_FPS = LITE ? 20 : 30;
 var FROZEN_T = 14.0;                                   // deterministic clock for shots
 
 /* ---------------------------------------------------------------- POEM -- */
@@ -247,10 +249,11 @@ var CAMS = [
 
 /* ----------------------------------------------------------- RENDERER -- */
 var canvas = document.getElementById('view');
-var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !SHOT && !LITE, powerPreference: 'high-performance' });
+renderer.setPixelRatio(SHOT ? 1 : Math.min(devicePixelRatio || 1, LITE ? 1 : 1.5));
+renderer.shadowMap.enabled = false;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = LITE ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.02;
 
 var scene = new THREE.Scene();
@@ -1015,7 +1018,7 @@ var SPRAY_PERIOD = (function () {
   return 6.28318 / (Math.sqrt(9.8 / k) * k * WAVE_SPEED);
 })();
 
-var SPRAY_CELLS = 150, SPRAY_PER_CELL = 11, SPRAY_TILE = 240;
+var SPRAY_CELLS = 150, SPRAY_PER_CELL = SHOT ? 6 : 11, SPRAY_TILE = 240;  // particle cap
 var SPRAY_N = SPRAY_CELLS * SPRAY_PER_CELL;
 var SPRAY_LIFE = 1.70, SPRAY_Z = -13.0;
 
@@ -1490,6 +1493,17 @@ function buildPearlBoat() {
   line.rotation.z = 0.10;
   o.add(line);
 
+  /* what he is going down for, piling up on the deck */
+  var basket = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.34, 0.40, 9),
+                              new THREE.MeshLambertMaterial({ color: 0x6b5638, flatShading: true }));
+  basket.position.set(-0.55, L * 0.05, -1.5);
+  o.add(basket);
+  var catchHeap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 5),
+                                 new THREE.MeshLambertMaterial({ color: 0xece3cd, flatShading: true }));
+  catchHeap.scale.set(1, 0.55, 1);
+  catchHeap.position.set(-0.55, L * 0.05 + 0.22, -1.5);
+  o.add(catchHeap);
+
   /* the float he is tied to, and the ring it sits in */
   var gourd = new THREE.Mesh(new THREE.SphereGeometry(0.26, 9, 7),
                              new THREE.MeshLambertMaterial({ color: 0xc8b070, flatShading: true }));
@@ -1567,8 +1581,17 @@ function updatePearlers(t, camX) {
       var q = (ph - 0.12) / 0.10;
       legs.position.set(1.35, 1.35 - q * 2.75, -0.5);
       legs.rotation.set(0.30 * q, 0, -0.12 + q * 0.28);
-    } else if (ph < 0.76) {                // down. nothing on the water but the gourd
+    } else if (ph < 0.70) {                // down. nothing on the water but the gourd
       diver.visible = false; legs.visible = false;
+    } else if (ph < 0.80) {
+      /* his head and shoulders back on the surface, still on the line, while
+       * the other man hauls. From the beach this is the picture the third
+       * stanza needs: a grown man going down after something, in the same
+       * frame as a child throwing a stone away. */
+      diver.visible = true; legs.visible = false;
+      diver.position.set(1.35, -1.28, -0.5);
+      diver.rotation.set(0.22, 0.3, 0);
+      tender.rotation.x = 0.55 + Math.sin(t * 2.2 + i) * 0.16;   // hauling
     } else if (ph < 0.86) {                // up again
       diver.visible = true; legs.visible = false;
       var r = (ph - 0.76) / 0.10;
@@ -2278,7 +2301,7 @@ function updateChildren(t, camX) {
       if (kh < 0.155) {
         putProp(iShell, nSh++, kx2, groundY(kx2, kz2) + 0.004, kz2, kh * 41.0, 0.42 + kh * 1.1);
       } else if (nPb < PEBBLE_POOL) {
-        putProp(iPebble, nPb++, kx2, groundY(kx2, kz2) + 0.004, kz2, kh * 33.0, 0.55 + kh * 0.5);
+        putProp(iPebble, nPb++, kx2, groundY(kx2, kz2) + 0.004, kz2, kh * 33.0, 0.42 + kh * 0.42);
       }
     }
   }
@@ -2298,7 +2321,7 @@ function updateChildren(t, camX) {
     var shz = 4.5 + h1(sx0 * 2.71) * 2.2 + Math.sin(shx * 0.021) * 1.1;
     if (underfoot(shx, shz)) continue;
     putProp(iPebble, nPb++, shx, groundY(shx, shz) + 0.006, shz,
-            h1(sx0 * 3.37) * TAU2, 0.55 + sg * 0.85);
+            h1(sx0 * 3.37) * TAU2, 0.42 + sg * 0.62);
   }
 
   /* and the prints that cover it. Every square metre of this sand has been
@@ -2787,7 +2810,7 @@ function updateChildren(t, camX) {
             var hx2 = cx - Math.sin(yaw) * 0.42 + Math.cos(ha) * hr;
             var hz2 = cz - Math.cos(yaw) * 0.42 + Math.sin(ha) * hr;
             putProp(iPebble, nPb++, hx2, groundY(hx2, hz2) + 0.02 + hp * 0.018, hz2,
-                    ha, 0.8 + h2(g, 890 + c * 6 + hp) * 0.4);
+                    ha, 0.50 + h2(g, 890 + c * 6 + hp) * 0.28);
           }
         }
         if (sph < 0.42 && nPb + 3 <= PEBBLE_POOL) {
@@ -2818,7 +2841,12 @@ function updateChildren(t, camX) {
             var bx2 = hx + dx2 * vf * tau, bz2 = hz + dz2 * vf * tau;
             var by2 = hy + vy * tau - 4.9 * tau * tau;
             putProp(iPebble, nPb++, bx2, Math.max(groundY(bx2, bz2) + 0.006, by2), bz2,
-                    tau * 9.0, 1.55 + h2(g, 550 + c * 9 + b) * 0.9);
+                    /* small. The entire weight of this gesture is that what
+                     * leaves the hand is worth nothing: a stone the size of a
+                     * child's head turns "gather pebbles and scatter them
+                     * again" into an event with force in it, which is the
+                     * opposite of what the line says. */
+                    tau * 9.0, 0.42 + h2(g, 550 + c * 9 + b) * 0.30);
           }
         }
       }
@@ -2832,7 +2860,7 @@ function updateChildren(t, camX) {
   iShell.instanceMatrix.needsUpdate = true; iPebble.instanceMatrix.needsUpdate = true;
   iFresh.instanceMatrix.needsUpdate = true;
   iFoot.instanceMatrix.needsUpdate = true;
-  iTorso.count = n; iSkirt.count = n; iHead.count = n; iHair.count = n; iShadow.count = Q.get('nodecal') ? 0 : n;
+  iTorso.count = n; iSkirt.count = n; iHead.count = n; iHair.count = n; iShadow.count = (SHOT || Q.get('nodecal')) ? 0 : n;
   iUpArm.count = iFore.count = iThigh.count = iShin.count = n * 2;
   iTorso.instanceMatrix.needsUpdate = true;
   iSkirt.instanceMatrix.needsUpdate = true;
@@ -2860,6 +2888,7 @@ var locked = false;
 addEventListener('keydown', function (e) {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
+  pokeLive();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -2878,6 +2907,7 @@ document.addEventListener('mousemove', function (e) {
   player.yaw   -= e.movementX * 0.0022;
   player.pitch -= e.movementY * 0.0022;
   player.pitch = Math.max(-1.25, Math.min(1.15, player.pitch));
+  pokeLive();
 });
 
 /* touch: left half drags a stick, right half looks */
@@ -3049,7 +3079,41 @@ function renderOnce() {
   renderer.render(scene, camera);
 }
 
-function frame() { requestAnimationFrame(frame); renderOnce(); }
+/* The interactive page does not keep a rAF loop spinning on an idle tab: it
+ * draws while somebody is moving, for a second and a bit after they stop, and
+ * then it stops until they touch something again. Several of these worlds share
+ * one machine with the person using it. */
+var loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
+function wantLive(now) {
+  if (document.hidden) return false;
+  if (roamHold) return true;
+  if (now < liveUntil) return true;
+  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
+      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight ||
+      keys.ShiftLeft || keys.ShiftRight) return true;
+  if (player.vel && player.vel.length() > 0.04) return true;
+  return false;
+}
+function pokeLive() { liveUntil = performance.now() + 1400; kickLoop(); }
+function kickLoop() {
+  if (SHOT || document.hidden) return;
+  if (!loopOn) { loopOn = true; requestAnimationFrame(frame); }
+}
+function frame(now) {
+  if (SHOT) return;
+  if (!wantLive(now)) { loopOn = false; return; }
+  requestAnimationFrame(frame);
+  if (now - lastDrawT < 1000 / LIVE_FPS) return;
+  lastDrawT = now;
+  renderOnce();
+}
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) loopOn = false; else pokeLive();
+});
+window.__poemPerf = {
+  poke: pokeLive,
+  roam: function (on) { roamHold = !!on; keys.KeyW = !!on; if (on) pokeLive(); }
+};
 
 /* The shot harness drives the cameras itself: it asks for one camera, takes the
  * picture, asks for the next. Nothing is rebuilt between them, and nothing waits
@@ -3101,7 +3165,8 @@ if (SHOT) {
   if (bv) bv.remove();
   markShotReady();
 } else {
-  frame();
+  renderOnce();
+  pokeLive();
   /* hold the boot veil until the first real frame has actually landed */
   requestAnimationFrame(function () {
     requestAnimationFrame(function () {
