@@ -64,6 +64,64 @@ enough like a flat sea to waste an afternoon on. Non-uniform rows fixed the firs
 the second, a mesh that vanishes but leaves the scene looking plausible is almost always
 winding or `side`.
 
+**Any wide stroke swept along a chain of samples will betray itself at its ends and in
+the near field.** chunjiang lost six rounds to one artefact — a pale block of river with a
+square vertical edge — that turned out to be twenty-two 34px strokes following the
+meadow's shore and all stopping at the same sample. The same shape of bug appeared four
+more times: the meadow's far edge, its shore breath, the shallows' rings (which also comb
+into teeth and weave into fabric where the samples spread out near the eye), and the
+tide's crests. The rules that hold: fade the stroke's alpha at both ends and by segment
+length, clip anything that lies on the water to `waterTop()`, and where a layer must cover
+the frame, wash it per screen column rather than sweeping a curve across it.
+
+**Anything that consumes the shared `rnd()` during world construction must be appended
+last.** One LCG places the sand, the grove, the far bank and the rest; inserting a new
+table in the middle shifts every one of them. Adding a cloud scattered chunjiang's whole
+wood, twice.
+
+**A defect is not necessarily drawn by the thing it appears to sit on, and a layer can be
+erased by the one drawn after it.** Silence each suspect in turn and measure the pixels —
+`zlib`-decoding the PNG and scanning a row or a column takes a few lines and settles in one
+round what looking at the image argues about for five. chunjiang's "hard bright line along
+the sandbar" was the bar's own polygon folding over itself and cancelling, so most of the
+sand was not being drawn at all; its "the lit tower throws no reflection, but the smaller
+boat lantern does" was draw order — the tower belongs to `drawFarBank()`, which runs
+before `drawWater()`, so the river was painted straight over its column.
+
+**Light a night scene by measuring it, not by eye.** For five rounds chunjiang's critics
+called the foreground sand a flat pastel wedge. The cause was not texture: the near sand
+averaged luminance 130 while the open water ran 22-46 and the moon's own road only reached
+60, so the ground at the viewer's feet was the brightest thing in the frame with nothing
+lighting it. On a river at night the near bank is the DARKEST thing you can see. Decide
+each surface's target luminance against the others first, then check it by decoding a band
+of rows; values tuned against a near-white surface (grain pairs, dune shading, wet glints)
+all have to be re-seated when that surface moves.
+
+**Light a night scene by measuring it, and remember that every value is seated against
+another one.** For five rounds chunjiang's critics called the foreground sand a flat
+pastel wedge. Texture was never the problem: the near sand measured luminance 130 while
+the open water ran 22-46 and the moon's own road only reached 60, so the ground at the
+viewer's feet was the brightest thing in the frame with nothing lighting it. What matters
+is not a surface's absolute value but where it sits relative to the light source in the
+picture — too bright and the scene reads as lit from below, too dark and 「看不见」 becomes
+「没照亮」, and chunjiang swung through both before landing between them. The trap is what
+follows: grain pairs, wet glints, dune shading and edge-softening strokes are all chosen
+against the surface they lie on, and when that surface moves they are silently left
+behind. A dune shade and a shore stroke still carrying their old values dragged an L80
+bar down to L27 on one camera while another camera measured it at L76 — which is also why
+two critics can each be right and flatly contradict each other: **check which camera a
+report is about before believing it generalises.**
+
+**A world that is one frozen tableau reads as wallpaper, however well each surface is
+drawn.** Three independent blind critics in a row led with the same complaint about
+chunjiang, and none of them was pointing at a surface: the moon sat at the same height in
+every frame and the tower's lamp was lit in the opening one, so 「何處相思明月樓」 was
+answered before the poem asked it. Deriving such things from a smooth function of the
+reader's position over the poem's stations fixes it and stays byte-reproducible, because a
+frozen camera is a fixed input. Weight that function sharply — chunjiang's stations stand
+15-25m apart, and an inverse-square falloff with too large a floor gave the station you
+are standing on barely half the weight, so every camera came out at mid-night.
+
 **A camera's `y` in `CAMS` is world-absolute, not height above ground.** gitanjali-60's
 `children` camera reads as 0.95m but sits 8cm above the sand there, so anything flat and
 close to it smears across the frame. Check a camera against the terrain height at its

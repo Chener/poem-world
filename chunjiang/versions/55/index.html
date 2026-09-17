@@ -144,7 +144,6 @@
 </aside>
 
 <script src="../shared/timeline.js"></script>
-<script src="../shared/worldprobe.js"></script>
 <script src="log.js"></script>
 <script>
 /* =========================================================================
@@ -285,8 +284,6 @@ for (var i6 = 0; i6 < 38; i6++) {
 
 /* the moon: low over the water, the centre of gravity of the whole night */
 var MOON = { th: Math.PI * 1.5, dist: 620, y: 96, r: 56 };
-var NIGHT = 0.5;   // 0 at 潮生, 1 at 落月摇情满江树 — set each frame by updateMoon()
-var LAMP = 1;      // how far the tower's window has come up, 0..1
 MOON.x = Math.cos(MOON.th) * MOON.dist;
 MOON.z = Math.sin(MOON.th) * MOON.dist;
 
@@ -412,7 +409,6 @@ for (var i9c = 0; i9c < 2; i9c++) {
 
 /* 明月楼: a tower on the far bank with exactly one window lit */
 var TOWER = { x: 22, z: -95 };
-var TW = 5.6;                        // the tower's module: half-widths are multiples of it
 
 /* --------------------------------------------------------------- DRAW  -- */
 function seg(a, b, col, w) {
@@ -521,12 +517,6 @@ function drawMoon() {
   return p;
 }
 
-/* how much of the tower reaches this eye; under 0.02 it is not drawn at all */
-function towerAlpha() {
-  var d = Math.hypot(TOWER.x - cam.x, TOWER.z - cam.z);
-  return Math.max(0, Math.min(1, (200 - d) / 95));
-}
-
 function drawFarBank() {
   /* the far bank: trees and one lit tower, all of it almost dissolved in haze */
   var k;
@@ -584,10 +574,12 @@ function drawFarBank() {
   }
   /* 明月楼 — 何处相思明月楼: eaves that lift at the corners, a railing, one lit window,
    * and the whole of it lying broken on the water. */
+  var TW = 5.6;
   /* how much of the tower this eye gets. From the grove station it is a hundred and
    * eighty metres off and half behind the mist, and drawn at full strength it read there
    * as a small grey block that could not be identified as anything. */
-  var tA = towerAlpha();
+  var tDist = Math.hypot(TOWER.x - cam.x, TOWER.z - cam.z);
+  var tA = Math.max(0, Math.min(1, (200 - tDist) / 95));
   if (tA < 0.02) return;
   ctx.save();
   ctx.globalAlpha = tA;
@@ -780,22 +772,22 @@ function drawFarBank() {
   troof(25.8, TW * 1.12, 3.2);
 
   var wp = project({ x: TOWER.x + 1.2, y: 14.2, z: TOWER.z - 0.25 });
-  if (wp && LAMP > 0.01) {
+  if (wp) {
     /* 何处相思明月楼 — one window, and far away. The halo used to come out very nearly
      * the moon's own diameter and brighter at its heart, so the eye went to the tower
      * first and the moon second; in this poem nothing outshines the moon. */
     var ws = Math.max(2.0, 1.7 * wp.s);
     var gl = ctx.createRadialGradient(wp.x, wp.y, 0, wp.x, wp.y, ws * 3.6);
-    gl.addColorStop(0, 'rgba(255,206,138,' + (0.22 * LAMP).toFixed(3) + ')');
-    gl.addColorStop(0.35, 'rgba(255,196,124,' + (0.07 * LAMP).toFixed(3) + ')');
+    gl.addColorStop(0, 'rgba(255,206,138,.22)');
+    gl.addColorStop(0.35, 'rgba(255,196,124,.07)');
     gl.addColorStop(1, 'rgba(255,196,124,0)');
     ctx.fillStyle = gl; ctx.fillRect(wp.x - ws * 3.6, wp.y - ws * 3.6, ws * 7.2, ws * 7.2);
     /* a lattice window, and its light spilling past its own frame — a flat orange
      * rectangle was the last hard-edged thing left in the picture */
     var wgr = ctx.createLinearGradient(wp.x - ws * 0.5, 0, wp.x + ws * 0.5, 0);
-    wgr.addColorStop(0, 'rgba(255,214,152,' + (0.62 * LAMP).toFixed(3) + ')');
-    wgr.addColorStop(0.5, 'rgba(255,228,178,' + (0.92 * LAMP).toFixed(3) + ')');
-    wgr.addColorStop(1, 'rgba(255,214,152,' + (0.62 * LAMP).toFixed(3) + ')');
+    wgr.addColorStop(0, 'rgba(255,214,152,.62)');
+    wgr.addColorStop(0.5, 'rgba(255,228,178,.92)');
+    wgr.addColorStop(1, 'rgba(255,214,152,.62)');
     ctx.fillStyle = wgr;
     ctx.fillRect(wp.x - ws * 0.5, wp.y - ws * 0.8, ws, ws * 1.6);
     if (ws > 6) {
@@ -1130,19 +1122,11 @@ function reflect(x, z, height, halfWidth, colour, strength) {
   }
 }
 
-/* where the skiff is at this instant. The debug port reads this too: one formula,
- * so the JSON can never report a boat the picture does not have. */
-function boatAt() {
-  var a = boat.th + T * boat.drift;
-  return { x: Math.cos(a) * boat.r, z: Math.sin(a) * boat.r,
-           bob: Math.sin(T * 0.7) * 0.10 };
-}
-
 function drawBoat() {
   /* 谁家今夜扁舟子 — a skiff: the sheer sweeps up at both ends, and it never arrives */
-  var bp = boatAt();
-  var bx = bp.x, bz = bp.z;
-  var bob = bp.bob;
+  var a = boat.th + T * boat.drift;
+  var bx = Math.cos(a) * boat.r, bz = Math.sin(a) * boat.r;
+  var bob = Math.sin(T * 0.7) * 0.10;
   var tilt = Math.sin(T * 0.53) * 0.06;
 
   /* the hull's own reflection, kept faint and broken: at full strength the fourteen
@@ -1485,25 +1469,15 @@ function drawSandbar() {
        * river's own value (19 -> 32), and the whole sequence of silencing the fill, the
        * grains and the wet belt, none of which moved the number at all.
        * The shore reads cleanest at exactly these weights. */
-      /* RAISED, after nine rounds of moving the sand instead. Every critic who has looked
-       * at this frame has said the same thing in different words — the bar is "一块打光的
-       * 白绸压在黑水上" — and the useful half of that sentence is 黑水, not 白绸.
-       * A pale bar against dark water draws an edge at any brightness the bar is given;
-       * that is why taking the sand up (L169) and taking it down (L44) both failed, and
-       * why the answer is not a third value for the sand. 白沙看不见 needs BOTH sides to
-       * be white: the shallows hugging the bar have to carry as much moon as the sand
-       * does, and then the frost drifting across the lip finishes the job.
-       * Do not take these back down — that was tried too, and it opens a dark gap between
-       * the wash and the sand's own ramp, which is a harder edge than the pale one. */
       sg2.addColorStop(0.00, 'rgba(206,218,238,0)');
-      sg2.addColorStop(0.45, 'rgba(210,222,240,' + (0.165 * wgt).toFixed(3) + ')');
-      sg2.addColorStop(0.80, 'rgba(214,226,242,' + (0.115 * wgt).toFixed(3) + ')');
+      sg2.addColorStop(0.45, 'rgba(210,222,240,' + (0.095 * wgt).toFixed(3) + ')');
+      sg2.addColorStop(0.80, 'rgba(214,226,242,' + (0.058 * wgt).toFixed(3) + ')');
       /* it does NOT go out at the shore. Both the wash and the sand's own fill were
        * fading to nothing at the same line, so the dark river showed through between
        * them — a hard dark edge in exactly the place the poem says there is no edge. */
       /* and low at the shore itself: at any weight this last stop draws a bright rim
        * along the top of the bar, which the eye then counts as one more band of value */
-      sg2.addColorStop(1.00, 'rgba(216,228,244,' + (0.092 * wgt).toFixed(3) + ')');
+      sg2.addColorStop(1.00, 'rgba(216,228,244,' + (0.045 * wgt).toFixed(3) + ')');
       /* (the gradient's own coordinates stop at the shore, so the extra strip below it
        *  simply carries the last stop's value) */
       ctx.fillStyle = sg2;
@@ -1595,22 +1569,11 @@ function drawSandbar() {
      * lowering the sand only raised that band's contrast against it. So the bar sits a
      * little above the water at L56 falling to L44, and the edge is fought where the edge
      * actually is — in the band, a hundred lines below. */
-    /* Where the pendulum finally comes to rest, and the distinction that took nine rounds
-     * to see. It is NOT about how bright the sand is in absolute terms; it is about where
-     * it sits relative to the moon's road on the water.
-     *   L169: brighter than the road (which peaks near 100) — "脸下的沙是全画最亮的",
-     *         the lighting reads as coming from below and the whole scene is wrong.
-     *   L44 : far below the water — "沙看不见是因为它黑，「看不见」被做成了
-     *         「没照亮」" — which is the line stood on its head just as badly.
-     * 白沙 is pale. It has to sit just UNDER the road: bright enough to be white sand
-     * under a full moon, never bright enough to outshine the thing lighting it. L72 at
-     * the shore falling to L57 at the bottom of the frame does that, and the boundary is
-     * then dissolved by the frost veil drifting across it rather than by a value match. */
-    g.addColorStop(0, 'rgba(64,73,92,0)');
-    g.addColorStop(t1 * 0.45, 'rgba(64,73,92,.52)');
-    g.addColorStop(t1, 'rgba(64,73,92,1)');
-    g.addColorStop(Math.min(1, t1 + 0.18), 'rgba(58,67,85,1)');
-    g.addColorStop(1, 'rgba(50,58,75,1)');
+    g.addColorStop(0, 'rgba(56,64,82,0)');
+    g.addColorStop(t1 * 0.45, 'rgba(56,64,82,.52)');
+    g.addColorStop(t1, 'rgba(56,64,82,1)');
+    g.addColorStop(Math.min(1, t1 + 0.18), 'rgba(52,60,78,1)');
+    g.addColorStop(1, 'rgba(38,45,60,1)');
     ctx.fillStyle = g; ctx.fill();
     /* kept so the sand grains can be tested against it: the bar is drawn as the near
      * lip closed down to the bottom of the frame, and a grain sitting on the ring's far
@@ -1631,11 +1594,7 @@ function drawSandbar() {
      * with a corner in it where the envelope turned. */
     for (var fI = 6; fI >= 1; fI--) {
       ctx.beginPath(); barShore(ctx);
-      /* six passes up to 66px wide, and the colour was L28 — seated, like the dunes and
-       * the grains, against a version of this bar that no longer exists. Softening an
-       * edge must not also drag the whole surface down: at L28 over an L80 bar these
-       * passes were most of why the 4-sandbar foreground measured 35 instead of 80. */
-      ctx.strokeStyle = 'rgba(64,74,94,' + (0.022 * fI / 6 + 0.010).toFixed(3) + ')';
+      ctx.strokeStyle = 'rgba(19,29,47,' + (0.022 * fI / 6 + 0.010).toFixed(3) + ')';
       ctx.lineWidth = fI * 11; ctx.stroke();
     }
 
@@ -1667,17 +1626,7 @@ function drawSandbar() {
         /* also re-seated on the darkened bar (see the ramp above): pure white was the
          * lit face of a dune on sand that was itself near-white; on sand at L36-63 it
          * blows out. The lit face is a moonlit grey now, the shaded one true shadow. */
-        /* Re-seated a second time, and this is what was actually crushing the bar in the
-         * 4-sandbar frame. The shaded face was '16,21,32' — chosen when the bar's own ramp
-         * was down at L36-63 — and it was never moved when the ramp went back up. With the
-         * bar at L79-93 the dune shading was still painting L22 over it, so the measured
-         * foreground there came out at L27 while the fill alone specifies near 80, and a
-         * critic reported the sand as "画面里最深的青灰蓝，比水还暗" in the same round
-         * the moonrise frame measured L76 against water at L48. Both were true: they are
-         * different cameras and the dunes only dominate where you stand ON the bar.
-         * Lesson, already in AGENTS.md and earned again: when a surface's value moves,
-         * everything seated against it has to move too — grains, wet glints AND dunes. */
-        var dcol = dS === 0 ? '132,145,170' : '54,62,78';
+        var dcol = dS === 0 ? '104,116,140' : '16,21,32';
         var damp = (dS === 0 ? 0.072 : 0.060) * (0.45 + d3);
         ctx.save();
         ctx.translate(dcx, dcy); ctx.scale(1, 0.26); ctx.translate(-dcx, -dcy);
@@ -1891,30 +1840,11 @@ function drawSandbar() {
      * still be told apart. */
     ctx.fillStyle = gr.m > 0.5 ? gaL : gaD;
     ctx.fillRect(gp.x, gp.y, gsz, gsz);
-    /* 0.86 left about one grain in seven as frost, and after the veil was spread out
-     * over the water as well a critic reported "空里的流霜几乎没有...只剩零星几点
-     * 浮尘，不成「流」". A veil has to be dense enough to be a veil. */
-    if (gr.m > 0.74) {                    // frost, a little above the sand, never felt falling
-      /* 空里流霜不觉飞，汀上白沙看不见 — these are one sentence, and the second half
-       * is a consequence of the first. The frost used to be clipped to barPath, so the
-       * veil stopped dead ON the waterline: the one layer whose whole job is to make the
-       * boundary unfindable was itself ending exactly at the boundary, which SHARPENS it.
-       * Five rounds of pushing values around (the bar's ramp, its wash, its grains, the
-       * wet belt, the meadow behind it) each took the step down a little and every blind
-       * critic still said the edge was there, because none of them touched the thing that
-       * was drawing a line at it.
-       * The veil now drifts outward past the lip, so the same particle falls on sand and
-       * on water alike and there is no row where it stops. Nothing new is drawn from
-       * rnd() — the outward reach comes from each grain's own k (AGENTS.md: anything
-       * consuming the shared LCG mid-construction moves the whole world). */
-      var fth2 = Math.atan2(gr.z, gr.x);
-      var frad2 = Math.hypot(gr.x, gr.z);
-      var outw = (gr.k - 0.30) * 11.0;     // most of it out over the water, some still inland
-      var fx2 = Math.cos(fth2) * (frad2 + outw) + Math.sin(T * 0.3 + gr.m * 9) * 1.4;
-      var fz2 = Math.sin(fth2) * (frad2 + outw);
-      var fp = project({ x: fx2, y: gh(fx2, fz2) + 0.6 + gr.m * 2.2, z: fz2 });
-      if (fp) {
-        ctx.fillStyle = 'rgba(246,250,255,' + (0.07 + 0.21 * near2).toFixed(3) + ')';
+    if (gr.m > 0.86) {                    // frost, a little above the sand, never felt falling
+      var fp = project({ x: gr.x + Math.sin(T * 0.3 + gr.m * 9) * 1.4,
+                         y: gh(gr.x, gr.z) + 0.6 + gr.m * 2.2, z: gr.z });
+      if (fp && (!barPath || ctx.isPointInPath(barPath, fp.x, fp.y + 6))) {
+        ctx.fillStyle = 'rgba(246,250,255,' + (0.05 + 0.16 * near2).toFixed(3) + ')';
         ctx.fillRect(fp.x, fp.y, 1.1, 1.1);
       }
     }
@@ -1977,35 +1907,10 @@ function drawMeadow() {
     /* lifted. 芳甸 under a full moon is not a dark field — from the station that stands
      * across the channel from it the whole picture was going black, and 「汀上白沙看不
      * 见」had turned into 「什么都看不见」. */
-    /* AND THEN MEASURED, because this fill is the answer to a defect that three blind
-     * critics in a row attributed to something else. Each of them described "一条贯穿
-     * 画面的发光亮带" cutting the sand from the water and said it made a liar of the
-     * subtitle 汀上白沙看不见 — and every one of them, and I, read it as the bar's
-     * own shoreline. It is not. Silencing drawSandbar left the band exactly where it was
-     * (ridge 13.9 at y=371, unchanged); silencing drawMeadow took it to 1.2. The band is
-     * THIS gradient's near edge — the meadow's own shore, lying across the frame behind
-     * the bar. AGENTS.md says a defect is not necessarily drawn by the thing it appears
-     * to sit on, and this is the clearest case of it in the project so far.
-     * The old stops ran to L95 at the near edge against a river at L45, so the meadow's
-     * bank was more than twice the brightness of the water: grass under a moon is not
-     * brighter than the water beside it, for the same reason the sand is not — the water
-     * gives the moon back and the grass does not. They now top out at L64, close enough
-     * to the river that the bank is found by its texture rather than by a step, and the
-     * lift is kept only far enough to stop the picture going black (which is what the
-     * stops were raised for in the first place — do not simply put them back). */
-    /* Taken down once more, and this is the setting the measurements land on. With the
-     * stops at L64 the bank still stood +28 above the river across a thirty-row swell,
-     * and a blind critic still called it the brightest edge in the lower half and still
-     * said it contradicted 汀上白沙看不见. At these values the swell is about +10:
-     * present, so the grove has ground under it and the picture does not go black, but
-     * no longer an edge the eye can fix. Checked for what it is NOT, too: outside the
-     * subtitle block there are only sixty-odd bright specks in the whole lower half and
-     * removing the bar changes that by two, so there is no bead chain on the sand — the
-     * "珠链" successive critics reported is this swell plus the subtitle's own text. */
-    mg.addColorStop(0.00, 'rgba(36,47,63,0)');
-    mg.addColorStop(0.22, 'rgba(38,49,66,.40)');
-    mg.addColorStop(0.55, 'rgba(41,52,69,.90)');
-    mg.addColorStop(1.00, 'rgba(45,57,75,.98)');
+    mg.addColorStop(0.00, 'rgba(40,55,76,0)');
+    mg.addColorStop(0.22, 'rgba(44,60,82,.40)');
+    mg.addColorStop(0.55, 'rgba(58,76,100,.90)');
+    mg.addColorStop(1.00, 'rgba(78,98,124,.98)');
     ctx.fillStyle = mg; ctx.fill();
     ctx.save(); ctx.clip();
     ctx.restore();
@@ -2021,12 +1926,7 @@ function drawMeadow() {
           var su = mj / (near.length - 1);
           var sEnds = Math.min(1, Math.min(su, 1 - su) / 0.22);
           if (sEnds > 0.01) {
-            /* three passes of a 200-luminance stroke, 15/10/5 px wide, all laid along the
-             * same chain of samples: they sum to roughly a tenth of an alpha on the bank
-             * and that is most of what is left of the swell there. The breath still has
-             * to exist — without it the meadow meets the river on a ruled polygon edge —
-             * but at a third of the weight and in a colour nearer the water's own. */
-            ctx.strokeStyle = 'rgba(150,168,196,' + (0.008 * lw2 * sEnds * sEnds).toFixed(3) + ')';
+            ctx.strokeStyle = 'rgba(184,202,228,' + (0.022 * lw2 * sEnds * sEnds).toFixed(3) + ')';
             ctx.lineWidth = lw2 * 5.0;
             ctx.beginPath(); ctx.moveTo(sPrev.x, sPrev.y); ctx.lineTo(near[mj].x, near[mj].y); ctx.stroke();
           }
@@ -2042,19 +1942,7 @@ function drawMeadow() {
     ctx.save();
     for (var chI = 0; chI < 22; chI++) {
       var chT = chI / 21;
-      /* THE BAND. These twenty-two strokes are 34px wide, nearly white (L222), and their
-       * weight used to be 0.030*(1-chT)^1.5 — strongest at chT=0, which is exactly the
-       * meadow's own bank, and at chT=0 the offset below is also zero, so the heaviest
-       * strokes all landed on the same line. Twenty-two of them summing there put a band
-       * of L89 across a river of L45: "一条贯穿画面的发光亮带" — reported by three
-       * blind critics running, every one of whom (and I) blamed the sandbar's waterline
-       * and said it made a liar of 汀上白沙看不见. Silencing the whole sandbar did not
-       * move it; silencing the meadow took the ridge from 13.9 to 1.2.
-       * The weight peaks MID-CHANNEL now and goes to nothing at both the meadow's bank
-       * and the open water, so the shallows still carry the moon along the bend — which
-       * is the thing this layer exists for, and removing it puts dead black river against
-       * the meadow on a line — but no edge in the picture is drawn by it. */
-      var chA = 0.007 * Math.pow(Math.sin(Math.PI * chT), 1.2);
+      var chA = 0.030 * Math.pow(1 - chT, 1.5);
       if (chA < 0.003) continue;
       /* Segment by segment, fading out at both ends. Drawn as one polyline these
        * thirty-odd-pixel strokes simply STOPPED where the meadow's samples ran out, and
@@ -2412,7 +2300,6 @@ function updateSubs() {
 }
 
 /* ---------------------------------------------------------------- LOOP -- */
-var lastFrameMs = 0;
 /* the lit window's column on the river. Lives outside drawFarBank() on purpose: see
  * the note at the window. Called after drawWater() so the river cannot erase it. */
 function drawTowerGlow() {
@@ -2422,57 +2309,10 @@ function drawTowerGlow() {
    * reflection in the frame and a blind critic reported that the moon had no road on the
    * water while the tower's lamp did — "别让它抢了月亮的倒影". In this poem nothing
    * outshines the moon; the window only has to be present. */
-  if (LAMP <= 0.01) return;
-  reflect(TOWER.x + 1.5, TOWER.z, 20, 0.5, 'rgba(255,206,140,$A)', 0.26 * LAMP);
-}
-
-/* ---- the night actually runs ----------------------------------------------
- * Three blind critics in a row, each seeing only the pictures, converged on the same
- * complaint and it was not about any surface in the world: "把「潮」和「扁舟」两张并
- * 排看，月亮在天上的位置、楼、舟、沙洲几乎一模一样，等于给同一张定格换字幕",
- * and "楼上灯在第一章就亮着，诗要到第五章才问「何处相思明月楼」，答案提前摆在了
- * 画面里，后面那一问就落空了".
- * They are right, and the poem itself asks for the fix: it runs from 海上明月共潮生 to
- * 江潭落月复西斜 and 落月摇情满江树 — one night, moonrise to moonset. So the moon's
- * height and the lamp in the tower are functions of WHERE THE READER STANDS, smoothly
- * weighted over the eight stations, not constants.
- * This stays reproducible: the phase is a pure function of cam.x/cam.z, so a frozen
- * camera gets the same moon in round 3 and round 90. It is also continuous — walking
- * from one station to the next raises the moon a little at a time, it never jumps. */
-function nightPhase() {
-  var wsum = 0, psum = 0;
-  for (var si = 0; si < STATIONS.length; si++) {
-    var st = STATIONS[si];
-    var dx = st.x - cam.x, dz = st.z - cam.z;
-    /* The stations stand fifteen to twenty-five metres apart, so a plain 1/(d^2+40)
-     * gave the station you are STANDING ON only about half the total weight and every
-     * camera came out near mid-night with the moon high — measured: the moon sat at
-     * screen y=124 from the tide station, which is the one place it has to be climbing
-     * out of the water. Squared, and with a smaller floor, the station underfoot takes
-     * essentially all of it while the field stays smooth between stations. */
-    var wq = 1 / Math.pow(dx * dx + dz * dz + 8, 2);
-    wsum += wq; psum += wq * (si / (STATIONS.length - 1));
-  }
-  return wsum ? psum / wsum : 0.5;
-}
-
-function updateMoon() {
-  var ph = Math.max(0, Math.min(1, nightPhase()));
-  NIGHT = ph;
-  /* 62 keeps it clear of the far bank, which tops out near four degrees at r=200 — any
-   * lower and 海上明月共潮生 would rise behind the trees instead of out of the water */
-  MOON.y = 62 + 150 * Math.sin(Math.PI * ph);
-  MOON.th = Math.PI * 1.5 + (ph - 0.5) * 0.30;          // and it goes west as the night runs
-  MOON.x = Math.cos(MOON.th) * MOON.dist;
-  MOON.z = Math.sin(MOON.th) * MOON.dist;
-  /* 何处相思明月楼 is the sixth station; the lamp is not the answer to a question
-   * that has not been asked yet, so it comes up over the two stations before it. */
-  LAMP = Math.max(0, Math.min(1, (ph - 0.42) / 0.30));
+  reflect(TOWER.x + 1.5, TOWER.z, 20, 0.5, 'rgba(255,206,140,$A)', 0.26);
 }
 
 function drawFrame() {
-  var frameT0 = performance.now();
-  updateMoon();
   drawSky();
   drawClouds();
   var moonP = drawMoon();
@@ -2487,7 +2327,6 @@ function drawFrame() {
   drawSandbar();
   drawGrove();
   if (!SHOT) updateSubs();
-  lastFrameMs = performance.now() - frameT0;
 }
 
 function markShotReady() {
@@ -2540,7 +2379,6 @@ window.__poemPerf = {
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
   var c = CAMS[Math.max(1, Math.min(CAMS.length, n)) - 1];
-  curCam = c;
   cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
   cam.y = gh(cam.x, cam.z) + 1.62;
   T = FROZEN_T;
@@ -2554,97 +2392,6 @@ window.__poemShot = function (n) {
   markShotReady();
   return true;
 };
-
-/* --------------------------------------------------------------- PROBE -- */
-/* window.__world(): what this frame actually contains, as a few kB of JSON.
- * The hard gates of the polish loop read this instead of a picture — see
- * ../shared/worldprobe.js and ../AGENTS.md. Every probe below reads the very
- * tables the draw code reads, through project(), the draw code's own
- * projection; nothing here re-derives a position. */
-var curCam = null;
-if (window.PoemProbe) {
-  window.PoemProbe.install('chunjiang', {
-    viewport: function () { return { w: W, h: H, dpr: DPR }; },
-    project: function (x, y, z) { return project({ x: x, y: y, z: z }); }
-  }, function (probe) {
-    var i, pts;
-
-    /* 皎皎空中孤月轮 */
-    probe.box('moon', [MOON.x - MOON.r, MOON.y - MOON.r, MOON.z - MOON.r],
-                      [MOON.x + MOON.r, MOON.y + MOON.r, MOON.z + MOON.r],
-                      { color: '#ffffff' });
-
-    /* 明月楼, and the one window that is lit */
-    var tA = towerAlpha();
-    probe.box('tower', [TOWER.x - TW * 0.94, 0, TOWER.z - TW * 0.94],
-                       [TOWER.x + TW * 0.94, 30.6, TOWER.z + TW * 0.94],
-                       { alpha: PoemProbe.n4(tA), drawn: tA >= 0.02 });
-    probe.add('tower-window', [[TOWER.x + 1.2, 14.2, TOWER.z - 0.25]],
-              { color: '#ffe4b2', drawn: tA >= 0.02 });
-
-    /* 扁舟: one skiff, never arriving */
-    var bp = boatAt();
-    probe.box('boat', [bp.x - 3.6, bp.bob - 0.04, bp.z - 1.2],
-                      [bp.x + 3.6, bp.bob + 0.92, bp.z + 1.2],
-                      { color: '#0c121e' });
-
-    /* 花林 */
-    pts = [];
-    for (i = 0; i < grove.length; i++) {
-      var g = grove[i], gy = gh(g.x, g.z);
-      pts.push([g.x, gy, g.z], [g.x, gy + g.h, g.z]);
-    }
-    probe.add('grove', pts, { count: grove.length });
-
-    /* 满江树: the far bank */
-    pts = [];
-    for (i = 0; i < bank.length; i++) {
-      var b = bank[i];
-      pts.push([b.x, 0, b.z], [b.x, b.h, b.z]);
-    }
-    probe.add('far-bank', pts, { count: bank.length });
-
-    /* 汀上白沙: the bar, sampled round its own lip table */
-    pts = [[0, BAR, 0]];
-    for (i = 0; i < EDGE.length; i += 10) pts.push([EDGE[i].x, 0, EDGE[i].z]);
-    probe.add('sandbar', pts, { count: grains.length, height: BAR });
-
-    /* 落花: where they are floating right now */
-    pts = [];
-    for (i = 0; i < PETAL.length; i++) {
-      var pt = PETAL[i];
-      var ang = pt.a + Math.sin(T * 0.11 * pt.sp + pt.ph) * 0.03;
-      var rad = pt.r + Math.sin(T * 0.19 * pt.sp + pt.ph * 1.7) * 0.9;
-      pts.push([Math.cos(ang) * rad, pt.air ? 3.1 : 0.03, Math.sin(ang) * rad]);
-    }
-    probe.add('petals', pts, { count: PETAL.length });
-
-    /* 水成文: only the rings that are open at this instant are drawn */
-    pts = [];
-    for (i = 0; i < RING.length; i++) {
-      var rg = RING[i];
-      if (((T + rg.t0) % rg.period) / rg.period > 0.85) continue;
-      pts.push([rg.x, 0, rg.z]);
-    }
-    probe.add('rings', pts, { count: pts.length, pool: RING.length });
-
-    return {
-      t: PoemProbe.n2(T),
-      camera: {
-        name: curCam ? curCam.name : null,
-        x: PoemProbe.n2(cam.x), y: PoemProbe.n2(cam.y), z: PoemProbe.n2(cam.z),
-        yaw: PoemProbe.n4(cam.yaw), pitch: PoemProbe.n4(cam.pitch), fov: cam.fov,
-        /* a camera's y is world-absolute: this is how far the eye really is
-         * above the sand under it */
-        ground: PoemProbe.n2(gh(cam.x, cam.z)),
-        eyeAboveGround: PoemProbe.n2(cam.y - gh(cam.x, cam.z))
-      },
-      /* Canvas 2D has no triangles to count; the budget this world can blow is
-       * the time one frame takes. */
-      render: { renderer: 'canvas2d', frameMs: PoemProbe.n2(lastFrameMs) }
-    };
-  });
-}
 
 /* ------------------------------------------------------------------ UI -- */
 var enter = document.getElementById('enter');
@@ -2675,7 +2422,6 @@ resize();
 
 if (SHOT) {
   var c = CAMS[Math.max(1, Math.min(CAMS.length, SHOT)) - 1];
-  curCam = c;
   cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
   cam.y = gh(cam.x, cam.z) + 1.62;
   T = FROZEN_T;
