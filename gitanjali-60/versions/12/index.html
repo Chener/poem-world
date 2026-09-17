@@ -189,8 +189,8 @@
       <div class="row"><span class="k">harness</span><span class="v">Claude Code</span></div>
       <div class="row"><span class="k">model</span><span class="v sand">Claude Opus 5（非 fast）</span></div>
       <div class="row"><span class="k">effort</span><span class="v sand">high</span></div>
-      <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">进行中</span></div>
-      <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">critic 连续两轮到位 / 额度将尽</span></div>
+      <div class="row"><span class="k">rounds</span><span class="v" id="ft-rounds">10</span></div>
+      <div class="row"><span class="k">stop</span><span class="v" id="ft-stop">10 轮到</span></div>
     </div>
     <div class="lnks">
       <a href="../">← 三个世界</a>
@@ -1965,10 +1965,7 @@ if (window.PolishTimeline) {
     onReady: function (rounds) {
       var n = rounds.length;
       document.getElementById('ft-rounds').textContent = n ? (n + ' 轮（进行中）') : '—';
-      /* only the NEWEST round can stop the loop: round 10 stopped it once and
-       * the loop was then restarted under a different mechanism, so an old
-       * stop must not keep claiming the footer */
-      var stopped = n && rounds[n - 1].stop ? rounds[n - 1] : null;
+      var stopped = rounds.filter(function (r) { return r.stop; }).pop();
       if (stopped) {
         document.getElementById('ft-rounds').textContent = n + ' 轮';
         document.getElementById('ft-stop').textContent = stopped.stop_reason || '循环结束';
