@@ -97,6 +97,31 @@ each surface's target luminance against the others first, then check it by decod
 of rows; values tuned against a near-white surface (grain pairs, dune shading, wet glints)
 all have to be re-seated when that surface moves.
 
+**Light a night scene by measuring it, and remember that every value is seated against
+another one.** For five rounds chunjiang's critics called the foreground sand a flat
+pastel wedge. Texture was never the problem: the near sand measured luminance 130 while
+the open water ran 22-46 and the moon's own road only reached 60, so the ground at the
+viewer's feet was the brightest thing in the frame with nothing lighting it. What matters
+is not a surface's absolute value but where it sits relative to the light source in the
+picture — too bright and the scene reads as lit from below, too dark and 「看不见」 becomes
+「没照亮」, and chunjiang swung through both before landing between them. The trap is what
+follows: grain pairs, wet glints, dune shading and edge-softening strokes are all chosen
+against the surface they lie on, and when that surface moves they are silently left
+behind. A dune shade and a shore stroke still carrying their old values dragged an L80
+bar down to L27 on one camera while another camera measured it at L76 — which is also why
+two critics can each be right and flatly contradict each other: **check which camera a
+report is about before believing it generalises.**
+
+**A world that is one frozen tableau reads as wallpaper, however well each surface is
+drawn.** Three independent blind critics in a row led with the same complaint about
+chunjiang, and none of them was pointing at a surface: the moon sat at the same height in
+every frame and the tower's lamp was lit in the opening one, so 「何處相思明月樓」 was
+answered before the poem asked it. Deriving such things from a smooth function of the
+reader's position over the poem's stations fixes it and stays byte-reproducible, because a
+frozen camera is a fixed input. Weight that function sharply — chunjiang's stations stand
+15-25m apart, and an inverse-square falloff with too large a floor gave the station you
+are standing on barely half the weight, so every camera came out at mid-night.
+
 **A camera's `y` in `CAMS` is world-absolute, not height above ground.** gitanjali-60's
 `children` camera reads as 0.95m but sits 8cm above the sand there, so anything flat and
 close to it smears across the frame. Check a camera against the terrain height at its
