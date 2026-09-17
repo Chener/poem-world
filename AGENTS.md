@@ -26,21 +26,39 @@ instanced colours come out squared and nearly black.
 `gitanjali-60` the GLSL is generated from one `WAVES` table that the JS mirror also reads;
 keep it that way. A JS mirror that drifts from the shader puts boats under the surface.
 
-**Screenshots are one-shot and niced.** `shared/shoot.sh` launches a headless Chrome for
-Testing per frame that exits when the file is written, behind a shared `mkdir` lock at
-`/tmp/poem-world-shot.lock`, after checking `uptime` load and `memory_pressure`. Never
-leave a browser running: several workers share this machine. Shot mode stops the render
-loop after a few frames (`SHOT_FRAMES`), because software GL will otherwise faithfully
-render every frame of Chrome's virtual-time budget and take minutes per image.
+**Screenshots are one-shot and must yield to the operator.** `shared/shoot.sh` launches
+one `chrome-headless-shell` per frame that exits when the file is written, under
+`taskpolicy -c background nice -n 20`, behind a shared `mkdir` lock at
+`/tmp/poem-world-shot.lock`, after checking `uptime` load and `memory_pressure`. It
+renders through `--use-angle=metal` (SwiftShader is the fallback and costs ten times the
+CPU; measurements and the `--disable-gpu` trap are in the script's own comments). Never
+leave a browser running and never open a visible window: several workers share this
+machine and somebody is using it. Shot mode stops the render loop after a few frames
+(`SHOT_FRAMES`).
 
-**Shots must stay byte-reproducible.** Every world freezes its clock (`FROZEN_T`) and
-places its contents from hashes of stable indices, never from runtime randomness, so the
-same camera in round 3 and round 9 frames the same scene. Verify with `md5` after changes
-to placement code.
+**Shots must stay reproducible.** Every world freezes its clock (`FROZEN_T`) and places
+its contents from hashes of stable indices, never from runtime randomness, so the same
+camera in round 3 and round 9 frames the same scene. `md5` on two rounds' same-named
+shots is the check — but only within one rasteriser: changing the ANGLE backend changes
+every byte while changing nothing in the world.
 
 **The timeline reads `log.jsonl`; `log.js` is a generated mirror** for `file://`, where
 `fetch` of a sibling file is blocked. Append rounds with `shared/logrow.py`, which
 regenerates the mirror; never hand-edit `log.js`.
+
+**Spend mesh resolution where the eye is, and check the winding.** Two bugs cost
+gitanjali-60 six rounds of critics writing "the sea is a pastel plane": a uniform grid
+over four kilometres put one vertex every 6.8m under wave trains 6.2m long, so the surf
+could not exist; and a hand-built `BufferGeometry` whose quads were wound the wrong way
+was silently back-face culled, showing the sky dome through the water — which looks
+enough like a flat sea to waste an afternoon on. Non-uniform rows fixed the first. For
+the second, a mesh that vanishes but leaves the scene looking plausible is almost always
+winding or `side`.
+
+**A camera's `y` in `CAMS` is world-absolute, not height above ground.** gitanjali-60's
+`children` camera reads as 0.95m but sits 8cm above the sand there, so anything flat and
+close to it smears across the frame. Check a camera against the terrain height at its
+own x/z before believing its eye height.
 
 **Rendered content avoids violent or morbid imagery**, whatever the source poem contains.
 Public-domain originals live in `POEM.md`; the world, the screenshots and the prose around
