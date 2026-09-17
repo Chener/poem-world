@@ -1421,7 +1421,7 @@ function buildEmptyBoat(len) {
   var rail = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.120, len * 0.128, len * 0.070, 12, 1, true), WOOD_DARK);
   rail.scale.set(1, 1, 3.4); rail.position.y = len * 0.030; o.add(rail);
   var mast = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.010, len * 0.017, len * 0.66, 6), WOOD_DARK);
-  mast.position.y = len * 0.30; mast.rotation.z = 0.19; o.add(mast);   // and it leans
+  mast.position.y = len * 0.32; mast.rotation.z = 0.06; o.add(mast);
   /* the sail is not set: it hangs off the mast in a slack fold */
   var slackGeo = new THREE.PlaneGeometry(len * 0.20, len * 0.46, 5, 6);
   (function slack() {
@@ -1441,14 +1441,10 @@ function buildEmptyBoat(len) {
   scene.add(o);
   return o;
 }
-/* Close enough to be seen from a child's eye height, and slow. Put out at three
- * hundred metres she was one more speck among the wrecks and nobody found her;
- * the whole point of this thing is that it is the only object in the world that
- * is moving, and you cannot read movement in something you cannot resolve. */
-var EMPTY_PERIOD = 1450;
+var EMPTY_PERIOD = 3100;
 var EMPTY_BOATS = [
-  { len: 15, z:  -62, x0:   16, spd: 0.30, yaw:  Math.PI * 0.5 },
-  { len: 19, z: -420, x0:  980, spd: -0.31, yaw: -Math.PI * 0.5 }
+  { len: 21, z: -330, x0:  -90, spd: 0.42, yaw:  Math.PI * 0.5 },
+  { len: 17, z: -760, x0:  980, spd: -0.31, yaw: -Math.PI * 0.5 }
 ];
 EMPTY_BOATS.forEach(function (e) { e.obj = buildEmptyBoat(e.len); });
 
