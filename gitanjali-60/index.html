@@ -1078,9 +1078,12 @@ function updateSpray(t, camX) {
      * the wave stands highest and throws hardest, so the spray is bunched into
      * a few places and thin between them — and a critic looking for the laugh
      * has somewhere to find it. */
-    var burst = Math.sin(x * 0.086 + 1.3) * 0.5 + Math.sin(x * 0.031 - 0.7) * 0.5;
+    /* periods of 33m and 88m: two or three bursts across the width of what you
+     * can see from the sand. At 73m and 203m a whole frame could sit in one
+     * trough and the sea threw nothing at all. */
+    var burst = Math.sin(x * 0.190 + 1.3) * 0.5 + Math.sin(x * 0.071 - 0.7) * 0.5;
     burst = Math.max(0, burst);
-    if (burst < 0.22) continue;
+    if (burst < 0.12) continue;
     var surf = seaHeightJS(x, zc, t);
     for (var k = 0; k < SPRAY_PER_CELL; k++) {
       var j = c * SPRAY_PER_CELL + k;
