@@ -216,7 +216,7 @@
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen time, no UI
 var FROZEN_T = 14.0;                                   // deterministic clock for shots
-var SHOT_FRAMES = 4;                                   // shot mode renders this many, then stops
+var SHOT_FRAMES = 1;                                   // one frame, then resolve — software GL would otherwise spend the virtual-time budget
 var shotFrames = 0;
 
 /* ---------------------------------------------------------------- POEM -- */
@@ -249,8 +249,8 @@ var CAMS = [
 
 /* ----------------------------------------------------------- RENDERER -- */
 var canvas = document.getElementById('view');
-var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !SHOT, powerPreference: 'high-performance' });
+renderer.setPixelRatio(SHOT ? 1 : Math.min(devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.02;
@@ -835,7 +835,7 @@ var SPRAY_PERIOD = (function () {
   return 6.28318 / (Math.sqrt(9.8 / k) * k * WAVE_SPEED);
 })();
 
-var SPRAY_CELLS = 150, SPRAY_PER_CELL = 8, SPRAY_TILE = 240;
+var SPRAY_CELLS = 150, SPRAY_PER_CELL = SHOT ? 4 : 8, SPRAY_TILE = 240;
 var SPRAY_N = SPRAY_CELLS * SPRAY_PER_CELL;
 var SPRAY_LIFE = 1.70, SPRAY_Z = -13.0;
 
@@ -2067,7 +2067,7 @@ function updateChildren(t, camX) {
   iShell.instanceMatrix.needsUpdate = true; iPebble.instanceMatrix.needsUpdate = true;
   iFresh.instanceMatrix.needsUpdate = true;
   iFoot.instanceMatrix.needsUpdate = true;
-  iTorso.count = n; iSkirt.count = n; iHead.count = n; iHair.count = n; iShadow.count = Q.get('nodecal') ? 0 : n;
+  iTorso.count = n; iSkirt.count = n; iHead.count = n; iHair.count = n; iShadow.count = (SHOT || Q.get('nodecal')) ? 0 : n;
   iUpArm.count = iFore.count = iThigh.count = iShin.count = n * 2;
   iTorso.instanceMatrix.needsUpdate = true;
   iSkirt.instanceMatrix.needsUpdate = true;
@@ -2221,6 +2221,10 @@ var simT = 0;
 function resize() {
   var r = canvas.getBoundingClientRect();
   var w = Math.max(1, r.width | 0), h = Math.max(1, r.height | 0);
+  if (SHOT) {
+    w = Math.max(w, window.innerWidth || 960);
+    h = Math.max(h, window.innerHeight || 600);
+  }
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -2235,14 +2239,17 @@ function applyShotCamera() {
   showStanza(stanzaAt(c.pos[0]));
 }
 
-function frame() {
-  if (!SHOT || shotFrames < SHOT_FRAMES) requestAnimationFrame(frame);
-  if (SHOT) shotFrames++;
-  var dt = Math.min(clock.getDelta(), 0.05);
+function markShotReady() {
+  document.body.setAttribute('data-shot-ready', '1');
+  document.documentElement.setAttribute('data-shot-ready', '1');
+}
+
+function renderOnce() {
   if (SHOT) {
     simT = FROZEN_T;
     applyShotCamera();
   } else {
+    var dt = Math.min(clock.getDelta(), 0.05);
     simT += dt;
     walkPhase += dt * 8.5 * Math.min(1, player.vel.length() / 5);
     stepPlayer(dt);
@@ -2267,6 +2274,22 @@ function frame() {
   renderer.render(scene, camera);
 }
 
+function frame() {
+  requestAnimationFrame(frame);
+  renderOnce();
+}
+
+window.__poemShot = function (n) {
+  SHOT = parseInt(n, 10) || SHOT;
+  document.body.classList.add('shot');
+  document.body.removeAttribute('data-shot-ready');
+  document.documentElement.removeAttribute('data-shot-ready');
+  resize();
+  renderOnce();
+  markShotReady();
+  return true;
+};
+
 /* ------------------------------------------------------------------ UI -- */
 var railToggle = document.getElementById('railtoggle');
 railToggle.addEventListener('click', function () {
@@ -2277,7 +2300,7 @@ railToggle.addEventListener('click', function () {
 });
 try { if (localStorage.getItem('g60.rail') === '1') railToggle.click(); } catch (e) {}
 
-if (window.PolishTimeline) {
+if (!SHOT && window.PolishTimeline) {
   PolishTimeline.mount({
     el: '#tl', log: 'log.jsonl',
     onReady: function (rounds) {
@@ -2297,25 +2320,26 @@ if (window.PolishTimeline) {
 
 if (SHOT) document.body.classList.add('shot');
 resize();
-frame();
-
-/* hold the boot veil until the first real frame has actually landed */
-requestAnimationFrame(function () {
+if (SHOT) {
+  renderOnce();
+  var b = document.getElementById('boot');
+  if (b) b.remove();
+  markShotReady();
+  document.body.setAttribute('data-counts',
+    'children=' + iTorso.count + ' boats=' + iBoat.count +
+    ' spray=' + iSpray.count + ' turrets=' + iTurret.count +
+    ' shells=' + iShell.count + ' pebbles=' + iPebble.count +
+    ' prints=' + iFoot.count + ' fresh=' + iFresh.count);
+} else {
+  frame();
   requestAnimationFrame(function () {
-    var b = document.getElementById('boot');
-    b.classList.add('gone');
-    setTimeout(function () { b.remove(); }, 800);
-    if (SHOT) {
-      document.body.setAttribute('data-shot-ready', '1');
-      /* so a headless --dump-dom can report what the frame contained */
-      document.body.setAttribute('data-counts',
-        'children=' + iTorso.count + ' boats=' + iBoat.count +
-        ' spray=' + iSpray.count + ' turrets=' + iTurret.count +
-        ' shells=' + iShell.count + ' pebbles=' + iPebble.count +
-        ' prints=' + iFoot.count + ' fresh=' + iFresh.count);
-    }
+    requestAnimationFrame(function () {
+      var b = document.getElementById('boot');
+      b.classList.add('gone');
+      setTimeout(function () { b.remove(); }, 800);
+    });
   });
-});
+}
 
 /* a small handle for poking at the world from the console / from the shot harness */
 window.__G60 = {

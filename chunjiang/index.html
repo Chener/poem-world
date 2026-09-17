@@ -44,7 +44,8 @@
   #hint kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-right: 2px; }
   #where { position: absolute; right: 16px; top: 16px; z-index: 3; font-family: var(--mono);
     font-size: 11px; color: var(--ink-faint); letter-spacing: .1em; }
-  body.shot #hint, body.shot #where, body.shot #touch, body.shot #enter { display: none; }
+  body.shot #hint, body.shot #where, body.shot #touch, body.shot #enter,
+  body.shot #rail { display: none !important; }
 
   #enter { position: absolute; inset: 0; z-index: 6; display: grid; place-content: center; gap: 12px;
     justify-items: center; background: rgba(5,8,14,.88); cursor: pointer; padding: 24px;
@@ -152,7 +153,7 @@ var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, 
 var FROZEN_T = 21.0;
 /* Software GL would otherwise faithfully render every frame of Chrome's virtual-time
  * budget, which takes minutes per image. In shot mode we draw a few frames and stop. */
-var SHOT_FRAMES = 3;
+var SHOT_FRAMES = 1;
 var shotFrames = 0;
 
 /* ---------------------------------------------------------------- POEM -- */
@@ -206,8 +207,9 @@ var ctx = cv.getContext('2d');
 var W = 0, H = 0, DPR = 1;
 
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = cv.clientWidth; H = cv.clientHeight;
+  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+  W = Math.max(1, (SHOT ? (window.innerWidth || 960) : cv.clientWidth) | 0);
+  H = Math.max(1, (SHOT ? (window.innerHeight || 600) : cv.clientHeight) | 0);
   cv.width = Math.max(1, Math.round(W * DPR));
   cv.height = Math.max(1, Math.round(H * DPR));
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -259,7 +261,7 @@ MOON.z = Math.sin(MOON.th) * MOON.dist;
 
 /* white sand grains, so the bar reads as sand and not as a floor */
 var grains = [];
-for (var i2 = 0; i2 < 3400; i2++) {
+for (var i2 = 0; i2 < (SHOT ? 1700 : 3400); i2++) {
   var a2 = rnd() * Math.PI * 2, r2 = Math.sqrt(rnd()) * 1;
   var th2 = a2, rr2 = r2 * edgeR(th2) * 0.985;
   grains.push({ x: Math.cos(th2) * rr2, z: Math.sin(th2) * rr2, m: rnd() });
@@ -473,7 +475,7 @@ function drawWater(moonP) {
     var ml = Math.hypot(mdx, mdz) || 1;
     var ux = mdx / ml, uz = mdz / ml;          // toward the moon, along the water
     var px = -uz, pz = ux;                     // across it
-    var N = 1400;
+    var N = SHOT ? 700 : 1400;
     for (var wi = 0; wi < N; wi++) {
       /* anchored to the world, not to the eye, so the river does not swim along with you */
       var h1 = Math.sin(wi * 12.9898) * 43758.5453; h1 -= Math.floor(h1);
@@ -512,7 +514,7 @@ function drawWater(moonP) {
 
     /* the road itself: sampled along the moon's azimuth so it never breaks, each rung
      * flattened by perspective and dimming with distance — 滟滟随波千万里 */
-    for (var ri2 = 0; ri2 < 260; ri2++) {
+    for (var ri2 = 0; ri2 < (SHOT ? 130 : 260); ri2++) {
       var rd = 2.2 * Math.pow(1.028, ri2);
       if (rd > 520) break;
       if (rd < edgeR(Math.atan2(cam.z + uz * rd, cam.x + ux * rd)) * 0.2) continue;
@@ -913,10 +915,7 @@ function updateSubs() {
 }
 
 /* ---------------------------------------------------------------- LOOP -- */
-function frame(now) {
-  var dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (SHOT) { T = FROZEN_T; } else { T += dt; step(dt); }
-
+function drawFrame() {
   drawSky();
   var moonP = drawMoon();
   drawFarBank();
@@ -925,10 +924,37 @@ function frame(now) {
   drawSandbar();
   drawGrove();
   if (!SHOT) updateSubs();
+}
 
-  if (SHOT && ++shotFrames >= SHOT_FRAMES) return;   // the frame is settled; let Chrome grab it
+function markShotReady() {
+  document.body.setAttribute('data-shot-ready', '1');
+  document.documentElement.setAttribute('data-shot-ready', '1');
+}
+
+function frame(now) {
+  var dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (SHOT) { T = FROZEN_T; } else { T += dt; step(dt); }
+  drawFrame();
+  if (SHOT && ++shotFrames >= SHOT_FRAMES) { markShotReady(); return; }
   requestAnimationFrame(frame);
 }
+
+window.__poemShot = function (n) {
+  n = parseInt(n, 10) || 1;
+  var c = CAMS[Math.max(1, Math.min(CAMS.length, n)) - 1];
+  cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
+  cam.y = gh(cam.x, cam.z) + 1.62;
+  T = FROZEN_T;
+  document.body.classList.add('shot');
+  enter.classList.add('gone');
+  curId = null; updateSubs();
+  document.body.removeAttribute('data-shot-ready');
+  document.documentElement.removeAttribute('data-shot-ready');
+  resize();
+  drawFrame();
+  markShotReady();
+  return true;
+};
 
 /* ------------------------------------------------------------------ UI -- */
 var enter = document.getElementById('enter');
@@ -940,7 +966,7 @@ railtoggle.addEventListener('click', function () {
   railtoggle.textContent = document.body.classList.contains('rail-collapsed') ? '‹' : '›';
 });
 
-if (window.PolishTimeline) {
+if (!SHOT && window.PolishTimeline) {
   window.PolishTimeline.mount({
     el: '#tl',
     log: 'log.jsonl',
@@ -966,10 +992,13 @@ if (SHOT) {
   enter.classList.add('gone');
   /* the station this camera is standing in still speaks, so the shot carries its line */
   curId = null; updateSubs();
+  resize();
+  drawFrame();
+  markShotReady();
+} else {
+  last = performance.now();
+  requestAnimationFrame(frame);
 }
-
-last = performance.now();
-requestAnimationFrame(frame);
 
 })();
 </script>

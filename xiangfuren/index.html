@@ -169,8 +169,8 @@ const M = {
 const WATER_Y = 0.0;
 const EYE = 1.62;
 const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-east shore
-/* ?shot=1 —— 取证模式：固定机位、固定时间、没有界面，画三帧就停。
-   密度只比交互时略低一点点 —— critic judged 的必须基本就是访客看到的那个世界。 */
+/* ?shot=1 —— 取证模式：固定机位、固定时间、没有界面，画一帧就停。
+   密度大约是交互时的一半 —— critic judged 的必须基本就是访客看到的那个世界。 */
 const SHOT = new URLSearchParams(location.search).has('shot');
 
 /* 定序随机。截图必须逐字节可复现：同一轮、同一机位，第 3 轮和第 9 轮拍出来的
@@ -534,7 +534,7 @@ const SHOAL_MAT = [-2.05, -55.40];
 
 /* ---------- 白薠 : sedge blades on the shoal ---------- */
 function makeBlades() {
-  const v = [], N = SHOT ? 23000 : 26000;
+  const v = [], N = SHOT ? 13000 : 26000;
   let placed = 0, guard = 0;
   while (placed < N && guard < N * 40) {
     guard++;
@@ -605,7 +605,7 @@ const bladeP = prog(`
 `);
 
 /* ---------- 木叶下 : the leaves, always coming down ---------- */
-const NLEAF = SHOT ? 880 : 1000;   // 叶子小了、还会翻到看不见，密度得补上：木叶要一直在落
+const NLEAF = SHOT ? 500 : 1000;
 const leaves = [];
 const leafRnd = mkRnd(0x9E3779B9);        // 木叶这一条序列，从种子起走，永远一样
 for (let i = 0; i < NLEAF; i++) leaves.push({
@@ -1667,9 +1667,11 @@ function invert(o, m) {   // full 4x4 inverse (used only for the sky ray)
 }
 
 function resize() {
-  const dpr = SHOT ? 1.6 : Math.min(devicePixelRatio || 1, 2);
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
-  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  const dpr = SHOT ? 1 : Math.min(devicePixelRatio || 1, 2);
+  const cssW = SHOT ? (window.innerWidth || 960) : canvas.clientWidth;
+  const cssH = SHOT ? (window.innerHeight || 600) : canvas.clientHeight;
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 }
 
@@ -1894,9 +1896,48 @@ function draw(t) {
   gl.disable(gl.BLEND);
 }
 
-/* 取证模式下不能挂着 rAF 空转：按固定步长走满 SHOT_FRAMES 帧就停，
-   截图因此既便宜又可复现 —— 同一轮同一机位，永远是同一秒的洞庭。 */
-const SHOT_FRAMES = 3, SHOT_DT = 1 / 20, SHOT_T0 = 7.5;
+/* 取证模式下不能挂着 rAF 空转：画 1 帧就停。机位切换走 window.__poemShot，不重建场景。 */
+const SHOT_FRAMES = 1, SHOT_DT = 1 / 20, SHOT_T0 = 7.5;
+
+function scatterShotAroundCam() {
+  const shotRnd = mkRnd(0x5F356495);
+  for (const L of leaves) {
+    const a = shotRnd() * Math.PI * 2, d = 3.5 + shotRnd() * 30;
+    L.x = cam.x + Math.cos(a) * d;
+    L.z = cam.z + Math.sin(a) * d;
+    L.y = groundY(L.x, L.z) + shotRnd() * 17;
+  }
+  ripples.length = 0;
+  rippleHead = 0;
+  for (let i = 0; i < NRIPPLE; i++) {
+    const a = shotRnd() * Math.PI * 2, d = 9 + shotRnd() * 42;
+    const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
+    if (terrainH(x, z) > WATER_Y - 0.15) continue;
+    dropRipple(x, z, SHOT_T0 - shotRnd() * RIPPLE_LIFE);
+  }
+}
+
+function renderShotFrame() {
+  resize();
+  const t = SHOT_T0;
+  step(SHOT_DT, t); draw(t);
+  document.documentElement.setAttribute('data-shot-ready', '1');
+  document.body.setAttribute('data-shot-ready', '1');
+}
+
+window.__poemShot = function (spec) {
+  const n = String(spec).split(',').map(Number);
+  if (n.length >= 4 && n.every(v => isFinite(v))) {
+    cam.x = n[0]; cam.z = n[1]; cam.yaw = n[2]; cam.pitch = n[3];
+  }
+  cam.y = groundY(cam.x, cam.z) + EYE;
+  document.body.classList.add('shot');
+  document.body.removeAttribute('data-shot-ready');
+  document.documentElement.removeAttribute('data-shot-ready');
+  scatterShotAroundCam();
+  renderShotFrame();
+  return true;
+};
 
 function frame(ms) {
   const t = ms / 1000;
@@ -1909,26 +1950,9 @@ function frame(ms) {
 if (gl) {
   cam.y = groundY(cam.x, cam.z) + EYE;
   if (SHOT) {
-    // 只画三帧，所以叶子得先撒到相机跟前，不能等它们自己飘过来
-    // 撒的位置也必须定序：同一机位每次得到同一片天
-    const shotRnd = mkRnd(0x5F356495);
-    for (const L of leaves) {
-      const a = shotRnd() * Math.PI * 2, d = 3.5 + shotRnd() * 30;
-      L.x = cam.x + Math.cos(a) * d;
-      L.z = cam.z + Math.sin(a) * d;
-      L.y = groundY(L.x, L.z) + shotRnd() * 17;
-    }
-    for (let i = 0; i < NRIPPLE; i++) {
-      const a = shotRnd() * Math.PI * 2, d = 9 + shotRnd() * 42;
-      const x = cam.x + Math.cos(a) * d, z = cam.z + Math.sin(a) * d;
-      if (terrainH(x, z) > WATER_Y - 0.15) continue;
-      dropRipple(x, z, SHOT_T0 - shotRnd() * RIPPLE_LIFE);
-    }
-    for (let i = 0; i < SHOT_FRAMES; i++) {          // 同步画满，画完就不再要新帧
-      const t = SHOT_T0 + i * SHOT_DT;
-      step(SHOT_DT, t); draw(t);
-    }
-    document.documentElement.setAttribute('data-shot-ready', '1');
+    document.body.classList.add('shot');
+    scatterShotAroundCam();
+    renderShotFrame();
   } else {
     requestAnimationFrame(frame);
   }
@@ -1937,7 +1961,7 @@ if (gl) {
 /* =====================================================================
    右栏：打磨时间线 —— 三个世界共用 shared/timeline.js，读同一份 log.jsonl
    ===================================================================== */
-if (window.PolishTimeline) {
+if (!SHOT && window.PolishTimeline) {
   PolishTimeline.mount({
     el: '#tl', log: 'log.jsonl',
     onReady: function (rounds) {
