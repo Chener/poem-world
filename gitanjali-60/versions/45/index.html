@@ -951,15 +951,9 @@ var sand = new THREE.Mesh(sandGeo, new THREE.ShaderMaterial({
  * film of water is still a mirror, and dulls over the next few metres as the
  * sand drains. The very front, where the sheet is still standing, is darker
  * again — water on sand is dark; water draining off it is the mirror. */
-/* "and pale gleams the smile of the sea beach" — the poem says it twice, which
- * is the only image in it that gets said twice. It has to be the brightest
- * thing in the picture: brighter than the sky it is reflecting, because a film
- * of water on sand at a grazing angle is a mirror and a mirror at that angle
- * beats the source. It runs the whole length of the tide line and out of both
- * edges of the frame, and it dies back over a few metres as the sand drains. */
-    '  float film = pow(wet, 1.15) * (1.0 - smoothstep(0.93, 1.0, wet) * 0.35);',
-    '  vec3 sheen = vec3(0.975, 0.982, 0.992);',
-    '  col = mix(col, sheen, clamp((0.55 + 0.45 * fres) * film * 1.12, 0.0, 0.93));',
+    '  float film = pow(wet, 1.35) * (1.0 - smoothstep(0.90, 1.0, wet) * 0.45);',
+    '  vec3 sheen = vec3(0.906, 0.918, 0.936);',
+    '  col = mix(col, sheen, clamp((0.42 + 0.58 * fres) * film * 0.92, 0.0, 0.74));',
     '  float lam = max(dot(n, normalize(uSunDir)), 0.0);',
     '  col *= 0.68 + lam*0.58;',
     /* the thin lace at the top of each run-up, where the water gives out */
@@ -1722,8 +1716,8 @@ function mergeGeos(list) {
 }
 
 var THIGH_L = 0.174, SHIN_L = 0.174, LEG_L = THIGH_L + SHIN_L;
-var UPARM_L = 0.145, FORE_L  = 0.150, ARM_L = UPARM_L + FORE_L;   // not noodles
-var TORSO_L = 0.395, FOOT_H = 0.038, HEAD_R = 0.1405, NECK_L = 0.042;
+var UPARM_L = 0.155, FORE_L  = 0.170, ARM_L = UPARM_L + FORE_L;
+var TORSO_L = 0.395, FOOT_H = 0.042, HEAD_R = 0.1405, NECK_L = 0.042;
 var HIP_Y = LEG_L + FOOT_H;                       // hips above the sand, standing
 var HEAD_Y = TORSO_L + NECK_L + HEAD_R * 0.86;    // head centre above the hips
 var SHO_Y = TORSO_L - 0.052;
@@ -1792,7 +1786,7 @@ var headGeo = (function () {
  * is left open, which is enough to tell you which way a child is facing without
  * ever drawing a face. Forward is +z. */
 var hairGeo = (function () {
-  var cap = new THREE.SphereGeometry(HEAD_R + 0.009, 13, 6, 0, TAU, 0, Math.PI * 0.44);
+  var cap = new THREE.SphereGeometry(HEAD_R + 0.009, 10, 5, 0, TAU, 0, Math.PI * 0.44);
   cap.scale(1, 1.02, 0.97);
   var back = new THREE.SphereGeometry(HEAD_R, 9, 5);
   back.scale(0.94, 0.80, 0.60);
@@ -1830,7 +1824,7 @@ var thighGeo = (function () {
 var shinGeo = (function () {
   var l = new THREE.CylinderGeometry(0.045, 0.034, SHIN_L, 6);
   var kn = new THREE.SphereGeometry(0.047, 6, 5); kn.translate(0, SHIN_L / 2, 0);
-  var f = new THREE.BoxGeometry(0.072, FOOT_H, 0.124);   // a foot, not a plank
+  var f = new THREE.BoxGeometry(0.084, FOOT_H, 0.152);
   f.translate(0, -SHIN_L / 2 - FOOT_H / 2 + 0.006, 0.032);
   return mergeGeos([l, kn, f]);
 })();
@@ -2274,7 +2268,6 @@ function poseChild(state, t, lean) {
 
 var _m = new THREE.Matrix4();
 var _hand = new THREE.Vector3();
-var _hairS = new THREE.Vector3();
 function readPart(node, mesh, slot) { mesh.setMatrixAt(slot, node.matrixWorld); }
 
 var PROP_RANGE = 190;   // props are small; drawing them to the horizon is waste
@@ -2716,16 +2709,7 @@ function updateChildren(t, camX) {
       readPart(rTorsoM, iTorso, n);
       readPart(rSkirtM, iSkirt, n);
       readPart(rHead, iHead, n);
-      /* Everybody had the identical bowl of hair, which is most of what makes
-       * a crowd of faceless figures look moulded. The cap is one mesh, but it
-       * does not have to be one size: a per-child stretch gives some of them a
-       * long fringe at the back and some a close crop. */
-      _m.copy(rHead.matrixWorld);
-      _hairS.set(0.93 + h2(g, 610 + c) * 0.18,
-                 0.86 + h2(g, 612 + c) * 0.34,
-                 0.90 + h2(g, 614 + c) * 0.26);
-      _m.scale(_hairS);
-      iHair.setMatrixAt(n, _m);
+      readPart(rHead, iHair, n);
       readPart(armL.a, iUpArm, n * 2);  readPart(armR.a, iUpArm, n * 2 + 1);
       readPart(armL.b, iFore,  n * 2);  readPart(armR.b, iFore,  n * 2 + 1);
       readPart(legL.a, iThigh, n * 2);  readPart(legR.a, iThigh, n * 2 + 1);
