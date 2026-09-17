@@ -33,8 +33,12 @@ captures all three cameras over CDP (`shared/cdp_shot.py`), then exits. Cameras 
 through `window.__poemShot` so the scene is not rebuilt. Shared `mkdir` lock at
 `/tmp/poem-world-shot.lock`; `taskpolicy -c background nice -n 20`. `?shot=1` is
 DPR=1 and one synchronous frame (`data-shot-ready`) — do not wait on rAF, offscreen
-and headless often never fire it. If Metal does not come up, the script falls back to
-headed-offscreen Metal, then SwiftShader. Numbers live in README「截图与资源」.
+and headless often never fire it. **Headless is the only allowed backend** — a headed
+Chrome takes a screen away from whoever is using this machine — so a failed round is
+retried once on the same backend and then gives up (exit 2) for the caller to log
+blocked. `shoot.sh` kills the Chrome tree and `cdp_shot.py` on every exit, timeout and
+signal path: a bare `alarm` walked away and left ppid=1 orphans. Numbers live in
+README「截图与资源」.
 
 **Interactive pages pause when still.** DPR cap 1.5, 30 fps, no shadow maps, freeze the
 loop after the first frame until input, and pause when `document.hidden`. `?lite=1` (or

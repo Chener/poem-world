@@ -96,8 +96,8 @@ xiangfuren 读建网格时标记的顶点区段和更新时写回的位置，chu
 世界里 GPU 是异步的，它只是提交时间，真正的预算看 `triangles` 和 `calls`。
 
 `shared/world.sh` 跟 `shared/shoot.sh` 是同一套浏览器管线：同一把
-`/tmp/poem-world-shot.lock`、同样的后台 QoS、同样的 Metal → headed → SwiftShader 回退，
-所以同一时刻本机仍然只有一个渲染进程。
+`/tmp/poem-world-shot.lock`、同样的后台 QoS，所以同一时刻本机仍然只有一个渲染进程。
+（`shoot.sh` 的后端已收成 headless-only，`world.sh` 的回退链还没跟上。）
 
 ## 截图与资源
 
@@ -121,7 +121,7 @@ xiangfuren 读建网格时标记的顶点区段和更新时写回的位置，chu
 | 3. Playwright WebKit 无头 | — | — | — | — | 未试：1 和 2 已可用，不引入新依赖 |
 | 4. 仅场景侧 `?shot=1`（叠加在捕获通道上） | 见上 | 见上 | 见上 | 见上 | 是。同一 CDP 换 SwiftShader 一轮 8.2s，单张仍 < 1s |
 
-选定 **2 + 4**：headless 不抢焦点、不占一块屏；Metal 起来了就把绘制交给 GPU；CPU 峰值按单进程算低于一核。只加 `--use-angle=metal`、不加另外三条 GPU 标志时 headless 曾 90 秒不出图，所以标志要齐。GPU 起不来时 `shared/shoot.sh` 依次退到 headed-metal、SwiftShader。旧路径（`chrome-headless-shell --screenshot --virtual-time-budget=5000 --disable-gpu`）会让软件 GL 把虚拟时间里的每一帧都画完，一张图可以到分钟级，单进程 CPU 350–390%。
+选定 **2 + 4**：headless 不抢焦点、不占一块屏；Metal 起来了就把绘制交给 GPU；CPU 峰值按单进程算低于一核。只加 `--use-angle=metal`、不加另外三条 GPU 标志时 headless 曾 90 秒不出图，所以标志要齐。GPU 起不来时 `shared/shoot.sh` 只在同一个 headless 后端上重试一次，然后本轮不出图、退 2 让调用方记 blocked——不回退 headed：headed Chrome 会在正被人用的机器上占掉一块屏。旧路径（`chrome-headless-shell --screenshot --virtual-time-budget=5000 --disable-gpu`）会让软件 GL 把虚拟时间里的每一帧都画完，一张图可以到分钟级，单进程 CPU 350–390%。
 
 截图进程再加拉开标志：`--num-raster-threads=1 --renderer-process-limit=1 --js-flags=--single-threaded`（SwiftShader 另加 `--disable-gpu-compositing`）。本机前后（`gitanjali-60` 三机位）：
 
