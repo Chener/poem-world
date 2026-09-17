@@ -58,3 +58,4 @@ round 63 | PRD-15aj | 蘋按噪声开口子，不再是一块绿毯 | 自检通�
 round 64 | PRD-15ak | 远岸补八株高矮错落的枯树 | 自检通过：岸线有纵深
 round 65 | PRD-15al | 杜若压深 + 折面明暗差拉大 | 自检通过：不再像塑料
 note (round 65 之后) | 用临时的 ?rail=1 参数拍了一张带右栏的整页图（只在本地改，没提交）：页脚 loop=Ralph（PRD + progress，一轮一事）、harness=Claude Code、model=Claude Opus 5（非 fast）、effort=medium、rounds=64 轮（进行中）、stop=PRD 清空 / 自检连两轮到位 / 周限，链接里 PRD 与 progress 都在；评分折线从 7 升到 9。船长要求的机制标注确认无误 | 无提交
+round 66 | 验证轮 | 连拍 md5 一致、无 JS/着色器报错、file:// 可开、意象十五条逐条对上 | 自检：连续第二轮无硬缺口
