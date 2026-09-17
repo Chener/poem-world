@@ -144,7 +144,6 @@
 </aside>
 
 <script src="../shared/timeline.js"></script>
-<script src="../shared/worldprobe.js"></script>
 <script src="log.js"></script>
 <script>
 /* =========================================================================
@@ -362,15 +361,7 @@ for (var c4 = 0; c4 < 11; c4++) {            // clumps, with gaps of open water 
 /* 扁舟: one small boat, drifting, never arriving */
 /* Placed so that the station whose subtitle names them can see them: the boat
  * crosses the view from the 'boat' camera, the tower stands beyond it. */
-/* r was 43, which put the skiff 31.8m from the 5-boat eye while the tower stands at
- * 87.5m. A hull 7.2m long at that range is 122px across, against a tower 250px tall:
- * three fifths of its height. An independent critic measured the same thing off the
- * frame — "船的水线 y≈345 和塔基 y≈349 几乎同高...一叶小舟该是塔高的六分之一左右" —
- * and read the result as a flying saucer parked on the horizon rather than a 扁舟.
- * At r=76 the boat sits 62m out, still well inside the tower and far inside the far
- * bank (which starts at 165), and with the hull scaled to 0.72 it comes out 45px —
- * about a fifth of the tower. 扁舟 has to be small or the word means nothing. */
-var boat = { th: -2.09, r: 76, drift: 0.0065, s: 0.72 };
+var boat = { th: -2.09, r: 43, drift: 0.0065 };
 
 /* 鱼龙潜跃水成文 — where something went down, the river writes. A handful of rings,
  * each opening slowly and gone before it is large; placed out on the open water, never
@@ -410,7 +401,6 @@ for (var i9c = 0; i9c < 2; i9c++) {
 
 /* 明月楼: a tower on the far bank with exactly one window lit */
 var TOWER = { x: 22, z: -95 };
-var TW = 5.6;                        // the tower's module: half-widths are multiples of it
 
 /* --------------------------------------------------------------- DRAW  -- */
 function seg(a, b, col, w) {
@@ -519,12 +509,6 @@ function drawMoon() {
   return p;
 }
 
-/* how much of the tower reaches this eye; under 0.02 it is not drawn at all */
-function towerAlpha() {
-  var d = Math.hypot(TOWER.x - cam.x, TOWER.z - cam.z);
-  return Math.max(0, Math.min(1, (200 - d) / 95));
-}
-
 function drawFarBank() {
   /* the far bank: trees and one lit tower, all of it almost dissolved in haze */
   var k;
@@ -582,10 +566,12 @@ function drawFarBank() {
   }
   /* 明月楼 — 何处相思明月楼: eaves that lift at the corners, a railing, one lit window,
    * and the whole of it lying broken on the water. */
+  var TW = 5.6;
   /* how much of the tower this eye gets. From the grove station it is a hundred and
    * eighty metres off and half behind the mist, and drawn at full strength it read there
    * as a small grey block that could not be identified as anything. */
-  var tA = towerAlpha();
+  var tDist = Math.hypot(TOWER.x - cam.x, TOWER.z - cam.z);
+  var tA = Math.max(0, Math.min(1, (200 - tDist) / 95));
   if (tA < 0.02) return;
   ctx.save();
   ctx.globalAlpha = tA;
@@ -777,15 +763,12 @@ function drawFarBank() {
       var mY = wp.y - ws * 0.8 + ws * 1.6 * 0.42;
       ctx.beginPath(); ctx.moveTo(wp.x - ws * 0.5, mY); ctx.lineTo(wp.x + ws * 0.5, mY); ctx.stroke();
     }
-    /* 玉户帘中卷不去 — the lamp lies down on the river and will not be rolled away.
-     * The reflection itself is NOT drawn here. The tower belongs to drawFarBank(), which
-     * runs before drawWater(), so for as long as this call sat here the river was painted
-     * straight over the window's column and the tower stood on a blank water with a lit
-     * window — while the boat's lantern, drawn after the water, kept its own. A critic
-     * seeing only the frame called it out exactly: "一座亮着窗的塔立在平静江面上，
-     * 水里一条倒影都没有...同一片水跑两套物理". It is drawn from drawTowerGlow()
-     * below, which drawFrame() calls after the water. If you add any other light that
-     * lives on the far bank, put its reflection there too. */
+    /* 玉户帘中卷不去 — the lamp lies down on the river and will not be rolled away */
+    /* 何处相思明月楼 — the lit window has to reach the water. At 0.24 it did not: an
+     * independent critic looking at the frame reported the window as lit and the water
+     * under it as carrying "一点暖色都没有". A single lamp over water throws a
+     * column that is often more conspicuous than the lamp itself. */
+    reflect(TOWER.x + 1.5, TOWER.z, 34, 0.55, 'rgba(255,206,140,$A)', 0.52);
   }
   ctx.restore();
 }
@@ -887,20 +870,12 @@ function drawWater(moonP) {
       /* 近宽远窄 in SCREEN terms: the ratio of width to distance is what falls away, so
        * the road arrives as an open mouth and draws in towards the moon's foot */
       var rhalf = rd * (0.40 - 0.255 * Math.min(1, rd / 150));
-      /* The swing is a function of distance alone, so every shard at the same distance
-       * takes the SAME sideways push: it moves the road's whole centreline, not its
-       * edges. At 0.55+0.85 of the half-width that displacement was up to 1.4 half-widths
-       * — measured on round 46, the brightness-weighted centre of the lit water sat at
-       * x=282 and x=549 in bands only thirty rows apart, while the moon stayed at x=479.
-       * An independent critic read the result as a fan falling away to the lower left and
-       * concluded the moon and the light on the water "不是同一个光源".
-       * A real glitter path has a ragged EDGE but its centre lies on the moon's azimuth
-       * at every distance, because each facet is lit only where it happens to tilt. So
-       * the coherent swing is now a small fraction of the width — enough that the road
-       * is not a ruled corridor — and the raggedness is left to each shard's own lat. */
+      /* the swing dies away with distance. Scaled by the road's own half-width it grew
+       * with distance too, so the far end of the road wandered right out from under the
+       * moon and the reflection no longer hung below the thing casting it. */
       var wFall = Math.max(0.10, 1 - rd / 90);
-      var wander = (Math.sin(rd * 0.055 + T * 0.30) * rhalf * 0.10
-                  + Math.sin(rd * 0.021 - T * 0.17) * rhalf * 0.13) * wFall;
+      var wander = (Math.sin(rd * 0.055 + T * 0.30) * rhalf * 0.55
+                  + Math.sin(rd * 0.021 - T * 0.17) * rhalf * 0.85) * wFall;
       var lat = rc.lat * rhalf + Math.sin(T * 0.85 + rc.ph) * rhalf * 0.3 + wander;
       var rx = cam.x + ux * rd + px * lat;
       var rz = cam.z + uz * rd + pz * lat;
@@ -1026,23 +1001,11 @@ function reflect(x, z, height, halfWidth, colour, strength) {
     var yy = base.y + t * drop;
     /* the wander has to grow with the column, or a long one comes back ruler-straight */
     var wob = Math.sin(T * 1.25 + i * 0.75 + x * 0.3) * (1.2 + t * 5.5 * (1 + drop / 90));
-    /* A reflection on water WIDENS towards the eye — the near facets are tilted through
-     * a bigger range of angles, so they scatter the light over a bigger arc. This used to
-     * narrow (1 - t*0.35), which is what a mirror does, not what a river does. */
-    var len = Math.max(3, halfWidth * 2 * base.s * (0.75 + t * 1.55));
-    /* The flicker was sin(T*1.9 + i*1.3): 1.3 radians per ROW, a period of 4.8 rows.
-     * Once the rows went dense that beat became a regular ladder of bright and dark, and
-     * an independent critic counted "八个等大、等间距、边缘锐利的橙色小方块" and
-     * called it a dotted line rather than light. The flicker has to live in t — the
-     * fraction of the way DOWN the column — so its period is the column, not the row
-     * count, and two incommensurable terms keep it from repeating. */
-    var a = strength * (1 - t) * (1 - t * 0.35)
-          * (0.58 + 0.42 * (0.6 * Math.sin(T * 1.9 + t * 4.3) + 0.4 * Math.sin(t * 9.7 - T * 1.1)));
+    var len = Math.max(3, halfWidth * 2 * base.s * (1 - t * 0.35));
+    var a = strength * (1 - t) * (0.55 + 0.45 * Math.sin(T * 1.9 + i * 1.3));
     if (a < 0.012) continue;
     ctx.strokeStyle = colour.replace('$A', a.toFixed(3));
-    /* at least 1.6x the row pitch, so a dense column closes up into one body of light
-     * instead of leaving a gap between every pair of rows */
-    ctx.lineWidth = Math.max(base.s * 0.22 * (1 - t * 0.4), (drop / rows) * 1.6, 0.7);
+    ctx.lineWidth = Math.max(0.7, base.s * 0.22 * (1 - t * 0.4));
     ctx.beginPath();
     ctx.moveTo(base.x - len / 2 + wob, yy);
     ctx.lineTo(base.x + len / 2 + wob, yy);
@@ -1050,28 +1013,19 @@ function reflect(x, z, height, halfWidth, colour, strength) {
   }
 }
 
-/* where the skiff is at this instant. The debug port reads this too: one formula,
- * so the JSON can never report a boat the picture does not have. */
-function boatAt() {
-  var a = boat.th + T * boat.drift;
-  return { x: Math.cos(a) * boat.r, z: Math.sin(a) * boat.r,
-           bob: Math.sin(T * 0.7) * 0.10 };
-}
-
 function drawBoat() {
   /* 谁家今夜扁舟子 — a skiff: the sheer sweeps up at both ends, and it never arrives */
-  var bp = boatAt();
-  var bx = bp.x, bz = bp.z;
-  var bob = bp.bob;
+  var a = boat.th + T * boat.drift;
+  var bx = Math.cos(a) * boat.r, bz = Math.sin(a) * boat.r;
+  var bob = Math.sin(T * 0.7) * 0.10;
   var tilt = Math.sin(T * 0.53) * 0.06;
 
   /* the hull's own reflection, kept faint and broken: at full strength the fourteen
    * rows closed up into one white slab sitting under the boat like a shadow cast the
    * wrong way. 江潭落月复西斜 — the water gives back light, not the shape of the thing. */
-  reflect(bx, bz, 3.2 * boat.s, 3.0 * boat.s, 'rgba(206,224,248,$A)', 0.085);
+  reflect(bx, bz, 3.2, 3.0, 'rgba(206,224,248,$A)', 0.085);
 
-  var BS = boat.s;   // one scale for the whole skiff: hull, awning, oar, lantern
-  function P(dx, dy) { return project({ x: bx + dx * BS, y: dy * BS + bob, z: bz }); }
+  function P(dx, dy) { return project({ x: bx + dx, y: dy + bob, z: bz }); }
   var bowU = P(3.6, 0.92 - tilt), bowL = P(2.9, 0.16 - tilt);
   var strU = P(-3.6, 0.92 + tilt), strL = P(-2.9, 0.16 + tilt);
   var midL = P(0, -0.04), midU = P(0, 0.74);
@@ -1084,57 +1038,14 @@ function drawBoat() {
   ctx.quadraticCurveTo(midU.x, midU.y - 2, strU.x, strU.y);   // the sheer line on top
   ctx.closePath();
   ctx.fillStyle = 'rgba(12,18,30,.97)'; ctx.fill();
-  /* The thin bright pass used to stroke the CLOSED hull, so it ran round the bottom of
-   * the boat as well as the sheer: an even chrome rim along the underside, brighter than
-   * the moon's own road, on a hull whose underside no light can reach. That single line
-   * is what made the shape read as a flying saucer — disc, dome, bright ring. The wide
-   * soft pass still goes all the way round (it is only mist), but the bright pass is now
-   * the SHEER ALONE, and it is weighted towards the side the moon is on. */
+  /* Two strokes, one wide and faint under one thin and quiet. A single bright hairline
+   * made the boat a piece of vector art sitting in a world that is otherwise all soft
+   * edges — every critic who looked at it said so. The wide pass is the mist on the
+   * sheer; the thin one is only enough to keep the hull's shape readable. */
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(206,224,248,.07)'; ctx.lineWidth = 4.5; ctx.stroke();
-  var mnP = project({ x: MOON.x, y: MOON.y, z: MOON.z });
-  var sheerG = null;
-  if (mnP) {
-    /* bright where the sheer faces the moon, dying away along it */
-    sheerG = ctx.createLinearGradient(bowU.x, bowU.y, strU.x, strU.y);
-    var moonLeft = mnP.x < (bowU.x + strU.x) / 2;
-    sheerG.addColorStop(0, 'rgba(222,236,254,' + (moonLeft ? 0.10 : 0.34) + ')');
-    sheerG.addColorStop(1, 'rgba(222,236,254,' + (moonLeft ? 0.34 : 0.10) + ')');
-  }
-  ctx.beginPath();
-  ctx.moveTo(bowU.x, bowU.y);
-  ctx.quadraticCurveTo(midU.x, midU.y - 2, strU.x, strU.y);
-  ctx.strokeStyle = sheerG || 'rgba(222,236,254,.24)';
-  ctx.lineWidth = 1.0; ctx.stroke();
+  ctx.strokeStyle = 'rgba(206,224,248,.10)'; ctx.lineWidth = 4.5; ctx.stroke();
+  ctx.strokeStyle = 'rgba(222,236,254,.40)'; ctx.lineWidth = 1.1; ctx.stroke();
   ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
-
-  /* the waterline: where the hull goes IN. Without it the boat sits on the water like a
-   * sticker on glass — the wavelet field simply ran on behind it. A band of shadow
-   * pressed into the water under the hull, and two short crests interrupted at the
-   * planking, are the whole of what makes a floating thing look floated. */
-  var wlL = P(-2.9, 0.02), wlR = P(2.9, 0.02);
-  if (wlL && wlR) {
-    var wlW = Math.abs(wlR.x - wlL.x), wlY = (wlL.y + wlR.y) / 2;
-    var wlg = ctx.createLinearGradient(0, wlY - wlW * 0.03, 0, wlY + wlW * 0.16);
-    wlg.addColorStop(0, 'rgba(6,10,18,.55)');
-    wlg.addColorStop(1, 'rgba(6,10,18,0)');
-    ctx.fillStyle = wlg;
-    ctx.beginPath();
-    ctx.ellipse((wlL.x + wlR.x) / 2, wlY + wlW * 0.03, wlW * 0.56, Math.max(1.5, wlW * 0.10), 0, 0, Math.PI * 2);
-    ctx.fill();
-    /* the water the bow pushes aside, on the moon's side only */
-    ctx.strokeStyle = 'rgba(214,232,252,.30)';
-    ctx.lineWidth = Math.max(0.7, wlW * 0.016);
-    ctx.lineCap = 'round';
-    for (var wl = 0; wl < 2; wl++) {
-      var wlo = wlW * (0.10 + wl * 0.13);
-      ctx.beginPath();
-      ctx.moveTo(wlR.x - wlW * 0.06, wlY + wlo * 0.55);
-      ctx.quadraticCurveTo(wlR.x + wlo * 0.9, wlY + wlo * 0.75, wlR.x + wlo * 1.7, wlY + wlo * 0.35);
-      ctx.stroke();
-    }
-    ctx.lineCap = 'butt';
-  }
 
   /* the awning: a bowed roof on two posts, the shape that says boat and not plank */
   var aL = P(-1.7, 0.80), aR = P(1.7, 0.80), aTop = P(0, 2.35);
@@ -1190,7 +1101,7 @@ function drawBoat() {
     ctx.strokeStyle = 'rgba(206,222,246,.22)'; ctx.lineWidth = 1.0;
     ctx.beginPath(); ctx.moveTo(pM.x, pM.y); ctx.lineTo(pB.x, pB.y); ctx.stroke();
     ctx.lineCap = 'butt';
-    reflect(bx - 3.4 * boat.s, bz, 1.1 * boat.s, 0.5 * boat.s, 'rgba(206,222,246,$A)', 0.14);  // where it dips in
+    reflect(bx - 3.4, bz, 1.1, 0.5, 'rgba(206,222,246,$A)', 0.14);   // where it dips in
   }
 
   /* one small lantern under the awning */
@@ -1217,7 +1128,7 @@ function drawBoat() {
     ctx.fillRect(lp.x - ls * 0.32, lp.y - ls * 0.42, ls * 0.64, ls * 0.84);
     /* the same correction as the tower's window: a column, not a two-metre smudge. At
      * the boat camera this is the one warm thing in the lower half of the frame. */
-    reflect(bx + 0.5 * boat.s, bz, 9.5 * boat.s, 0.44 * boat.s, 'rgba(255,200,130,$A)', 0.56);
+    reflect(bx + 0.5, bz, 9.5, 0.44, 'rgba(255,200,130,$A)', 0.56);
   }
 }
 
@@ -2190,23 +2101,12 @@ function updateSubs() {
 }
 
 /* ---------------------------------------------------------------- LOOP -- */
-var lastFrameMs = 0;
-/* the lit window's column on the river. Lives outside drawFarBank() on purpose: see
- * the note at the window. Called after drawWater() so the river cannot erase it. */
-function drawTowerGlow() {
-  var tp = project({ x: TOWER.x, y: TOWER.y || 0, z: TOWER.z });
-  if (!tp) return;
-  reflect(TOWER.x + 1.5, TOWER.z, 34, 0.55, 'rgba(255,206,140,$A)', 0.52);
-}
-
 function drawFrame() {
-  var frameT0 = performance.now();
   drawSky();
   drawClouds();
   var moonP = drawMoon();
   drawFarBank();
   drawWater(moonP);
-  drawTowerGlow();
   drawMeadow();
   drawHaze();
   drawRings();
@@ -2215,7 +2115,6 @@ function drawFrame() {
   drawSandbar();
   drawGrove();
   if (!SHOT) updateSubs();
-  lastFrameMs = performance.now() - frameT0;
 }
 
 function markShotReady() {
@@ -2268,7 +2167,6 @@ window.__poemPerf = {
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
   var c = CAMS[Math.max(1, Math.min(CAMS.length, n)) - 1];
-  curCam = c;
   cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
   cam.y = gh(cam.x, cam.z) + 1.62;
   T = FROZEN_T;
@@ -2282,97 +2180,6 @@ window.__poemShot = function (n) {
   markShotReady();
   return true;
 };
-
-/* --------------------------------------------------------------- PROBE -- */
-/* window.__world(): what this frame actually contains, as a few kB of JSON.
- * The hard gates of the polish loop read this instead of a picture — see
- * ../shared/worldprobe.js and ../AGENTS.md. Every probe below reads the very
- * tables the draw code reads, through project(), the draw code's own
- * projection; nothing here re-derives a position. */
-var curCam = null;
-if (window.PoemProbe) {
-  window.PoemProbe.install('chunjiang', {
-    viewport: function () { return { w: W, h: H, dpr: DPR }; },
-    project: function (x, y, z) { return project({ x: x, y: y, z: z }); }
-  }, function (probe) {
-    var i, pts;
-
-    /* 皎皎空中孤月轮 */
-    probe.box('moon', [MOON.x - MOON.r, MOON.y - MOON.r, MOON.z - MOON.r],
-                      [MOON.x + MOON.r, MOON.y + MOON.r, MOON.z + MOON.r],
-                      { color: '#ffffff' });
-
-    /* 明月楼, and the one window that is lit */
-    var tA = towerAlpha();
-    probe.box('tower', [TOWER.x - TW * 0.94, 0, TOWER.z - TW * 0.94],
-                       [TOWER.x + TW * 0.94, 30.6, TOWER.z + TW * 0.94],
-                       { alpha: PoemProbe.n4(tA), drawn: tA >= 0.02 });
-    probe.add('tower-window', [[TOWER.x + 1.2, 14.2, TOWER.z - 0.25]],
-              { color: '#ffe4b2', drawn: tA >= 0.02 });
-
-    /* 扁舟: one skiff, never arriving */
-    var bp = boatAt();
-    probe.box('boat', [bp.x - 3.6, bp.bob - 0.04, bp.z - 1.2],
-                      [bp.x + 3.6, bp.bob + 0.92, bp.z + 1.2],
-                      { color: '#0c121e' });
-
-    /* 花林 */
-    pts = [];
-    for (i = 0; i < grove.length; i++) {
-      var g = grove[i], gy = gh(g.x, g.z);
-      pts.push([g.x, gy, g.z], [g.x, gy + g.h, g.z]);
-    }
-    probe.add('grove', pts, { count: grove.length });
-
-    /* 满江树: the far bank */
-    pts = [];
-    for (i = 0; i < bank.length; i++) {
-      var b = bank[i];
-      pts.push([b.x, 0, b.z], [b.x, b.h, b.z]);
-    }
-    probe.add('far-bank', pts, { count: bank.length });
-
-    /* 汀上白沙: the bar, sampled round its own lip table */
-    pts = [[0, BAR, 0]];
-    for (i = 0; i < EDGE.length; i += 10) pts.push([EDGE[i].x, 0, EDGE[i].z]);
-    probe.add('sandbar', pts, { count: grains.length, height: BAR });
-
-    /* 落花: where they are floating right now */
-    pts = [];
-    for (i = 0; i < PETAL.length; i++) {
-      var pt = PETAL[i];
-      var ang = pt.a + Math.sin(T * 0.11 * pt.sp + pt.ph) * 0.03;
-      var rad = pt.r + Math.sin(T * 0.19 * pt.sp + pt.ph * 1.7) * 0.9;
-      pts.push([Math.cos(ang) * rad, pt.air ? 3.1 : 0.03, Math.sin(ang) * rad]);
-    }
-    probe.add('petals', pts, { count: PETAL.length });
-
-    /* 水成文: only the rings that are open at this instant are drawn */
-    pts = [];
-    for (i = 0; i < RING.length; i++) {
-      var rg = RING[i];
-      if (((T + rg.t0) % rg.period) / rg.period > 0.85) continue;
-      pts.push([rg.x, 0, rg.z]);
-    }
-    probe.add('rings', pts, { count: pts.length, pool: RING.length });
-
-    return {
-      t: PoemProbe.n2(T),
-      camera: {
-        name: curCam ? curCam.name : null,
-        x: PoemProbe.n2(cam.x), y: PoemProbe.n2(cam.y), z: PoemProbe.n2(cam.z),
-        yaw: PoemProbe.n4(cam.yaw), pitch: PoemProbe.n4(cam.pitch), fov: cam.fov,
-        /* a camera's y is world-absolute: this is how far the eye really is
-         * above the sand under it */
-        ground: PoemProbe.n2(gh(cam.x, cam.z)),
-        eyeAboveGround: PoemProbe.n2(cam.y - gh(cam.x, cam.z))
-      },
-      /* Canvas 2D has no triangles to count; the budget this world can blow is
-       * the time one frame takes. */
-      render: { renderer: 'canvas2d', frameMs: PoemProbe.n2(lastFrameMs) }
-    };
-  });
-}
 
 /* ------------------------------------------------------------------ UI -- */
 var enter = document.getElementById('enter');
@@ -2403,7 +2210,6 @@ resize();
 
 if (SHOT) {
   var c = CAMS[Math.max(1, Math.min(CAMS.length, SHOT)) - 1];
-  curCam = c;
   cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
   cam.y = gh(cam.x, cam.z) + 1.62;
   T = FROZEN_T;
