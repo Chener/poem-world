@@ -171,7 +171,10 @@ const EYE = 1.62;
 const WIND = [0.62, -0.78];           // autumn wind, blowing toward the south-east shore
 /* ?shot=1 —— 取证模式：固定机位、固定时间、没有界面，画一帧就停。
    密度大约是交互时的一半 —— critic judged 的必须基本就是访客看到的那个世界。 */
-const SHOT = new URLSearchParams(location.search).has('shot');
+const QS = new URLSearchParams(location.search);
+const SHOT = QS.has('shot');
+const LITE = QS.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const LIVE_FPS = LITE ? 20 : 30;
 
 /* 定序随机。截图必须逐字节可复现：同一轮、同一机位，第 3 轮和第 9 轮拍出来的
    必须是同一张图，否则并排比较就没有意义。所以这个世界里不用浏览器的随机数，
@@ -218,7 +221,7 @@ function groundY(x, z) { return Math.max(terrainH(x, z), WATER_Y); }
 
 /* ---------- gl boot ---------- */
 const canvas = document.getElementById('gl');
-const glOpts = { antialias: true, alpha: false, depth: true, preserveDrawingBuffer: SHOT };
+const glOpts = { antialias: !LITE, alpha: false, depth: true, preserveDrawingBuffer: SHOT };
 const gl = canvas.getContext('webgl', glOpts) || canvas.getContext('experimental-webgl', glOpts);
 if (!gl) {
   document.getElementById('enter').innerHTML =
@@ -1542,6 +1545,7 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
   if (e.code === 'Escape' && pointerLocked) document.exitPointerLock();
+  pokeLive();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -1558,12 +1562,14 @@ addEventListener('mousemove', e => {
   if (!pointerLocked) return;
   cam.yaw   -= e.movementX * 0.0022;
   cam.pitch = Math.max(-1.35, Math.min(1.1, cam.pitch - e.movementY * 0.0020));
+  pokeLive();
 });
 
 /* drag-to-look (no pointer lock) + touch stick */
 let isTouch = false, dragId = null, dragX = 0, dragY = 0;
 let stick = null;   // {id, ox, oy, dx, dy}
 canvas.addEventListener('pointerdown', e => {
+  pokeLive();
   if (e.pointerType === 'touch') isTouch = true;
   if (!entered) { enterWorld(); if (e.pointerType === 'touch') return; }
   const leftHalf = e.clientX - canvas.getBoundingClientRect().left < canvas.clientWidth * 0.42;
@@ -1667,7 +1673,7 @@ function invert(o, m) {   // full 4x4 inverse (used only for the sky ray)
 }
 
 function resize() {
-  const dpr = SHOT ? 1 : Math.min(devicePixelRatio || 1, 2);
+  const dpr = SHOT ? 1 : Math.min(devicePixelRatio || 1, LITE ? 1 : 1.5);
   const cssW = SHOT ? (window.innerWidth || 960) : canvas.clientWidth;
   const cssH = SHOT ? (window.innerHeight || 600) : canvas.clientHeight;
   const w = Math.max(1, Math.round(cssW * dpr));
@@ -1940,13 +1946,45 @@ window.__poemShot = function (spec) {
 };
 
 function frame(ms) {
+  if (SHOT) return;
+  if (!wantLive(ms)) { loopOn = false; return; }
+  requestAnimationFrame(frame);
+  if (ms - lastDrawT < 1000 / LIVE_FPS) return;
+  lastDrawT = ms;
   const t = ms / 1000;
   if (!T0) { T0 = t; lastT = t; }
   const dt = Math.min(0.05, t - lastT); lastT = t;
   step(dt, t - T0);
   draw(t - T0);
-  requestAnimationFrame(frame);
 }
+
+let loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
+function wantLive(now) {
+  if (document.hidden) return false;
+  if (roamHold) return true;
+  if (now < liveUntil) return true;
+  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
+      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight) return true;
+  if (stick || dragId !== null) return true;
+  return false;
+}
+function pokeLive() {
+  liveUntil = performance.now() + 1400;
+  kickLoop();
+}
+function kickLoop() {
+  if (SHOT || document.hidden) return;
+  if (!loopOn) { loopOn = true; lastT = performance.now() / 1000; requestAnimationFrame(frame); }
+}
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) loopOn = false;
+  else pokeLive();
+});
+window.__poemPerf = {
+  poke: pokeLive,
+  roam: function (on) { roamHold = !!on; keys.KeyW = !!on; if (on) pokeLive(); }
+};
+
 if (gl) {
   cam.y = groundY(cam.x, cam.z) + EYE;
   if (SHOT) {
@@ -1954,7 +1992,10 @@ if (gl) {
     scatterShotAroundCam();
     renderShotFrame();
   } else {
-    requestAnimationFrame(frame);
+    resize();
+    const t0 = performance.now() / 1000;
+    T0 = t0; lastT = t0;
+    step(0.016, 0); draw(0);
   }
 }
 
