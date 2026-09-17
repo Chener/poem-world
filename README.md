@@ -6,7 +6,7 @@
 
 | 子项目 | 诗 | loop 机制 | harness | 模型 | 推理强度 |
 |---|---|---|---|---|---|
-| [`gitanjali-60/`](gitanjali-60/) | 泰戈尔《吉檀迦利》60（英文原作） | Gauntlet 独立 critic + Ralph 一轮一事 | Claude Code | Claude Opus 5（非 fast） | high |
+| [`gitanjali-60/`](gitanjali-60/) | 泰戈尔《吉檀迦利》60（英文原作） | 纯 Gauntlet（一条总 prompt · 盲评 critic） | Claude Code | Claude Opus 5（非 fast） | high |
 | [`xiangfuren/`](xiangfuren/) | 屈原《九歌·湘夫人》 | Gauntlet 独立 critic + Ralph 一轮一事 | Claude Code | Claude Opus 5（非 fast） | medium |
 | [`chunjiang/`](chunjiang/) | 张若虚《春江花月夜》 | Gauntlet 独立 critic + Ralph 一轮一事 | Claude Code | Claude Opus 5（非 fast） | low |
 
