@@ -236,11 +236,7 @@ def chrome_cmd(backend, chrome, profile, port, w, h):
             "--renderer-process-limit=1",
             "--js-flags=--single-threaded",
         ]
-    if backend == "headed-metal":
-        flags += GPU_FLAGS + [
-            "--window-position=-20000,0",
-        ]
-    elif backend == "headless-gpu":
+    if backend == "headless-gpu":
         flags += GPU_FLAGS + ["--headless=new"]
     elif backend == "swiftshader":
         flags += [
@@ -347,7 +343,9 @@ def parse_shots(items):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", required=True, choices=("headed-metal", "headless-gpu", "swiftshader"))
+    # Headless only: a headed Chrome takes over a screen on a machine someone
+    # is using. shared/shoot.sh refuses anything else before it gets here.
+    ap.add_argument("--backend", required=True, choices=("headless-gpu", "swiftshader"))
     ap.add_argument("--load", required=True, help="first URL; enables ?shot=1")
     ap.add_argument("--shot", action="append", default=[], help="name:arg for window.__poemShot")
     ap.add_argument("--outdir", required=True)
@@ -356,6 +354,8 @@ def main():
     ap.add_argument("--width", type=int, default=960)
     ap.add_argument("--height", type=int, default=600)
     ap.add_argument("--stats", default="")
+    ap.add_argument("--profile", default="", help="chrome --user-data-dir; default is a fresh /tmp dir")
+    ap.add_argument("--pidfile", default="", help="write the browser pid here so the caller can reap it")
     args = ap.parse_args()
     shots = parse_shots(args.shot)
     chrome = args.chrome
@@ -363,7 +363,7 @@ def main():
         print("no Chrome for Testing at: %s" % chrome, file=sys.stderr)
         return 1
     os.makedirs(args.outdir, exist_ok=True)
-    profile = os.path.join(
+    profile = args.profile or os.path.join(
         "/tmp", "pw-shot-profile-%d-%d" % (os.getpid(), time.time_ns())
     )
     os.makedirs(profile, exist_ok=True)
@@ -374,6 +374,17 @@ def main():
     if os.environ.get("POEM_SHOT_DEBUG"):
         log_path = os.path.join(profile, "chrome.log")
         logf = open(log_path, "wb")
+    # A signal must reach the finally: below, or Chrome is reparented to init
+    # and stays. SystemExit unwinds the try, so kill_tree(proc) still runs.
+    def _bail(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        try:
+            signal.signal(_sig, _bail)
+        except (ValueError, OSError):
+            pass
+
     t0 = time.time()
     proc = subprocess.Popen(
         cmd,
@@ -381,6 +392,12 @@ def main():
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    if args.pidfile:
+        try:
+            with open(args.pidfile, "w") as f:
+                f.write("%d\n" % proc.pid)
+        except OSError:
+            pass
     peak_sum = 0.0
     peak_one = 0.0
     gpu_seen = []
@@ -520,12 +537,18 @@ def main():
         if cdp is not None:
             cdp.close()
         kill_tree(proc)
+        if args.pidfile:
+            try:
+                os.remove(args.pidfile)
+            except OSError:
+                pass
         if log_path:
             try:
                 logf.close()
             except Exception:
                 pass
-        shutil.rmtree(profile, ignore_errors=True)
+        if not args.profile:
+            shutil.rmtree(profile, ignore_errors=True)
 
 
 if __name__ == "__main__":
