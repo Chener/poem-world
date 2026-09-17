@@ -2835,8 +2835,8 @@ function updateChildren(t, camX) {
              * the sand within the first third of the throw, so at any frozen
              * instant almost nobody had anything in the air — which is exactly
              * what four critics reported. */
-            var vf = 2.6 + h2(g, 490 + c * 9 + b) * 2.0;
-            var vy = 3.40 + h2(g, 520 + c * 9 + b) * 1.25;
+            var vf = 3.0 + h2(g, 490 + c * 9 + b) * 2.2;
+            var vy = 2.75 + h2(g, 520 + c * 9 + b) * 1.05;   // thrown across, not up
             var dx2 = -Math.sin(yaw + spread), dz2 = -Math.cos(yaw + spread);
             var bx2 = hx + dx2 * vf * tau, bz2 = hz + dz2 * vf * tau;
             var by2 = hy + vy * tau - 4.9 * tau * tau;
