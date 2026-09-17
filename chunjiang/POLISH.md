@@ -2,10 +2,14 @@
 
 ## 机制：纯 Gauntlet
 只有这一条总 prompt。没有任务清单，没有「一轮一事」的外壳。
-lead 自己读世界、自己拆块、自己决定这一轮动哪几块；每一轮结束另开一个
-**没有看过 builder 任何解释**的 critic，只给它 `POEM.md`、下面的意象对照表和这一轮的
-真实截图，让它盲比「像不像 / 最大缺口 / 0-10 分」。critic 判输就打回重做，
-判「到位」连续两轮才算赢。
+lead 自己读世界、自己拆块、自己决定这一轮动哪几块；每一轮结束由
+`shared/critic.sh` 起一个**没有看过 builder 任何解释**的一次性 critic 进程，
+只给它 `POEM.md` 和这一轮最多 2 张缩小后的截图，让它盲比「像不像 / 最大缺口 / 0-10 分」。
+critic 判输就打回重做，判「到位」连续两轮才算赢。
+
+**lead 不看图。** 截图仍然三机位落盘，但进 lead 会话的只有 critic 打印的那行 JSON——
+图片一旦读进会话，之后每一次 API 请求都要把它重传一遍，会打满本机上行。
+理由与上限见 `../AGENTS.md`「主循环工人不读图」。
 
 ## 目标
 把张若虚《春江花月夜》（见 `POEM.md`）变成一个可以走进去的春夜江上世界：
@@ -41,7 +45,9 @@ lead 自己读世界、自己拆块、自己决定这一轮动哪几块；每一
 1. 读 `index.html`、`POEM.md`、`log.jsonl`。
 2. 自己判断这一轮最该动的块，改掉。
 3. `sh shots.sh N` 拍 3 机位真实截图到 `shots/N/`。
-4. 开一个干净的 critic 子代理盲评，拿回分数和最大缺口。
+4. `sh ../shared/critic.sh chunjiang N` —— 盲评在一次性 `claude -p` 子进程里发生，
+   你只读它打印的那行 JSON（`score` / `verdict` / `critic` / `gap`）。
+   **你自己一张图都不要 `Read`。**
 5. 追加一行 `log.jsonl`（含 `score`），跑 `python3 ../shared/logrow.py` 一类工具重生成 `log.js`，快照到 `versions/N/`。
 
 ## 停止条件

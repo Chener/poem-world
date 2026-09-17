@@ -62,7 +62,9 @@ builder 每轮拿世界和这七段比，不是和上一版比。
 1. builder 读世界现状、`POEM.md`、`log.jsonl` 全部历史，尤其上一轮 critic 的原话。
 2. builder 自己拆块。动几块由他判断，不受「一轮一事」限制。
 3. 3 个固定机位截图到 `shots/N/`，快照到 `versions/N/`。
-4. **另开一个 critic 子代理**，它没看过代码、diff、builder 的任何解释，
+4. **`sh ../shared/critic.sh gitanjali-60 N`**，一次性 critic 进程，
+   它没看过代码、diff、builder 的任何解释，
+   builder 自己一张图都不 `Read`（见 `../AGENTS.md`「主循环工人不读图」），
    不知道这一轮改了什么。只给它三样东西：
    `POEM.md` 的诗与意象对照表、本轮截图、以及「这是照着这首诗做的一个可漫游世界」这句话。
    它只回答两件事：**像不像**（0–10 + 理由），**最大缺口**（一条）。

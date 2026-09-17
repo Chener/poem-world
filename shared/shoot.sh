@@ -3,7 +3,14 @@
 #   sh shared/shoot.sh <world> <round> [port]
 #
 # One niced Chrome for Testing process paints all three cameras over CDP and
-# exits. Cameras switch through window.__poemShot so the scene is not rebuilt.
+# exits.
+#
+# The loop worker does NOT look at what comes out of here. Shots go to disk for
+# the site and for the byte-for-byte reproducibility check; the aesthetic gate
+# runs `shared/critic.sh`, which shrinks them and shows 1-2 to a throwaway
+# `claude -p` process. See AGENTS.md "上行流量".
+#
+# Cameras switch through window.__poemShot so the scene is not rebuilt.
 # Backends (POEM_SHOT_BACKEND): headless-gpu (default) | headed-metal | swiftshader.
 # QoS: taskpolicy -c background, nice -n 20. Shared mkdir lock so at most one
 # render process exists on this machine. No resident browser.
@@ -133,3 +140,4 @@ if [ "$ok" -ne 1 ] || [ -n "$missing" ]; then
   exit 2
 fi
 echo "round $R: 3 shots in $OUT"
+echo "  do not Read these PNGs — run: sh shared/critic.sh $W $R"
