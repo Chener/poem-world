@@ -65,6 +65,19 @@ winding or `side`.
 close to it smears across the frame. Check a camera against the terrain height at its
 own x/z before believing its eye height.
 
+**主循环工人不读图。** Claude 的每一次 API 请求都会把会话上下文里还在的每一张图重新上传
+一遍；prompt cache 只省计费，不省上传字节。一张 300KB 的截图被 `Read` 进来之后，这个会话
+剩下的每一个回合都要再传一次它，直到压缩把它挤掉。2026-09-17 实测：xiangfuren 工人会话
+212MB / 410 张图，chunjiang 97MB / 262 张，本机上行被打满到全屋丢包。所以：截图照常三机位
+落盘（站点要用，逐字节复现也要用），但**循环工人自己不 `Read` 任何 `shots/` 下的图**，也不
+从浏览器通道把截图取回会话——审美判断走 `shared/critic.sh`，一个 `claude -p` 一次性进程看
+图、打分、打印 JSON，工人只读那行文字。缩放与张数上限写死在
+`shared/shrink.sh`（最长边 ≤1024、JPEG 质量 70，单张 250–530KB 掉到 55–100KB）和
+`shared/critic.sh`（每轮最多 2 张，按轮号轮换机位，其余当场删掉）。critic 仍然是盲评：
+子进程的 cwd 在 `/tmp`、只开 `Read` 工具，看不到 `index.html`、diff 或 `log.jsonl`。
+**不要假设 Task 子代理就等于不进主会话**——chunjiang 的 `POLISH.md` 一直写着 critic 子代理，
+主会话仍然攒下了 262 张，因为工人为了挑图、比较前后轮、排查黑图，还是自己看了。
+
 **Rendered content avoids violent or morbid imagery**, whatever the source poem contains.
 Public-domain originals live in `POEM.md`; the world, the screenshots and the prose around
 them stay clear of it.

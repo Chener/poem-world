@@ -35,6 +35,28 @@ python3 -m http.server 8731     # 然后开 http://127.0.0.1:8731/
 共用件在 [`shared/`](shared/)：`site.css`（色板）、`timeline.css` + `timeline.js`（时间线）、
 `mklog.sh`（由 `log.jsonl` 生成 `log.js`）、`shoot.sh` + `cdp_shot.py`（一轮三张固定机位图）。
 
+## 上行流量：循环工人不读图
+
+截图拍三机位、照常落盘；**循环工人自己一张都不 `Read`**。审美判定走
+[`shared/critic.sh`](shared/critic.sh)：它先用 [`shared/shrink.sh`](shared/shrink.sh)
+把这一轮的图缩到最长边 ≤1024、JPEG 质量 70（单张 250–530KB → 55–100KB），
+取其中最多 2 张（按轮号轮换机位，其余当场删掉），交给一个 `claude -p`
+一次性进程，打印一行 JSON 就死；工人只读那行字。
+
+```sh
+sh shots.sh 44                      # 3 机位 PNG 落盘（站点与逐字节复现用）
+sh ../shared/critic.sh chunjiang 44 # → {"score":7,"verdict":"还不像","critic":"…","gap":"…"}
+```
+
+为什么非这么写不可：Claude 每一次 API 请求都会把会话上下文里还在的每一张图
+重新上传一遍，prompt cache 只省计费、不省上传字节。一张图读进来之后，这个会话
+剩下的每一个回合都要再传一次它。2026-09-17 实测：xiangfuren 工人会话 212MB / 410 张，
+chunjiang 97MB / 262 张，本机上行被打满到全屋丢包。
+
+critic 仍然是盲评：子进程 cwd 在 `/tmp`、只开 `Read` 工具，看不到 `index.html`、
+diff 或 `log.jsonl`，只拿到诗、评分口径和图。Ralph 的每轮自检用 `POEM_CRITIC_ASK`
+多问一句，答案回在 JSON 的 `ask` 里。
+
 ## 截图与资源
 
 循环工人和这台电脑共用一台机器，截图必须又轻又短：同样 3 张机位，单张墙钟 ≤ 60 秒，
