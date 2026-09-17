@@ -155,8 +155,6 @@
 
 var Q = new URLSearchParams(location.search);
 var SHOT = parseInt(Q.get('shot') || '0', 10) || 0;   // 1..6 → fixed camera, frozen clock, no UI
-var LITE = Q.get('lite') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-var LIVE_FPS = LITE ? 20 : 30;
 var FROZEN_T = 21.0;
 /* Software GL would otherwise faithfully render every frame of Chrome's virtual-time
  * budget, which takes minutes per image. In shot mode we draw a few frames and stop. */
@@ -214,7 +212,7 @@ var ctx = cv.getContext('2d');
 var W = 0, H = 0, DPR = 1;
 
 function resize() {
-  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, LITE ? 1 : 1.5);
+  DPR = SHOT ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   W = Math.max(1, (SHOT ? (window.innerWidth || 960) : cv.clientWidth) | 0);
   H = Math.max(1, (SHOT ? (window.innerHeight || 600) : cv.clientHeight) | 0);
   cv.width = Math.max(1, Math.round(W * DPR));
@@ -339,7 +337,7 @@ for (var i3 = 0; i3 < 22; i3++) {
  * cross-hatch lying over the whole river. The same LCG that places the sand and the
  * grove has no such structure in it. */
 var WAVES = [];
-for (var i8 = 0; i8 < 20000; i8++) {
+for (var i8 = 0; i8 < 11000; i8++) {
   var wA = rnd() * Math.PI * 2, wB = rnd();
   WAVES.push({ ang: wA, rad: 2.5 + Math.pow(wB, 0.62) * 300,
                len: rnd(), ph: rnd() * 6.28318, bow: rnd() < 0.5 ? 1 : -1 });
@@ -362,42 +360,6 @@ for (var c4 = 0; c4 < 11; c4++) {            // clumps, with gaps of open water 
 /* Placed so that the station whose subtitle names them can see them: the boat
  * crosses the view from the 'boat' camera, the tower stands beyond it. */
 var boat = { th: -2.09, r: 43, drift: 0.0065 };
-
-/* 鱼龙潜跃水成文 — where something went down, the river writes. A handful of rings,
- * each opening slowly and gone before it is large; placed out on the open water, never
- * on the bar. */
-var RING = [];
-for (var i6r = 0; i6r < 7; i6r++) {
-  var ra6 = rnd() * Math.PI * 2, rr6 = 26 + rnd() * 90;
-  RING.push({ x: Math.cos(ra6) * rr6, z: Math.sin(ra6) * rr6,
-              t0: rnd() * 26, period: 19 + rnd() * 16 });
-}
-
-/* 昨夜闲潭梦落花 — blossom off the grove, on the water and a little of it still in the
- * air. Placed in the channel the river makes round the meadow, because that is the water
- * the flowering trees actually stand over. */
-var PETAL = [];
-for (var i7p = 0; i7p < 150; i7p++) {
-  var pa7 = -0.80 + rnd() * 1.55;
-  var pr7 = 14 + rnd() * 15;
-  PETAL.push({ a: pa7, r: pr7, ph: rnd() * 6.28318, air: rnd() < 0.22,
-               sp: 0.6 + rnd() * 0.9, sz: 0.55 + rnd() * 0.75 });
-}
-
-/* 白云一片: two thin strips, built once, each a run of soft puffs */
-var CLOUD = [];
-for (var i9c = 0; i9c < 2; i9c++) {
-  var puffs = [];
-  var n9 = 16 + Math.floor(rnd() * 10);
-  for (var j9 = 0; j9 < n9; j9++) {
-    var t9 = j9 / (n9 - 1);
-    puffs.push({ u: (t9 - 0.5) * 2, v: (rnd() - 0.5) * 0.9 + Math.sin(t9 * 3.1) * 0.25,
-                 r: 0.5 + rnd() * 0.75,
-                 a: Math.sin(Math.PI * t9) * (0.55 + rnd() * 0.65) });
-  }
-  CLOUD.push({ x0: rnd() * 1600, y: 150 + rnd() * 110, z: -420 - rnd() * 260,
-               w: 150 + rnd() * 90, h: 16 + rnd() * 10, puffs: puffs });
-}
 
 /* 明月楼: a tower on the far bank with exactly one window lit */
 var TOWER = { x: 22, z: -95 };
@@ -429,38 +391,6 @@ function drawSky() {
   g.addColorStop(0.62, '#1b2c42');
   g.addColorStop(1.00, '#0a1020');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-}
-
-function drawClouds() {
-  /* 白云一片去悠悠 — one strip of cloud, and it is leaving. The sky in this world has
-   * been nothing but a gradient with a moon in it, and this is a line of the poem that
-   * was never in the picture at all. It is thin, it lies well off the moon so as not to
-   * take the eye from it, its underside carries a little of the moonlight, and it drifts
-   * so slowly that in any one look it is simply there. */
-  for (var cI = 0; cI < CLOUD.length; cI++) {
-    var cd = CLOUD[cI];
-    var drift = (cd.x0 + T * 0.55) % 1600 - 800;
-    var cp3 = project({ x: drift, y: cd.y, z: cd.z });
-    if (!cp3) continue;
-    var cw = cd.w * cp3.s, chh = cd.h * cp3.s;
-    if (cw < 4) continue;
-    for (var pI = 0; pI < cd.puffs.length; pI++) {
-      var pu = cd.puffs[pI];
-      var ux3 = cp3.x + pu.u * cw, uy3 = cp3.y + pu.v * chh;
-      var ur = pu.r * chh;
-      ctx.save();
-      ctx.translate(ux3, uy3); ctx.scale(1, 0.46); ctx.translate(-ux3, -uy3);
-      var cg3 = ctx.createRadialGradient(ux3, uy3, 0, ux3, uy3, ur);
-      /* lit from below, where the moon is */
-      var lift = 0.5 + 0.5 * (-pu.v);
-      cg3.addColorStop(0, 'rgba(150,172,204,' + (0.052 * pu.a * (0.5 + lift)).toFixed(3) + ')');
-      cg3.addColorStop(0.55, 'rgba(142,164,196,' + (0.024 * pu.a * (0.5 + lift)).toFixed(3) + ')');
-      cg3.addColorStop(1, 'rgba(138,160,192,0)');
-      ctx.fillStyle = cg3;
-      ctx.beginPath(); ctx.arc(ux3, uy3, ur, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-  }
 }
 
 function drawMoon() {
@@ -756,15 +686,8 @@ function drawWater(moonP) {
   g.addColorStop(0.16, '#101b2e');
   g.addColorStop(1.00, '#070d18');
   ctx.save();
-  /* Started a little above the join and faded in. Clipped exactly at the horizon, the
-   * water's own fill left a one-pixel rule straight across the picture and cut 江天一色
-   * into two flat halves. */
-  ctx.beginPath(); ctx.rect(0, hy - 26, W, H - hy + 26); ctx.clip();
+  ctx.beginPath(); ctx.rect(0, hy, W, H - hy); ctx.clip();
   ctx.fillStyle = g; ctx.fillRect(0, hy, W, H - hy);
-  var jg = ctx.createLinearGradient(0, hy - 26, 0, hy + 12);
-  jg.addColorStop(0, 'rgba(22,36,58,0)');
-  jg.addColorStop(1, 'rgba(22,36,58,.85)');
-  ctx.fillStyle = jg; ctx.fillRect(0, hy - 26, W, 38);
 
   /* 滟滟随波千万里 — one field of wavelets over the whole river. Everywhere it is
    * faint ripple; along the moon's own azimuth the same field burns into a road
@@ -808,7 +731,7 @@ function drawWater(moonP) {
       /* 何处春江无月明 — the river away from the road is still lit river, not a colour.
        * Only the road was carrying any texture at all and everything either side of it
        * read as one flat fill. */
-      var alpha = (0.30 + 0.40 * near * near * flick) * flick * Math.max(0.22, 1 - along / 320);
+      var alpha = (0.23 + 0.42 * near * near * flick) * flick * Math.max(0.2, 1 - along / 300);
       if (alpha < 0.014) continue;
       /* seen at a grazing angle, a wavelet is a flat sliver: wide, and almost no height */
       var len = Math.min(17, Math.max(1.6, (0.35 + 1.5 * h1) * p.s * 1.5));
@@ -1066,29 +989,17 @@ function drawBoat() {
   var lp = P(0.5, 1.45);
   if (lp) {
     var ls = Math.max(1.4, 1.1 * (project({ x: bx, y: 0, z: bz }) || { s: 1 }).s);
-    /* Three soft passes rather than one disc. A single radial gradient at a third of an
-     * alpha shows its own circle on the water, and a lamp on a river does not come with
-     * a rim; layered and stretched sideways it reads as light in the air over water. */
-    for (var lgI = 0; lgI < 3; lgI++) {
-      var lr = ls * (1.8 + lgI * 2.2);
-      var la2 = 0.30 / (1 + lgI * 1.25);
-      ctx.save();
-      ctx.translate(lp.x, lp.y); ctx.scale(1, 0.72 - lgI * 0.12); ctx.translate(-lp.x, -lp.y);
-      var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, lr);
-      lg.addColorStop(0, 'rgba(255,198,126,' + la2.toFixed(3) + ')');
-      lg.addColorStop(0.45, 'rgba(255,196,124,' + (la2 * 0.42).toFixed(3) + ')');
-      lg.addColorStop(1, 'rgba(255,196,124,0)');
-      ctx.fillStyle = lg;
-      ctx.beginPath(); ctx.arc(lp.x, lp.y, lr, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
+    var lg = ctx.createRadialGradient(lp.x, lp.y, 0, lp.x, lp.y, ls * 3.4);
+    lg.addColorStop(0, 'rgba(255,198,126,.34)');
+    lg.addColorStop(1, 'rgba(255,198,126,0)');
+    ctx.fillStyle = lg; ctx.fillRect(lp.x - ls * 3.4, lp.y - ls * 3.4, ls * 6.8, ls * 6.8);
     ctx.fillStyle = 'rgba(255,224,176,.92)';
     ctx.fillRect(lp.x - ls * 0.32, lp.y - ls * 0.42, ls * 0.64, ls * 0.84);
     reflect(bx + 0.5, bz, 2.0, 0.5, 'rgba(255,206,140,$A)', 0.26);
   }
 }
 
-var barPath = null, barEnv = null, barPathCols = null, barPathOut = null;
+var barPath = null, barEnv = null;
 function drawSandbar() {
   /* The bar is one polygon: the lip loop, clipped against the near plane and closed
    * along the bottom of the screen. Reconstructing it per screen column produced a
@@ -1124,7 +1035,7 @@ function drawSandbar() {
     if (ain) chain.push(a);
     if (ain !== bin) chain.push(mix(a, b, (NEAR - a.Z) / (b.Z - a.Z)));
   }
-  barPath = null; barEnv = null; barPathCols = null; barPathOut = null;
+  barPath = null; barEnv = null;
   if (chain.length > 2) {
     var pts = [];
     for (i9 = 0; i9 < chain.length; i9++) pts.push(toScreen(chain[i9]));
@@ -1137,10 +1048,7 @@ function drawSandbar() {
      * Sorting the points by x instead turned that fold into a row of dark teeth combed
      * down through the sand. An envelope can do neither, and it carries the shore out to
      * both frame edges without the horizontal seam the old corner-jump left there. */
-    /* two pixels, not four: the shallows are washed one column at a time and at a
-     * four-pixel step the columns can just be counted along the shore — the "regular
-     * vertical striations" in the bank. */
-    var COLW = 2, nCol = Math.ceil((W + 8) / COLW) + 1;
+    var COLW = 4, nCol = Math.ceil((W + 8) / COLW) + 1;
     var env = new Array(nCol), ci2;
     for (i9 = 0; i9 < pts.length; i9++) {
       var ci = Math.round((pts[i9].x + 4) / COLW);
@@ -1180,7 +1088,7 @@ function drawSandbar() {
      * such a column alone yields a point far down the frame, which came out as a long
      * dark tooth combed down through the sand. Any real far lip within a few columns
      * overrides it. */
-    var envM = env.slice(), RUN = 8;
+    var envM = env.slice(), RUN = 4;
     for (ci2 = 0; ci2 < nCol; ci2++) {
       var mn = env[ci2];
       for (var dk = -RUN; dk <= RUN; dk++) {
@@ -1196,7 +1104,7 @@ function drawSandbar() {
      * edge. That join was a kink, and the wide pale strokes that lie along the shore
      * turned the kink into a step: a lighter block of river with one square vertical
      * edge, sitting just above the sand. */
-    for (var sm = 0; sm < 22; sm++) {
+    for (var sm = 0; sm < 10; sm++) {
       var env2 = env.slice();
       for (ci2 = 1; ci2 < nCol - 1; ci2++) env2[ci2] = (env[ci2 - 1] + env[ci2] * 2 + env[ci2 + 1]) / 4;
       env = env2;
@@ -1227,16 +1135,13 @@ function drawSandbar() {
     /* and the wash dies away across any stretch the outer ring never reached. Carried on
      * at full strength it ran out to the frame's edge as a level bright line lying on the
      * river — the same mistake as the meadow's shore, in a third place. */
-    /* a long fade — a hundred and forty passes reaches most of a hundred pixels. At half
-     * that, the stretch where the outer ring never reached still showed as a pale slab
-     * with one straight side lying on the water off to the left. */
-    for (var er = 0; er < 140; er++) {
+    for (var er = 0; er < 26; er++) {
       var er2 = envReal.slice();
       for (ci2 = 1; ci2 < nCol - 1; ci2++)
         er2[ci2] = Math.min(1, (envReal[ci2 - 1] + envReal[ci2] * 2 + envReal[ci2 + 1]) / 4);
       envReal = er2;
     }
-    for (var smo = 0; smo < 18; smo++) {
+    for (var smo = 0; smo < 8; smo++) {
       var eo2 = envOut.slice();
       for (ci2 = 1; ci2 < nCol - 1; ci2++) {
         if (envOut[ci2 - 1] === undefined || envOut[ci2 + 1] === undefined) continue;
@@ -1249,49 +1154,34 @@ function drawSandbar() {
      * procedural texture, which is exactly what the shallows must not look like. Each
      * layer runs between the two envelopes at its own fraction and is stroked thick
      * enough to overlap its neighbours. */
-    /* Back to one short vertical wash per screen column, which is the only version of
-     * this that has ever measured clean: layered curves across the frame either comb the
-     * near shallows into stripes or, when widened enough not to, flood the whole channel.
-     * Clipped under the horizon, because unclipped the layers once swung up off the top
-     * of the river and laid concentric arcs across the night sky. */
-    var hyS = waterTop();
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, hyS, W, H - hyS); ctx.clip();
-    for (ci2 = 0; ci2 < nCol; ci2++) {
-      var yS = env[ci2], yO = envOut[ci2];
-      if (yO === undefined || !(yS - yO > 2) || yO < hyS - 4 || yS - yO > H * 0.9) continue;
-      var wgt = envReal[ci2];
-      if (wgt < 0.02) continue;
-      var sg2 = ctx.createLinearGradient(0, yO, 0, yS);
-      sg2.addColorStop(0.00, 'rgba(206,218,238,0)');
-      sg2.addColorStop(0.45, 'rgba(210,222,240,' + (0.095 * wgt).toFixed(3) + ')');
-      sg2.addColorStop(0.80, 'rgba(214,226,242,' + (0.058 * wgt).toFixed(3) + ')');
-      /* it does NOT go out at the shore. Both the wash and the sand's own fill were
-       * fading to nothing at the same line, so the dark river showed through between
-       * them — a hard dark edge in exactly the place the poem says there is no edge. */
-      /* and low at the shore itself: at any weight this last stop draws a bright rim
-       * along the top of the bar, which the eye then counts as one more band of value */
-      sg2.addColorStop(1.00, 'rgba(216,228,244,' + (0.045 * wgt).toFixed(3) + ')');
-      /* (the gradient's own coordinates stop at the shore, so the extra strip below it
-       *  simply carries the last stop's value) */
-      ctx.fillStyle = sg2;
-      /* Exactly abutting, on whole pixels. Overlapped by a pixel or two "to hide the
-       * seams", every overlap took the wash twice and the river came out ruled with an
-       * even four-pixel beat — read as CRT scan lines lying on the water. */
-      var xA = Math.round(ci2 * COLW - 4), xB = Math.round((ci2 + 1) * COLW - 4);
-      /* and it runs on a little way UNDER the shore. Stopping dead on the shoreline, the
-       * wash's last value met the sand's own ramp starting from nothing, and the sum
-       * stepped down across that one line: the "hard outline" reported along the top of
-       * the bar. The sand is painted over this afterwards, so the overlap costs nothing. */
-      ctx.fillRect(xA, yO, xB - xA, (yS - yO) + 46);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (var shL = 0; shL < 13; shL++) {
+      var fL = (shL + 0.5) / 13;
+      /* nothing at the shore, most of it a little way out, gone at the far edge */
+      var aL = 0.055 * Math.sin(Math.PI * Math.pow(fL, 0.8));
+      if (aL < 0.003) continue;
+      var started = false, maxBand = 0;
+      ctx.beginPath();
+      for (ci2 = 0; ci2 < nCol; ci2++) {
+        var yS = env[ci2], yO = envOut[ci2];
+        if (yO === undefined || !(yS - yO > 2) || envReal[ci2] < 0.02) { started = false; continue; }
+        if (yS - yO > maxBand) maxBand = yS - yO;
+        var yy2 = yO + (yS - yO) * (1 - fL);
+        var xx2 = ci2 * COLW - 4;
+        if (!started) { ctx.moveTo(xx2, yy2); started = true; } else ctx.lineTo(xx2, yy2);
+      }
+      if (!started && maxBand === 0) continue;
+      ctx.strokeStyle = 'rgba(210,222,240,' + aL.toFixed(3) + ')';
+      ctx.lineWidth = Math.max(6, maxBand / 5);
+      ctx.stroke();
     }
-    ctx.restore();
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
 
     function barShore(sink) {           // the visible shore, open, left to right
       sink.moveTo(-4, env[0]);
       for (var ck = 1; ck < nCol; ck++) sink.lineTo(ck * COLW - 4, env[ck]);
     }
-    barEnv = barShore; barPathCols = env; barPathOut = envOut;
+    barEnv = barShore;
     function barOutline(sink) {
       sink.moveTo(-4, H + 4);
       for (var cj = 0; cj < nCol; cj++) sink.lineTo(cj * COLW - 4, env[cj]);
@@ -1331,9 +1221,7 @@ function drawSandbar() {
      * went from water to bar in about eight pixels and read as a line ruled across the
      * frame; an alpha that comes up over the first fifty has no line in it anywhere.
      * 汀上白沙看不见. */
-    /* a long ramp. At a fifth of the bar's height the transition was short enough that
-     * the eye counts it as one of three or four stacked bands of value — 「色阶带」. */
-    var fadeH = Math.max(46, Math.min(190, (barBot - barTop) * 0.46));
+    var fadeH = Math.max(28, Math.min(80, (barBot - barTop) * 0.22));
     var t1 = Math.min(0.95, fadeH / Math.max(1, barBot - barTop));
     g.addColorStop(0, 'rgba(157,171,194,0)');
     g.addColorStop(t1 * 0.45, 'rgba(157,171,194,.52)');
@@ -1425,7 +1313,7 @@ function drawSandbar() {
           var wLen = Math.hypot(wq.x - wPrev.x, wq.y - wPrev.y);
           var wAa = 0.075 * wEnds * wEnds * Math.min(1, 24 / Math.max(6, wLen));
           if (wAa > 0.004) {
-            ctx.strokeStyle = 'rgba(112,128,158,' + (wAa * 0.55).toFixed(3) + ')';
+            ctx.strokeStyle = 'rgba(112,128,158,' + wAa.toFixed(3) + ')';
             ctx.lineWidth = 9 + q2w * 14;
             ctx.beginPath(); ctx.moveTo(wPrev.x, wPrev.y); ctx.lineTo(wq.x, wq.y); ctx.stroke();
           }
@@ -1481,61 +1369,6 @@ function drawSandbar() {
   }
   ctx.restore();
 
-  /* The shoreline itself, eaten by grains. Everything else that softens this edge works
-   * on VALUE — the fill's alpha ramp, the wash outside it — and a soft ramp is still a
-   * ramp: five critics in a row have said the shore is the sharpest line in the picture,
-   * which is the one thing 汀上白沙看不见 forbids. What actually destroys an edge is
-   * grain crossing it. This band is walked along the shore as it was DRAWN, a few specks
-   * per screen column, thickest right on the line and thinning both ways; the specks are
-   * hashed from the column's own world position so they stay with the sand, and the band
-   * is narrow enough that no lattice can show through it. */
-  if (barEnv && barPathCols) {
-    var bandN = 7;
-    for (var xC = 0; xC < barPathCols.length; xC++) {
-      var eY = barPathCols[xC];
-      if (eY === undefined || eY < -50 || eY > H + 50) continue;
-      var eX = xC * 2 - 4;
-      /* the band's depth comes from the shallows under THIS column, not from how far
-       * down the frame the shore happens to be — keyed to the frame it was widest where
-       * the shore was highest, which is exactly backwards for perspective */
-      var eBand = (barPathOut && barPathOut[xC] !== undefined) ? (eY - barPathOut[xC]) : 30;
-      var eDepth = Math.max(5, Math.min(60, eBand * 0.55));
-      for (var bK = 0; bK < bandN; bK++) {
-        var f1b = Math.sin(xC * 37.13 + bK * 71.7) * 43758.5453; f1b -= Math.floor(f1b);
-        var f2b = Math.sin(xC * 91.7 + bK * 13.9) * 43758.5453; f2b -= Math.floor(f2b);
-        var f3b = Math.sin(xC * 19.3 + bK * 53.1) * 43758.5453; f3b -= Math.floor(f3b);
-        var off = (f1b * 2 - 1);
-        var yB = eY + off * eDepth;
-        var aB = (1 - Math.abs(off)) * (0.16 + 0.34 * f3b);
-        if (aB < 0.03) continue;
-        var szB2 = 1.0 + 1.4 * f2b;
-        ctx.fillStyle = f2b > 0.45
-          ? 'rgba(248,251,255,' + aB.toFixed(3) + ')'
-          : 'rgba(110,124,152,' + (aB * 0.8).toFixed(3) + ')';
-        ctx.fillRect(eX + (f2b - 0.5) * 3.0, yB, szB2, szB2);
-      }
-    }
-  }
-
-  /* NOTE for whoever comes back to this. The sand at your feet is smoother than the sand
-   * twenty metres off, and it always will be: a grain field of even density in the world
-   * is spread over more and more pixels the nearer it gets to the eye. Four critics in a
-   * row called the foreground a flat fill with noise on it, and three different fixes
-   * were built and measured against that:
-   *   - each far grain standing in for a patch and scattering into sub-specks: at every
-   *     setting the patches became the texture — first pebbles, then pale blotches, in
-   *     the end plainly visible rectangles;
-   *   - a quarter-metre lattice laid around the camera: thins out towards the eye for
-   *     exactly the same reason as the world field, because it is still a world field;
-   *   - walking the pixels and un-projecting each one onto the ground, hashing the grain
-   *     from where it lands: even density at last, but the three-pixel sampling step and
-   *     the hash cell together read as a woven lattice, and with the cell scaled by
-   *     distance it still clots. A worse artefact than the smoothness it replaced.
-   * What carries the foreground instead is the dune shading — paired lit and shaded
-   * faces, the shaded one always away from the moon — and the drift field that makes the
-   * grain coarse in some stretches and swept smooth in others. If you try again, the
-   * thing to beat is a regular lattice showing through at STEP-sized spacing. */
-
   /* grains of sand, and 空里流霜不觉飞 drifting just above them */
   for (i9 = 0; i9 < grains.length; i9++) {
     var gr = grains[i9];
@@ -1555,15 +1388,7 @@ function drawSandbar() {
     var gsz = Math.max(0.8, Math.min(2.8, gp.s * 0.032));
     /* and the biggest ones have to be the faintest, or the sand at your feet turns into
      * a scatter of little pale tiles */
-    /* Sand is not evenly grained. A single density everywhere is exactly what makes a
-     * scatter read as a noise texture laid over a flat fill; real sand has coarse drifts
-     * and swept-smooth stretches. This is a slow field in world space, so the drifts stay
-     * put as you walk over them, and it also decides which grains appear at all. */
-    var drift = 0.5 + 0.5 * Math.sin(gr.x * 0.46 + gr.z * 0.21)
-                    * Math.sin(gr.z * 0.37 - gr.x * 0.17 + 1.3);
-    if (gr.k > 0.52 + 0.48 * drift) continue;
-    var ga = (0.09 + 0.30 * near2) * (0.45 + 0.55 * gr.k) * (0.45 + 0.95 * drift)
-           * Math.min(1, 2.0 / Math.max(1, gp.s * 0.032)) * 1.45;
+    var ga = (0.09 + 0.30 * near2) * (0.45 + 0.55 * gr.k) * Math.min(1, 2.0 / Math.max(1, gp.s * 0.032));
     var gaL = 'rgba(252,253,255,' + ga.toFixed(3) + ')';
     var gaD = 'rgba(126,138,162,' + (ga * 0.80).toFixed(3) + ')';
     /* One speck, one grain, and simply a great many grains. Standing each grain in for a
@@ -1706,76 +1531,9 @@ function drawMeadow() {
   }
 }
 
-function drawRings() {
-  /* 鱼龙潜跃水成文 — 水成文: the water writes. Each ring opens, thins and is gone, and
-   * it never closes into a hard circle: a few arcs of it at a time, the rest taken by
-   * the swell. */
-  for (var kR = 0; kR < RING.length; kR++) {
-    var rg = RING[kR];
-    var ph6 = ((T + rg.t0) % rg.period) / rg.period;
-    if (ph6 > 0.85) continue;
-    var rad6 = 0.6 + ph6 * 7.5;
-    var aR = Math.sin(Math.PI * Math.min(1, ph6 / 0.85)) * 0.17 * (1 - ph6 * 0.55);
-    if (aR < 0.01) continue;
-    var prev6 = null, segs = 46;
-    ctx.lineCap = 'round';
-    for (var jR = 0; jR <= segs; jR++) {
-      var th6 = (jR / segs) * Math.PI * 2;
-      var wob6 = 1 + 0.10 * Math.sin(th6 * 3 + rg.t0);
-      var q6 = project({ x: rg.x + Math.cos(th6) * rad6 * wob6, y: 0,
-                         z: rg.z + Math.sin(th6) * rad6 * wob6 });
-      if (!q6 || q6.z > 150) { prev6 = null; continue; }
-      if (prev6) {
-        /* only the stretches the light is on — a whole clean circle would read as a
-         * drawn shape rather than as water */
-        var lit6 = 0.5 + 0.5 * Math.sin(th6 * 2 + rg.t0 * 2.1 + T * 0.4);
-        var sl6 = Math.hypot(q6.x - prev6.x, q6.y - prev6.y);
-        var a6 = aR * lit6 * lit6 * Math.min(1, 16 / Math.max(5, sl6));
-        if (a6 > 0.008) {
-          ctx.strokeStyle = 'rgba(206,224,248,' + a6.toFixed(3) + ')';
-          ctx.lineWidth = Math.max(0.7, Math.min(2.2, q6.s * 0.05));
-          ctx.beginPath(); ctx.moveTo(prev6.x, prev6.y); ctx.lineTo(q6.x, q6.y); ctx.stroke();
-        }
-      }
-      prev6 = q6;
-    }
-    ctx.lineCap = 'butt';
-  }
-}
-
-function drawPetals() {
-  /* 昨夜闲潭梦落花 — they turn slowly on the water, and the few still in the air come
-   * down so slowly that nobody sees them fall: 空里流霜不觉飞 is the same idea one line
-   * earlier. Faint, small, and never more than a hint. */
-  for (var pI2 = 0; pI2 < PETAL.length; pI2++) {
-    var pt = PETAL[pI2];
-    var ang = pt.a + Math.sin(T * 0.11 * pt.sp + pt.ph) * 0.03;
-    var rad2 = pt.r + Math.sin(T * 0.19 * pt.sp + pt.ph * 1.7) * 0.9;
-    var py4 = pt.air ? (0.5 + 2.6 * (0.5 + 0.5 * Math.sin(T * 0.16 * pt.sp + pt.ph))) : 0.03;
-    var pp = project({ x: Math.cos(ang) * rad2, y: py4, z: Math.sin(ang) * rad2 });
-    if (!pp || pp.z > 70) continue;
-    var pf = 0.45 + 0.55 * Math.abs(Math.sin(T * 0.7 * pt.sp + pt.ph * 2.1));
-    var pa4 = (pt.air ? 0.30 : 0.42) * pf * Math.max(0.15, 1 - pp.z / 70);
-    if (pa4 < 0.03) continue;
-    var ps = Math.max(0.9, Math.min(3.2, pt.sz * pp.s * 0.055));
-    ctx.fillStyle = 'rgba(246,244,248,' + pa4.toFixed(3) + ')';
-    ctx.save();
-    ctx.translate(pp.x, pp.y); ctx.scale(1, pt.air ? 0.8 : 0.34); ctx.translate(-pp.x, -pp.y);
-    ctx.beginPath(); ctx.ellipse(pp.x, pp.y, ps, ps * 0.62, ang * 1.7, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    if (!pt.air) {                    // what floats on this river gives its light back
-      ctx.fillStyle = 'rgba(232,236,246,' + (pa4 * 0.3).toFixed(3) + ')';
-      ctx.fillRect(pp.x - ps * 0.8, pp.y + ps * 0.5, ps * 1.6, Math.max(0.7, ps * 0.30));
-    }
-  }
-}
-
 function drawGrove() {
   /* which way the moon lies, in screen terms, for every crown in the wood */
   var mP = project({ x: MOON.x, y: MOON.y, z: MOON.z });
-  /* the moon's bearing on the ground, for the shadows the wood throws */
-  var mwl = Math.hypot(MOON.x, MOON.z) || 1;
-  var moonWx = MOON.x / mwl, moonWz = MOON.z / mwl;
   var moonDirX = 0, moonDirY = -1;
   if (mP) {
     var mdx = mP.x - W * 0.5, mdy = mP.y - H * 0.5, mdl = Math.hypot(mdx, mdy) || 1;
@@ -1813,25 +1571,6 @@ function drawGrove() {
     ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(cp2.x, cp2.y, cr * 1.05, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-
-    /* 月照花林 casts something. Without a shadow under it a tree is a sticker laid over
-     * the ground, which is how the whole wood has been reading; a pool of dark on the
-     * meadow, thrown away from the moon and squashed by the grazing angle, is enough to
-     * set each tree down on the ground it stands on. */
-    var shP = project({ x: g.x - moonWx * g.h * 0.55, y: y0 + 0.02,
-                        z: g.z - moonWz * g.h * 0.55 });
-    if (shP && shP.s > 0.4) {
-      var shR = Math.max(3, g.h * 0.58 * g.wid * shP.s);
-      ctx.save();
-      ctx.translate(shP.x, shP.y); ctx.scale(1, 0.26); ctx.translate(-shP.x, -shP.y);
-      var shG = ctx.createRadialGradient(shP.x, shP.y, 0, shP.x, shP.y, shR);
-      shG.addColorStop(0, 'rgba(10,16,28,.34)');
-      shG.addColorStop(0.55, 'rgba(12,18,30,.17)');
-      shG.addColorStop(1, 'rgba(14,20,32,0)');
-      ctx.fillStyle = shG;
-      ctx.beginPath(); ctx.arc(shP.x, shP.y, shR, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
 
     /* the trunk, and two boughs that reach up into the crown so it is held, not floating */
     var bp2 = project({ x: g.x, y: y0, z: g.z });
@@ -1942,7 +1681,6 @@ var keys = Object.create(null);
 addEventListener('keydown', function (e) {
   keys[e.code] = true;
   if (['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
-  pokeLive();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -1952,7 +1690,6 @@ stage.addEventListener('pointerdown', function (e) {
   if (e.target.closest('#touch') || e.target.closest('#enter')) return;
   drag = { x: e.clientX, y: e.clientY };
   try { stage.setPointerCapture(e.pointerId); } catch (err) {}
-  pokeLive();
 });
 stage.addEventListener('pointermove', function (e) {
   if (!drag) return;
@@ -1960,7 +1697,6 @@ stage.addEventListener('pointermove', function (e) {
   cam.pitch -= (e.clientY - drag.y) * 0.0023;
   cam.pitch = Math.max(-0.42, Math.min(0.45, cam.pitch));
   drag = { x: e.clientX, y: e.clientY };
-  pokeLive();
 });
 addEventListener('pointerup', function () { drag = null; });
 
@@ -2037,14 +1773,11 @@ function updateSubs() {
 /* ---------------------------------------------------------------- LOOP -- */
 function drawFrame() {
   drawSky();
-  drawClouds();
   var moonP = drawMoon();
   drawFarBank();
   drawWater(moonP);
   drawMeadow();
   drawHaze();
-  drawRings();
-  drawPetals();
   drawBoat();
   drawSandbar();
   drawGrove();
@@ -2057,46 +1790,12 @@ function markShotReady() {
 }
 
 function frame(now) {
-  if (SHOT) return;
-  if (!wantLive(now)) { loopOn = false; return; }
-  requestAnimationFrame(frame);
-  if (now - lastDrawT < 1000 / LIVE_FPS) return;
   var dt = Math.min(0.05, (now - last) / 1000); last = now;
-  lastDrawT = now;
-  T += dt; step(dt);
+  if (SHOT) { T = FROZEN_T; } else { T += dt; step(dt); }
   drawFrame();
+  if (SHOT && ++shotFrames >= SHOT_FRAMES) { markShotReady(); return; }
+  requestAnimationFrame(frame);
 }
-
-var loopOn = false, lastDrawT = 0, liveUntil = 0, roamHold = false;
-function wantLive(now) {
-  if (document.hidden) return false;
-  if (roamHold) return true;
-  if (now < liveUntil) return true;
-  if (keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ||
-      keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight || keys.Space) return true;
-  if (drag || jx || jz) return true;
-  return false;
-}
-function pokeLive() {
-  liveUntil = performance.now() + 1400;
-  kickLoop();
-}
-function kickLoop() {
-  if (SHOT || document.hidden) return;
-  if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(frame); }
-}
-document.addEventListener('visibilitychange', function () {
-  if (document.hidden) loopOn = false;
-  else pokeLive();
-});
-window.__poemPerf = {
-  poke: pokeLive,
-  roam: function (on) {
-    roamHold = !!on;
-    keys.KeyW = !!on;
-    if (on) pokeLive();
-  }
-};
 
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
@@ -2156,7 +1855,7 @@ if (SHOT) {
   markShotReady();
 } else {
   last = performance.now();
-  drawFrame();
+  requestAnimationFrame(frame);
 }
 
 })();
