@@ -30,10 +30,13 @@ python3 -m http.server 8731     # 然后开 http://127.0.0.1:8731/
   log.js              由 log.jsonl 生成，只为 file:// 下也能看见时间线
   versions/N/         每轮的 index.html 快照
   shots/N/            每轮六个固定机位的截图
+  scene/N.json        每轮三个机位的场景数据（硬门读它，见下）
 ```
 
 共用件在 [`shared/`](shared/)：`site.css`（色板）、`timeline.css` + `timeline.js`（时间线）、
-`mklog.sh`（由 `log.jsonl` 生成 `log.js`）、`shoot.sh` + `cdp_shot.py`（一轮三张固定机位图）。
+`mklog.sh`（由 `log.jsonl` 生成 `log.js`）、`shoot.sh` + `cdp_shot.py`（一轮三张固定机位图）、
+`worldprobe.js` + `world.sh` + `cdp_world.py`（一轮三个机位的场景数据）。三个机位在
+`cams.sh` 里写一次，拍图和取数据都读它。
 
 ## 上行流量：循环工人不读图
 
@@ -56,6 +59,45 @@ chunjiang 97MB / 262 张，本机上行被打满到全屋丢包。
 critic 仍然是盲评：子进程 cwd 在 `/tmp`、只开 `Read` 工具，看不到 `index.html`、
 diff 或 `log.jsonl`，只拿到诗、评分口径和图。Ralph 的每轮自检用 `POEM_CRITIC_ASK`
 多问一句，答案回在 JSON 的 `ask` 里。
+
+## 硬门看场景数据，审美门才看图
+
+源码说的是「应该出现什么」，像素说的是「实际渲染成什么样」，中间还有一层：
+**场景运行时数据**。凡是能用数字断言的判断，就不该让模型看图去猜——数字几 KB、
+确定、可复现，还能进仓库当长期测试。
+
+每个世界的页面都暴露一个调试口 `window.__world()`，返回这一帧到底有什么：
+
+```sh
+sh shared/world.sh chunjiang 44        # → chunjiang/scene/44.json，三机位，约 10 KB
+python3 -c "import json;d=json.load(open('chunjiang/scene/44.json'))
+print([o for o in d['cameras'][2]['objects'] if o['name']=='boat'])"
+```
+
+一个对象一行，字段只有硬门现在用得到的那些：
+
+| 字段 | 回答的问题 |
+|---|---|
+| `present` / `count` | 这东西建出来没有，有几个 |
+| `bbox` | 它在世界里的什么位置、多大（世界坐标） |
+| `screen` / `cover` | 投到这个机位的画面上是哪一块、占几成画面 |
+| `inView` / `inViewCount` / `behind` | 在不在画面里；一片实例里有几个在画面里 |
+| `color` / `alpha` / `drawn` | 材质颜色；这个距离上还画不画 |
+| `render.triangles` / `render.calls` / `render.frameMs` | 有没有超性能预算 |
+| `camera.ground` / `camera.eyeAboveGround` | 机位的 y 是世界绝对高度，这两个才是眼睛离地多高 |
+
+三个世界三种渲染器（three.js / 手写 WebGL / 手写 Canvas 2D），所以三份 `__world()`
+各写各的，只共用 [`shared/worldprobe.js`](shared/worldprobe.js) 里的投影—包围盒—出屏
+那点算术和 schema。**探针一律读画面自己那张表**：three.js 读场景图与 `instanceMatrix`，
+xiangfuren 读建网格时标记的顶点区段和更新时写回的位置，chunjiang 用 `project()`——
+画面用哪个公式，探针就用哪个。一份会漂的镜像报的是没人在渲染的那个世界。
+
+`frameMs` 是 CPU 画/提交这一帧的时间：Canvas 2D 世界里它就是画一帧的钱；两个 GL
+世界里 GPU 是异步的，它只是提交时间，真正的预算看 `triangles` 和 `calls`。
+
+`shared/world.sh` 跟 `shared/shoot.sh` 是同一套浏览器管线：同一把
+`/tmp/poem-world-shot.lock`、同样的后台 QoS、同样的 Metal → headed → SwiftShader 回退，
+所以同一时刻本机仍然只有一个渲染进程。
 
 ## 截图与资源
 

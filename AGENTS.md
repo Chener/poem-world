@@ -78,6 +78,17 @@ own x/z before believing its eye height.
 **不要假设 Task 子代理就等于不进主会话**——chunjiang 的 `POLISH.md` 一直写着 critic 子代理，
 主会话仍然攒下了 262 张，因为工人为了挑图、比较前后轮、排查黑图，还是自己看了。
 
+**硬门看场景数据，审美门才看图。** 每个世界的页面都有一个调试口 `window.__world()`，
+返回这一帧实际有什么：对象在不在、包围盒、投在这个机位画面上的位置与占比、在不在画面里、
+材质颜色、三角形数与绘制调用数、帧耗时。`sh shared/world.sh <world> <round>` 起一次
+headless Chrome，把三个机位的它打成 `<world>/scene/<round>.json`，几 KB 的文字。
+「有没有 / 在不在画面里 / 超没超预算」这类判断一律读这个文件，别去看图；图只留给
+`shared/critic.sh` 的美不美。字段表与三种渲染器各自怎么取数在 README「硬门看场景数据」。
+**探针只许读画面自己那张表**（three.js 读场景图与 `instanceMatrix`，xiangfuren 读建网格
+时标记的顶点区段与更新时写回的位置，chunjiang 用画面同一个 `project()`）——理由同上面
+那条波场镜像：会漂的镜像报的是没人在渲染的那个世界。三个定机位写在 `shared/cams.sh`，
+拍图与取数据共用它，也共用 `/tmp/poem-world-shot.lock`。
+
 **Rendered content avoids violent or morbid imagery**, whatever the source poem contains.
 Public-domain originals live in `POEM.md`; the world, the screenshots and the prose around
 them stay clear of it.
