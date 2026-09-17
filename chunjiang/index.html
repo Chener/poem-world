@@ -144,6 +144,7 @@
 </aside>
 
 <script src="../shared/timeline.js"></script>
+<script src="../shared/worldprobe.js"></script>
 <script src="log.js"></script>
 <script>
 /* =========================================================================
@@ -401,6 +402,7 @@ for (var i9c = 0; i9c < 2; i9c++) {
 
 /* 明月楼: a tower on the far bank with exactly one window lit */
 var TOWER = { x: 22, z: -95 };
+var TW = 5.6;                        // the tower's module: half-widths are multiples of it
 
 /* --------------------------------------------------------------- DRAW  -- */
 function seg(a, b, col, w) {
@@ -509,6 +511,12 @@ function drawMoon() {
   return p;
 }
 
+/* how much of the tower reaches this eye; under 0.02 it is not drawn at all */
+function towerAlpha() {
+  var d = Math.hypot(TOWER.x - cam.x, TOWER.z - cam.z);
+  return Math.max(0, Math.min(1, (200 - d) / 95));
+}
+
 function drawFarBank() {
   /* the far bank: trees and one lit tower, all of it almost dissolved in haze */
   var k;
@@ -566,12 +574,10 @@ function drawFarBank() {
   }
   /* 明月楼 — 何处相思明月楼: eaves that lift at the corners, a railing, one lit window,
    * and the whole of it lying broken on the water. */
-  var TW = 5.6;
   /* how much of the tower this eye gets. From the grove station it is a hundred and
    * eighty metres off and half behind the mist, and drawn at full strength it read there
    * as a small grey block that could not be identified as anything. */
-  var tDist = Math.hypot(TOWER.x - cam.x, TOWER.z - cam.z);
-  var tA = Math.max(0, Math.min(1, (200 - tDist) / 95));
+  var tA = towerAlpha();
   if (tA < 0.02) return;
   ctx.save();
   ctx.globalAlpha = tA;
@@ -965,11 +971,19 @@ function reflect(x, z, height, halfWidth, colour, strength) {
   }
 }
 
+/* where the skiff is at this instant. The debug port reads this too: one formula,
+ * so the JSON can never report a boat the picture does not have. */
+function boatAt() {
+  var a = boat.th + T * boat.drift;
+  return { x: Math.cos(a) * boat.r, z: Math.sin(a) * boat.r,
+           bob: Math.sin(T * 0.7) * 0.10 };
+}
+
 function drawBoat() {
   /* 谁家今夜扁舟子 — a skiff: the sheer sweeps up at both ends, and it never arrives */
-  var a = boat.th + T * boat.drift;
-  var bx = Math.cos(a) * boat.r, bz = Math.sin(a) * boat.r;
-  var bob = Math.sin(T * 0.7) * 0.10;
+  var bp = boatAt();
+  var bx = bp.x, bz = bp.z;
+  var bob = bp.bob;
   var tilt = Math.sin(T * 0.53) * 0.06;
 
   /* the hull's own reflection, kept faint and broken: at full strength the fourteen
@@ -2035,7 +2049,9 @@ function updateSubs() {
 }
 
 /* ---------------------------------------------------------------- LOOP -- */
+var lastFrameMs = 0;
 function drawFrame() {
+  var frameT0 = performance.now();
   drawSky();
   drawClouds();
   var moonP = drawMoon();
@@ -2049,6 +2065,7 @@ function drawFrame() {
   drawSandbar();
   drawGrove();
   if (!SHOT) updateSubs();
+  lastFrameMs = performance.now() - frameT0;
 }
 
 function markShotReady() {
@@ -2101,6 +2118,7 @@ window.__poemPerf = {
 window.__poemShot = function (n) {
   n = parseInt(n, 10) || 1;
   var c = CAMS[Math.max(1, Math.min(CAMS.length, n)) - 1];
+  curCam = c;
   cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
   cam.y = gh(cam.x, cam.z) + 1.62;
   T = FROZEN_T;
@@ -2114,6 +2132,97 @@ window.__poemShot = function (n) {
   markShotReady();
   return true;
 };
+
+/* --------------------------------------------------------------- PROBE -- */
+/* window.__world(): what this frame actually contains, as a few kB of JSON.
+ * The hard gates of the polish loop read this instead of a picture — see
+ * ../shared/worldprobe.js and ../AGENTS.md. Every probe below reads the very
+ * tables the draw code reads, through project(), the draw code's own
+ * projection; nothing here re-derives a position. */
+var curCam = null;
+if (window.PoemProbe) {
+  window.PoemProbe.install('chunjiang', {
+    viewport: function () { return { w: W, h: H, dpr: DPR }; },
+    project: function (x, y, z) { return project({ x: x, y: y, z: z }); }
+  }, function (probe) {
+    var i, pts;
+
+    /* 皎皎空中孤月轮 */
+    probe.box('moon', [MOON.x - MOON.r, MOON.y - MOON.r, MOON.z - MOON.r],
+                      [MOON.x + MOON.r, MOON.y + MOON.r, MOON.z + MOON.r],
+                      { color: '#ffffff' });
+
+    /* 明月楼, and the one window that is lit */
+    var tA = towerAlpha();
+    probe.box('tower', [TOWER.x - TW * 0.94, 0, TOWER.z - TW * 0.94],
+                       [TOWER.x + TW * 0.94, 30.6, TOWER.z + TW * 0.94],
+                       { alpha: PoemProbe.n4(tA), drawn: tA >= 0.02 });
+    probe.add('tower-window', [[TOWER.x + 1.2, 14.2, TOWER.z - 0.25]],
+              { color: '#ffe4b2', drawn: tA >= 0.02 });
+
+    /* 扁舟: one skiff, never arriving */
+    var bp = boatAt();
+    probe.box('boat', [bp.x - 3.6, bp.bob - 0.04, bp.z - 1.2],
+                      [bp.x + 3.6, bp.bob + 0.92, bp.z + 1.2],
+                      { color: '#0c121e' });
+
+    /* 花林 */
+    pts = [];
+    for (i = 0; i < grove.length; i++) {
+      var g = grove[i], gy = gh(g.x, g.z);
+      pts.push([g.x, gy, g.z], [g.x, gy + g.h, g.z]);
+    }
+    probe.add('grove', pts, { count: grove.length });
+
+    /* 满江树: the far bank */
+    pts = [];
+    for (i = 0; i < bank.length; i++) {
+      var b = bank[i];
+      pts.push([b.x, 0, b.z], [b.x, b.h, b.z]);
+    }
+    probe.add('far-bank', pts, { count: bank.length });
+
+    /* 汀上白沙: the bar, sampled round its own lip table */
+    pts = [[0, BAR, 0]];
+    for (i = 0; i < EDGE.length; i += 10) pts.push([EDGE[i].x, 0, EDGE[i].z]);
+    probe.add('sandbar', pts, { count: grains.length, height: BAR });
+
+    /* 落花: where they are floating right now */
+    pts = [];
+    for (i = 0; i < PETAL.length; i++) {
+      var pt = PETAL[i];
+      var ang = pt.a + Math.sin(T * 0.11 * pt.sp + pt.ph) * 0.03;
+      var rad = pt.r + Math.sin(T * 0.19 * pt.sp + pt.ph * 1.7) * 0.9;
+      pts.push([Math.cos(ang) * rad, pt.air ? 3.1 : 0.03, Math.sin(ang) * rad]);
+    }
+    probe.add('petals', pts, { count: PETAL.length });
+
+    /* 水成文: only the rings that are open at this instant are drawn */
+    pts = [];
+    for (i = 0; i < RING.length; i++) {
+      var rg = RING[i];
+      if (((T + rg.t0) % rg.period) / rg.period > 0.85) continue;
+      pts.push([rg.x, 0, rg.z]);
+    }
+    probe.add('rings', pts, { count: pts.length, pool: RING.length });
+
+    return {
+      t: PoemProbe.n2(T),
+      camera: {
+        name: curCam ? curCam.name : null,
+        x: PoemProbe.n2(cam.x), y: PoemProbe.n2(cam.y), z: PoemProbe.n2(cam.z),
+        yaw: PoemProbe.n4(cam.yaw), pitch: PoemProbe.n4(cam.pitch), fov: cam.fov,
+        /* a camera's y is world-absolute: this is how far the eye really is
+         * above the sand under it */
+        ground: PoemProbe.n2(gh(cam.x, cam.z)),
+        eyeAboveGround: PoemProbe.n2(cam.y - gh(cam.x, cam.z))
+      },
+      /* Canvas 2D has no triangles to count; the budget this world can blow is
+       * the time one frame takes. */
+      render: { renderer: 'canvas2d', frameMs: PoemProbe.n2(lastFrameMs) }
+    };
+  });
+}
 
 /* ------------------------------------------------------------------ UI -- */
 var enter = document.getElementById('enter');
@@ -2144,6 +2253,7 @@ resize();
 
 if (SHOT) {
   var c = CAMS[Math.max(1, Math.min(CAMS.length, SHOT)) - 1];
+  curCam = c;
   cam.x = c.x; cam.z = c.z; cam.yaw = c.yaw; cam.pitch = c.pitch;
   cam.y = gh(cam.x, cam.z) + 1.62;
   T = FROZEN_T;

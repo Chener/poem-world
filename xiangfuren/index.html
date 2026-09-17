@@ -129,6 +129,7 @@
 </div>
 
 <script src="../shared/timeline.js"></script>
+<script src="../shared/worldprobe.js"></script>
 <script src="log.js"></script>
 
 <script>
@@ -223,6 +224,23 @@ function groundY(x, z) { return Math.max(terrainH(x, z), WATER_Y); }
 const canvas = document.getElementById('gl');
 const glOpts = { antialias: !LITE, alpha: false, depth: true, preserveDrawingBuffer: SHOT };
 const gl = canvas.getContext('webgl', glOpts) || canvas.getContext('experimental-webgl', glOpts);
+/* hand-written WebGL has no renderer.info, so the two numbers the performance
+ * gate needs are counted at the only two places they can come from. Reset at the
+ * top of draw(); read by window.__world(). */
+const glStats = { calls: 0, tris: 0 };
+if (gl) (function () {
+  const da = gl.drawArrays.bind(gl), de = gl.drawElements.bind(gl);
+  gl.drawArrays = function (mode, first, count) {
+    glStats.calls++;
+    if (mode === gl.TRIANGLES) glStats.tris += count / 3;
+    da(mode, first, count);
+  };
+  gl.drawElements = function (mode, count, type, off) {
+    glStats.calls++;
+    if (mode === gl.TRIANGLES) glStats.tris += count / 3;
+    de(mode, count, type, off);
+  };
+})();
 if (!gl) {
   document.getElementById('enter').innerHTML =
     '<div class="k">此浏览器没有 WebGL</div><div class="s">试试桌面版 Chrome / Safari</div>';
@@ -702,6 +720,33 @@ const HOUSE = { x: 0, z: 40 };
 const LAMPS = [];                      // 点着的灯，位置在建屋时填进来，晕由下面那段画
 function Builder() {
   const V = [];                       // x,y,z, nx,ny,nz, r,g,b, float-on-water
+  /* Named runs of that vertex list, so the debug port can say where one feature
+   * of a single mesh ended up. mark() costs nothing; parts() is read once, while
+   * V is still here, and the box it returns is the geometry's own. */
+  const marks = [];
+  function mark(name) { marks.push({ name: name, at: V.length }); }
+  function parts() {
+    const out = [];
+    for (let m = 0; m < marks.length; m++) {
+      const a = marks[m].at, b = (m + 1 < marks.length) ? marks[m + 1].at : V.length;
+      const e = { name: marks[m].name, tris: (b - a) / 30, box: null };
+      if (b > a) {
+        let x0 = Infinity, y0 = Infinity, z0 = Infinity;
+        let x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+        for (let k = a; k < b; k += 10) {
+          if (V[k] < x0) x0 = V[k];
+          if (V[k + 1] < y0) y0 = V[k + 1];
+          if (V[k + 2] < z0) z0 = V[k + 2];
+          if (V[k] > x1) x1 = V[k];
+          if (V[k + 1] > y1) y1 = V[k + 1];
+          if (V[k + 2] > z1) z1 = V[k + 2];
+        }
+        e.box = [x0, y0, z0, x1, y1, z1];
+      }
+      out.push(e);
+    }
+    return out;
+  }
   function tri(a, b, c, col, fl) {
     const ux = b[0]-a[0], uy = b[1]-a[1], uz = b[2]-a[2];
     const vx = c[0]-a[0], vy = c[1]-a[1], vz = c[2]-a[2];
@@ -771,11 +816,12 @@ function Builder() {
     const dk = col.map(v => v * 0.62);
     tri(l,f,bt,dk,fl); tri(bk,l,bt,dk,fl); tri(r,bk,bt,dk,fl); tri(f,r,bt,dk,fl);
   }
-  return { V, tri, quad, box, beam, lotusPad, blob };
+  return { V, tri, quad, box, beam, lotusPad, blob, mark, parts };
 }
 function makeHouse() {
   const B = Builder();
   const { V, tri, quad, box, beam, lotusPad } = B;
+  B.mark('house-frame');
   const HX = HOUSE.x, HZ = HOUSE.z;
   const WOOD   = [0.150, 0.118, 0.092];   // the stilts, standing in water
   const PURPLE = [0.212, 0.172, 0.232];   // 紫坛：迎光那一面原来亮成一条紫带子
@@ -957,12 +1003,14 @@ function makeHouse() {
   }
   lamp(HX + 1.62, FLOOR, HZ - 5.75, 1.0);
 
+  B.mark('mats-and-lamps');
   layMat(HX, HZ - 5.75, FLOOR, 0, 1.0);
   // 北渚上的那一处：踩出来的那条路的尽头，他站了一整天的地方
   layMat(SHOAL_MAT[0], SHOAL_MAT[1], terrainH(SHOAL_MAT[0], SHOAL_MAT[1]) + 0.02, 0.34, 1.0);
   lamp(SHOAL_MAT[0] + 1.52, terrainH(SHOAL_MAT[0] + 1.52, SHOAL_MAT[1] - 0.52) + 0.02,
        SHOAL_MAT[1] - 0.52, 0.92);
 
+  B.mark('lotus-roof');
   // 荷盖：一片压着一片的荷叶，铺满两面坡
   const tilt = Math.atan2(1.55, 5.45);
   for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
@@ -975,6 +1023,7 @@ function makeHouse() {
       lotusPad(x, y, z, 1.22 + 0.22 * k, s * tilt + (k - .5) * 0.10, col, 0, 13);
     }
   }
+  B.mark('lotus-pond');
   // 屋外的水面上，荷叶一直铺到远处；有几枝还没开的花。
   // 这座屋子是「葺之兮荷盖」的，屋外的荷该多些、该铺得更远，
   // 从北渚望过来，那一片田田的荷就是这座屋子坐落的地方。
@@ -1006,7 +1055,7 @@ function makeHouse() {
       }
     }
   }
-  return { vb: buf(new Float32Array(V)), n: V.length / 10 };
+  return { vb: buf(new Float32Array(V)), n: V.length / 10, parts: B.parts() };
 }
 const house = makeHouse();
 const objP = prog(`
@@ -1385,6 +1434,7 @@ function makeWrongness() {
                  [1.5, -75.5, 7.6, 71],     // 正对着北渚那个机位
                  [-12.5, -45.5, 6.8, 83],   // 骋望那个机位的左前景
                  [-47, 16, 7.2, 97]];       // 漂在水里的那株，正对着等待那个机位
+  B.mark('trees');
   for (const [x, z, h, sd] of TREES) tree(x, z, h, sd);
   // 远岸上再补几株，高矮差得开一点：原来那一排看过去几乎一样高，
   // 「洞庭波兮木叶下」的岸线不该是一排电线杆。
@@ -1393,6 +1443,7 @@ function makeWrongness() {
                                [-70, -18, 5.6, 163], [62, -20, 6.6, 167]])
     tree(x, z, h, sd);
   const treeTop = (x, z, h) => Math.max(terrainH(x, z), WATER_Y - 0.55) + h * 0.66;
+  B.mark('nets');
   net(14.6, terrainH(14, -76) + 5.1, -75.0, 3.6, 2.9, 0.42, 7);
   net(-33.4, terrainH(-34, -56) + 4.2, -55.4, 3.0, 2.4, 2.35, 19);
   net(45.6, terrainH(45, -37) + 4.5, -36.4, 2.6, 2.1, 1.05, 29);
@@ -1407,6 +1458,7 @@ function makeWrongness() {
   beam([-12.45, 4.78, -45.45], [-11.45, 4.30, -46.35], 0.15, 0.13, BARK, 0);
 
   // 鸟落在蘋中，不落在树上
+  B.mark('ping-and-birds');
   pingPatch(19, -7, 7.2, 5, 7);
   pingPatch(-25, 9, 6.4, 17, 5);
   pingPatch(21, 96, 8.0, 29, 9);
@@ -1491,6 +1543,7 @@ function makeWrongness() {
       }
     }
   }
+  B.mark('zhi-and-lan');
   // 沅（西）有芷。原来种在 (-46,-24) 那道沙洲上——那地方水深 0.7 米，
   // 一株都没长出来（zhi() 要求地面高过 0.2）。挪到北渚西岸真正露出水面的那一段。
   for (let i = 0; i < 130; i++) {
@@ -1572,6 +1625,7 @@ function makeWrongness() {
       }
     }
   }
+  B.mark('duruo');
   // 汀洲：北渚北边那一片平沙，正对着人一整天站着的方向
   for (let i = 0; i < 17; i++) {
     const x = -14 + h2(i, 51.3) * 30, z = -78 + h2(i, 52.9) * 20;
@@ -1588,6 +1642,7 @@ function makeWrongness() {
     duruo(x, z, i * 6.3 + 404);
   }
 
+  B.mark('zhi-and-lan-near');
   // 两条水在北渚两侧入湖，香草一直长到水边上来：走在渚上，左手是芷，右手是兰
   for (let i = 0; i < 150; i++) {
     const u = h2(i, 41.3);
@@ -1604,6 +1659,7 @@ function makeWrongness() {
 
   // 麋食兮庭中 —— 就在为她盖的那座屋子的廊下
   // 它站在东边的廊上吃庭里的百草 —— 别站在铺好的席上，那太荒唐了
+  B.mark('elk');
   elk(HOUSE.x + 4.55, 1.52, HOUSE.z - 2.30, 1.92);
   // 北渚上那处席案也是一个「庭」：席铺好了，人没来，麋来了，低头在席边吃草。
   // 这一句的反问要成立，得让人看见它站在本该是她的位置上。
@@ -1614,12 +1670,13 @@ function makeWrongness() {
   }
 
   // 蛟何为兮水裔
+  B.mark('jiao');
   jiao(30, -4, 0.55, 15);
   jiao(-30, 66, 2.30, 13);
   // 水裔：就在北渚的边上，从骋望那个机位看过去，它横在人和水中之室之间
   jiao(15.0, -16.0, -0.40, 30, 2.7);
 
-  return { vb: buf(new Float32Array(V)), n: V.length / 10 };
+  return { vb: buf(new Float32Array(V)), n: V.length / 10, parts: B.parts() };
 }
 const wrong = makeWrongness();
 
@@ -1670,6 +1727,9 @@ function updateCloths(t) {
     const cx = C.x + (C.vx || 0) * t, cz = C.z + (C.vz || 0) * t;
     const ca = Math.cos(C.ang + (C.snag ? 0 : t * 0.010)), sa = Math.sin(C.ang + (C.snag ? 0 : t * 0.010));
     const base = C.snag ? Math.max(terrainH(cx, cz), WATER_Y) + (C.lift || 0.62) : WATER_Y;
+    /* where this sleeve actually is at time t — written here, read by the debug
+     * port, so the JSON cannot claim a cloth the water has carried elsewhere */
+    C.at = C.hang ? [C.x, C.y, C.z] : [cx, base, cz];
     if (C.hang) {                                    // 挂在枯枝上的那一件
       const ca2 = Math.cos(C.ang), sa2 = Math.sin(C.ang);
       const hangAt = (u, v, out) => {
@@ -2159,7 +2219,11 @@ function step(dt, t) {
   compass.textContent = ['北','东北','东','东南','南','西南','西','西北'][Math.round(deg / 45) % 8];
 }
 
+let sceneT = 0, lastFrameMs = 0;
 function draw(t) {
+  const frameT0 = performance.now();
+  sceneT = t;
+  glStats.calls = 0; glStats.tris = 0;
   resize();
   // 两盏灯的位置（廊下一盏、席边一盏）：水、地、草、物件都按它算光
   const LA = LAMPS[0] ? [LAMPS[0][0], LAMPS[0][1], LAMPS[0][2]] : [0, -999, 0];
@@ -2327,6 +2391,7 @@ function draw(t) {
   gl.drawArrays(gl.TRIANGLES, 0, NLEAF * 6);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
+  lastFrameMs = performance.now() - frameT0;
 }
 
 /* 取证模式下不能挂着 rAF 空转：画 1 帧就停。机位切换走 window.__poemShot，不重建场景。 */
@@ -2371,6 +2436,80 @@ window.__poemShot = function (spec) {
   renderShotFrame();
   return true;
 };
+
+/* --------------------------------------------------------------- 调试口 -- */
+/* window.__world(): 这一帧里究竟有什么，几 KB 的 JSON。循环的硬门读它，不读图
+ * （见 ../shared/worldprobe.js 与 ../AGENTS.md）。手写 WebGL 没有场景图，所以
+ * 每一项都读它自己那张表：网格的包围盒从建网格时的顶点来，漂着的东西从更新时
+ * 写回的位置来，没有一处是把公式再抄一遍。 */
+if (window.PoemProbe) {
+  window.PoemProbe.install('xiangfuren', {
+    viewport: function () {
+      return { w: canvas.width, h: canvas.height,
+               dpr: SHOT ? 1 : Math.min(devicePixelRatio || 1, LITE ? 1 : 1.5) };
+    },
+    project: function (x, y, z) {
+      const m = vp;                       // 画这一帧用的那个矩阵，不是另算一个
+      const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+      if (!(cw > 1e-4)) return null;      // 在眼睛后面
+      const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+      const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+      return { x: (cx / cw * 0.5 + 0.5) * canvas.width,
+               y: (-cy / cw * 0.5 + 0.5) * canvas.height };
+    }
+  }, function (probe) {
+    const t = sceneT;
+
+    function meshParts(prefix, mesh) {
+      for (const part of mesh.parts || []) {
+        if (!part.box) { probe.add(prefix + part.name, null, { tris: part.tris }); continue; }
+        probe.box(prefix + part.name, part.box.slice(0, 3), part.box.slice(3),
+                  { tris: part.tris });
+      }
+    }
+    meshParts('', house);
+    meshParts('', wrong);
+
+    /* 灯：它照得到什么，是看水和席的亮度；灯本身在不在画面里先得能问 */
+    probe.add('lamps', LAMPS.map(L => [L[0], L[1], L[2]]), { count: LAMPS.length });
+
+    /* 袂与褋：这个世界里唯一还在走的东西 */
+    probe.add('cloths', CLOTHS.filter(C => C.at).map(C => C.at),
+              { count: CLOTHS.length, hanging: CLOTHS.filter(C => C.hang).length });
+
+    /* 木叶下：空中的与水上的 */
+    probe.add('falling-leaves', leaves.map(L => [L.x, L.y, L.z]), { count: NLEAF });
+    probe.add('float-leaves', null, { present: true, count: FLOATN });
+
+    /* 水成文：此刻还开着的圈 */
+    const live = ripples.filter(r => r && t - r.t0 < RIPPLE_LIFE && t >= r.t0);
+    probe.add('ripples', live.map(r => [r.x, WATER_Y, r.z]),
+              { count: live.length, pool: NRIPPLE });
+
+    /* 底下这三张网格总是在的；对它们，硬门问的是预算不是有无 */
+    probe.add('water', null, { present: true, tris: water.n / 3, span: WSPAN });
+    probe.add('terrain', null, { present: true, tris: terrain.n / 3 });
+    probe.add('peaks', null, { present: true, tris: peaks.n / 3 });
+    probe.add('blades', null, { present: true, tris: blades.n / 3 });
+
+    return {
+      t: PoemProbe.n2(t),
+      camera: {
+        x: PoemProbe.n2(cam.x), y: PoemProbe.n2(cam.y), z: PoemProbe.n2(cam.z),
+        yaw: PoemProbe.n4(cam.yaw), pitch: PoemProbe.n4(cam.pitch),
+        /* 机位的 y 是世界绝对高度：这才是眼睛离脚下地面多高 */
+        ground: PoemProbe.n2(groundY(cam.x, cam.z)),
+        eyeAboveGround: PoemProbe.n2(cam.y - groundY(cam.x, cam.z))
+      },
+      render: {
+        renderer: 'webgl',
+        calls: glStats.calls,
+        triangles: Math.round(glStats.tris),
+        frameMs: PoemProbe.n2(lastFrameMs)
+      }
+    };
+  });
+}
 
 function frame(ms) {
   if (SHOT) return;

@@ -203,6 +203,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
 <script src="../shared/timeline.js"></script>
+<script src="../shared/worldprobe.js"></script>
 <script src="log.js"></script>
 <script>
 /* =========================================================================
@@ -3198,7 +3199,9 @@ function markShotReady() {
     ' prints=' + iFoot.count + ' fresh=' + iFresh.count);
 }
 
+var lastFrameMs = 0;
 function renderOnce() {
+  var frameT0 = performance.now();
   var dt = Math.min(clock.getDelta(), 0.05);
   if (SHOT) {
     simT = FROZEN_T;
@@ -3232,6 +3235,7 @@ function renderOnce() {
   sea.position.x = Math.round(camera.position.x / 200) * 200;
   sand.position.x = Math.round(camera.position.x / 400) * 400; // the shore never ends
   renderer.render(scene, camera);
+  lastFrameMs = performance.now() - frameT0;
 }
 
 /* The interactive page does not keep a rAF loop spinning on an idle tab: it
@@ -3283,6 +3287,131 @@ window.__poemShot = function (n) {
   markShotReady();
   return true;
 };
+
+/* --------------------------------------------------------------- PROBE -- */
+/* window.__world(): what this frame actually contains, as a few kB of JSON.
+ * The hard gates of the polish loop read this instead of a picture — see
+ * ../shared/worldprobe.js and ../AGENTS.md. Boxes come from the live scene
+ * graph, so nothing here can claim an object the renderer does not have. */
+if (window.PoemProbe) {
+  var _pbox = new THREE.Box3();
+  var _pv = new THREE.Vector3();
+
+  function objPoints(objs) {
+    /* the corners of the union of these objects' world boxes */
+    var box = new THREE.Box3();
+    var any = false;
+    for (var i = 0; i < objs.length; i++) {
+      var o = objs[i];
+      if (!o || !o.visible) continue;
+      if (o.isInstancedMesh && !o.count) continue;
+      _pbox.makeEmpty();
+      _pbox.setFromObject(o);
+      if (_pbox.isEmpty()) continue;
+      box.union(_pbox);
+      any = true;
+    }
+    if (!any) return null;
+    var pts = [];
+    for (var k = 0; k < 8; k++) {
+      pts.push([(k & 1) ? box.max.x : box.min.x,
+                (k & 2) ? box.max.y : box.min.y,
+                (k & 4) ? box.max.z : box.min.z]);
+    }
+    return pts;
+  }
+
+  /* an instanced field is not one object with one box: what the gate wants to
+   * know is how many of its instances are in this frame, so the samples are the
+   * instance origins themselves. */
+  function instPoints(m) {
+    if (!m || !m.visible || !m.count) return null;
+    var a = m.instanceMatrix.array, pts = [];
+    for (var i = 0; i < m.count; i++) {
+      var o = i * 16;
+      _pv.set(a[o + 12], a[o + 13], a[o + 14]).applyMatrix4(m.matrixWorld);
+      pts.push([_pv.x, _pv.y, _pv.z]);
+    }
+    return pts;
+  }
+
+  function matColor(o) {
+    var m = o && o.material;
+    if (!m || !m.color) return undefined;
+    return '#' + m.color.getHexString();
+  }
+
+  window.PoemProbe.install('gitanjali-60', {
+    viewport: function () {
+      var v = renderer.getSize(new THREE.Vector2());
+      return { w: v.x, h: v.y, dpr: renderer.getPixelRatio() };
+    },
+    project: function (x, y, z) {
+      _pv.set(x, y, z).project(camera);
+      if (_pv.z > 1) return null;              // behind the eye
+      var v = renderer.getSize(new THREE.Vector2());
+      return { x: (_pv.x * 0.5 + 0.5) * v.x, y: (-_pv.y * 0.5 + 0.5) * v.y };
+    }
+  }, function (probe) {
+    function one(name, obj, extra) {
+      var e = extra || {};
+      var pts;
+      if (obj && obj.isInstancedMesh) { e.count = obj.count; pts = instPoints(obj); }
+      else pts = obj ? objPoints([obj]) : null;
+      if (matColor(obj) !== undefined) e.color = matColor(obj);
+      return probe.add(name, pts, e);
+    }
+    function many(name, list, extra) {
+      var objs = [], i;
+      for (i = 0; i < list.length; i++) objs.push(list[i].obj || list[i]);
+      var e = extra || {};
+      e.count = objs.length;
+      return probe.add(name, objPoints(objs), e);
+    }
+
+    one('sky', sky);
+    one('sea', sea);
+    one('sand', sand);
+    one('children', iTorso);
+    one('leaf-boats', iBoat);
+    one('fresh-leaves', iFresh);
+    one('shells', iShell);
+    one('pebbles', iPebble);
+    one('turrets', iTurret);
+    one('sand-gates', iGate);
+    one('footprints', iFoot);
+    one('spray', iSpray);
+    many('wrecks', WRECK_SPOTS);
+    many('traders', TRADERS);
+    many('empty-boats', EMPTY_BOATS);
+    many('pearl-boats', PEARL_BOATS);
+
+    var info = renderer.info;
+    return {
+      t: PoemProbe.n2(simT),
+      camera: {
+        name: (CAMS[SHOT - 1] || {}).name || null,
+        x: PoemProbe.n2(camera.position.x),
+        y: PoemProbe.n2(camera.position.y),
+        z: PoemProbe.n2(camera.position.z),
+        fov: camera.fov,
+        /* a camera's y is world-absolute: this is how far its eye really is
+         * above the sand it stands on */
+        ground: PoemProbe.n2(sandHeight(camera.position.x, camera.position.z)),
+        eyeAboveGround: PoemProbe.n2(camera.position.y - sandHeight(camera.position.x, camera.position.z))
+      },
+      render: {
+        renderer: 'three',
+        calls: info.render.calls,
+        triangles: info.render.triangles,
+        programs: info.programs ? info.programs.length : null,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
+        frameMs: PoemProbe.n2(lastFrameMs)
+      }
+    };
+  });
+}
 
 /* ------------------------------------------------------------------ UI -- */
 var railToggle = document.getElementById('railtoggle');

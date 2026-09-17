@@ -31,24 +31,8 @@ CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome/mac_arm-150.0.78
 
 # name:arg passed to window.__poemShot. Index worlds take a camera number;
 # xiangfuren takes x,z,yaw,pitch (the same cam= string as before).
-case "$W" in
-  gitanjali-60)
-    SHOTS="1-arrival:1 2-children:2 6-above:6"
-    DEFAULT_PORT=8731
-    ;;
-  chunjiang)
-    SHOTS="1-moonrise:1 4-sandbar:4 5-boat:5"
-    DEFAULT_PORT=8732
-    ;;
-  xiangfuren)
-    SHOTS="1-beizhu:2,-58,0,-0.05 5-chengwang:0,-62,3.1416,-0.06 6-dengdai:-70,46,-0.575,-0.02"
-    DEFAULT_PORT=8793
-    ;;
-  *)
-    echo "unknown world: $W" >&2
-    exit 1
-    ;;
-esac
+. "$HERE/cams.sh"
+world_cams "$W" || exit 1
 PORT="${3:-${PORT:-$DEFAULT_PORT}}"
 LOAD="http://127.0.0.1:$PORT/$W/index.html?shot=1"
 mkdir -p "$OUT"
