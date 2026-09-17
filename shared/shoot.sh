@@ -25,18 +25,18 @@ LOCK=/tmp/poem-world-shot.lock
 # --screenshot, and it exits the moment the file is written - about four seconds a
 # frame instead of hanging until the alarm.
 #
-# ANGLE backend: Metal, not SwiftShader. Measured on this machine, same scene, same
-# frozen clock, one frame of camera 1:
+# ANGLE backend. Measured on this machine, same scene, same frozen clock, one frame
+# of camera 1:
 #
 #     --disable-gpu --use-angle=swiftshader   real 10.6s   cpu 19.6s
 #     --use-angle=metal                       real  6.0s   cpu  2.0s
 #
-# SwiftShader rasterises on the cores the operator is using, and at 350-400% CPU it
-# was pushing the network stack around; Metal hands the work to the GPU and costs a
-# tenth of the CPU time. --disable-gpu must NOT be passed with it or the WebGL
-# context never comes up and the page is captured still on its loading veil, which
-# is what a 30KB screenshot means. SwiftShader stays as the fallback for any machine
-# where the Metal context fails.
+# Metal costs a tenth of the CPU, but it takes the GPU the operator is drawing their
+# screen with, so the default here is SwiftShader under background QoS: slow, but it
+# stays on the efficiency cores and out of the way. Set POEM_WORLD_ANGLE=metal to use
+# the GPU path on a machine nobody is sitting at. --disable-gpu must NOT be passed
+# with metal or the WebGL context never comes up and the page is captured still on
+# its loading veil, which is what a 30KB screenshot means.
 CTF="${POEM_WORLD_CHROME:-/Users/chener/.cache/puppeteer/chrome-headless-shell/mac_arm-150.0.7871.24/chrome-headless-shell-mac-arm64/chrome-headless-shell}"
 
 [ -x "$CTF" ] || { echo "no chrome-headless-shell at: $CTF" >&2; exit 1; }
@@ -92,16 +92,22 @@ shoot_one() {
   rm -rf "$_prof"
 }
 
+SOFT="--disable-gpu --use-angle=swiftshader"
+case "${POEM_WORLD_ANGLE:-swiftshader}" in
+  metal) PRIMARY="--use-angle=metal" ;;
+  *)     PRIMARY="$SOFT" ;;
+esac
+
 for c in $CAMS; do
   n="${c%%-*}"
   rm -f "$OUT/$c.png"
-  shoot_one "--use-angle=metal" "$n" "$PWD/$OUT/$c.png"
-  # a Metal context that never came up captures the loading veil: tens of KB, not
+  shoot_one "$PRIMARY" "$n" "$PWD/$OUT/$c.png"
+  # a GPU context that never came up captures the loading veil: tens of KB, not
   # hundreds. Fall back rather than log a blank round.
-  if [ ! -s "$OUT/$c.png" ] || [ "$(wc -c < "$OUT/$c.png")" -lt 120000 ]; then
-    echo "  metal gave nothing usable for $c, falling back to swiftshader" >&2
+  if [ "$PRIMARY" != "$SOFT" ] && { [ ! -s "$OUT/$c.png" ] || [ "$(wc -c < "$OUT/$c.png")" -lt 120000 ]; }; then
+    echo "  $PRIMARY gave nothing usable for $c, falling back to swiftshader" >&2
     rm -f "$OUT/$c.png"
-    shoot_one "--disable-gpu --use-angle=swiftshader" "$n" "$PWD/$OUT/$c.png"
+    shoot_one "$SOFT" "$n" "$PWD/$OUT/$c.png"
   fi
   if [ ! -s "$OUT/$c.png" ]; then
     # Skip the rest of the round rather than wait: a wedged Chrome will not get

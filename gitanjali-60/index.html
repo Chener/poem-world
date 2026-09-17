@@ -309,7 +309,7 @@ var sky = new THREE.Mesh(
       '  float t = pow(elc, 0.42);',
       '  vec3 col = mix(uHaze, uTop, t);',
       /* and it keeps deepening overhead, so there is a weight above you */
-      '  col = mix(col, uTop * 0.60, pow(elc, 1.55) * 0.80);',
+      '  col = mix(col, uTop * 0.52, pow(elc, 1.40) * 0.88);',
       /* the sun does not burn here; it soaks */
       '  float d = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);',
       '  col += uSun * pow(d, 12.0) * 0.26;',
@@ -364,7 +364,11 @@ var sky = new THREE.Mesh(
       '  float baseEl = (0.052 + 0.016 * across) * smoothstep(0.02, 0.34, across);',
       /* domain-warp the noise first, or the cloud comes out a smooth lens
        * instead of weather */
-      '  vec2 q = vec2(da*3.4, el*13.0);',
+      /* Over the storm's own width this sampled about two cells of noise, so
+       * its outline came out as a smooth elliptical dome — "像贴上去的一块".
+       * A thunderhead's edge is cauliflower: it needs cells small enough to
+       * see several of them across the cloud. */
+      '  vec2 q = vec2(da*7.6, el*19.0);',
       '  float warp = fbm(q*1.7 + vec2(uTime*0.010, 0.0));',
       '  float n = fbm(q + vec2(warp*1.6 + uTime*0.009, warp*1.1));',
       '  float bulge = top * (0.62 + 0.55*n);',
@@ -378,8 +382,12 @@ var sky = new THREE.Mesh(
       '  float acrossR = 1.0 - smoothstep(0.0, 0.46, abs(dar));',
       '  float veil = (1.0 - smoothstep(flatBase * 0.55, flatBase * 1.04, el))',
       '             * step(-0.02, el) * clamp(acrossR * 1.25, 0.0, 1.0);',
+      /* rain falls in shafts with daylight between them, not as one curtain
+       * ruled across the whole horizon */
+      '  float shafts = fbm(vec2(dar*4.3 + 9.0, 1.7));',
       '  float streak = fbm(vec2(dar*21.0, el*17.0 - uTime*0.30));',
-      '  veil *= smoothstep(0.16, 0.86, streak) * 0.80 * smoothstep(-0.005, 0.030, el);',
+      '  veil *= smoothstep(0.16, 0.86, streak) * 0.92 * smoothstep(-0.005, 0.030, el)',
+      '        * smoothstep(0.34, 0.66, shafts);',
       '  col = mix(col, vec3(0.235,0.250,0.282), veil);',
       '  vec3 stormCol = mix(vec3(0.062,0.068,0.082), vec3(0.300,0.312,0.342), n*n);',
       /* the sun is over the sea and it is above this thing: the anvil and the

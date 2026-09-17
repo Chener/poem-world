@@ -30,8 +30,9 @@ keep it that way. A JS mirror that drifts from the shader puts boats under the s
 one `chrome-headless-shell` per frame that exits when the file is written, under
 `taskpolicy -c background nice -n 20`, behind a shared `mkdir` lock at
 `/tmp/poem-world-shot.lock`, after checking `uptime` load and `memory_pressure`. It
-renders through `--use-angle=metal` (SwiftShader is the fallback and costs ten times the
-CPU; measurements and the `--disable-gpu` trap are in the script's own comments). Never
+renders through SwiftShader by default; `POEM_WORLD_ANGLE=metal` switches to the GPU
+path, which costs a tenth of the CPU but takes the GPU the operator is drawing their
+screen with (measurements and the `--disable-gpu` trap are in the script's comments). Never
 leave a browser running and never open a visible window: several workers share this
 machine and somebody is using it. Shot mode stops the render loop after a few frames
 (`SHOT_FRAMES`).
